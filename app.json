@@ -9,9 +9,23 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.laon.dancefeedback",
+      "infoPlist": {
+        "NSCameraUsageDescription": "댄스 영상 촬영을 위해 카메라 권한이 필요합니다.",
+        "NSMicrophoneUsageDescription": "댄스 영상 촬영 시 오디오 녹음을 위해 마이크 권한이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "피드백할 댄스 영상을 선택하기 위해 사진첩 접근 권한이 필요합니다."
+      }
     },
     "android": {
+      "package": "com.laon.dancefeedback",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,11 +52,23 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "laon-dance",
+          "project": "laon-dance-feedback"
+        }
+      ],
+      "expo-video",
+      "expo-audio",
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }

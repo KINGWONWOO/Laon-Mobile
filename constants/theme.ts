@@ -1,53 +1,64 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
+import { ThemeType } from "../types";
 
-import { Platform } from 'react-native';
-
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
-export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+export const getThemeColors = (theme: ThemeType = 'dark') => {
+  switch (theme) {
+    case 'white':
+      return {
+        primary: '#7B2CBF',
+        secondary: '#FF007A',
+        accent: '#21F3A3',
+        background: '#FFFFFF',
+        card: '#F5F5F7',
+        text: '#1D1D1F',
+        textSecondary: '#6E6E73',
+        border: '#D2D2D7',
+        error: '#FF3B30',
+      };
+    case 'cute':
+      return {
+        primary: '#FF85A1',    // Pastel Pink
+        secondary: '#FFB7C5',  // Lighter Pink
+        accent: '#A0E7E5',     // Minty Blue
+        background: '#FFF5F8', // Very light pink
+        card: '#FFFFFF',       // White cards
+        text: '#5D4157',       // Dark mauve text
+        textSecondary: '#A899A7',
+        border: '#FFD1DC',
+        error: '#FF6B6B',
+      };
+    case 'dark':
+    default:
+      return {
+        primary: '#7B2CBF',
+        secondary: '#FF007A',
+        accent: '#21F3A3',
+        background: '#0F0E17',
+        card: '#1B1927',
+        text: '#FFFFFF',
+        textSecondary: '#A7A6B4',
+        border: '#2D2B3D',
+        error: '#FF4D4D',
+      };
+  }
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+// Default colors for backward compatibility if needed, 
+// though we should use getThemeColors(theme) everywhere.
+export const Colors = getThemeColors('dark');
+
+export const Shadows = {
+  primary: {
+    shadowColor: '#7B2CBF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+  secondary: {
+    shadowColor: '#FF007A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  }
+};
