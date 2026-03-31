@@ -1,15 +1,29 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAppContext } from '../context/AppContext';
 import { Colors } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+
+// Apple Authentication은 iOS 네이티브 빌드에서만 로드
+let AppleAuthentication: typeof import('expo-apple-authentication') | null = null;
+if (Platform.OS === 'ios') {
+  try {
+    AppleAuthentication = require('expo-apple-authentication');
+  } catch {
+    // Expo Go 또는 Android에서는 무시
+  }
+}
+import * as Linking from 'expo-linking';
 import { authService } from '../services/authService';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'kakao' | 'apple' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
 
@@ -23,10 +37,16 @@ export default function LoginScreen() {
     try {
       const { error } = await authService.signIn(email, password);
       if (error) {
-        setErrorMsg(error.message === 'Invalid login credentials' ? '이메일 또는 비밀번호가 일치하지 않습니다.' : error.message);
+        if (error.message === 'Invalid login credentials') {
+          setErrorMsg('이메일 또는 비밀번호가 일치하지 않습니다.');
+        } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          setErrorMsg('이메일 인증이 완료되지 않았습니다. 받은 편지함을 확인해주세요.');
+        } else {
+          setErrorMsg(error.message);
+        }
       }
-      // Success is handled by AppContext session listener
-    } catch (e) {
+      // 성공 시 AppContext의 onAuthStateChange가 자동으로 /rooms로 이동
+    } catch {
       setErrorMsg('로그인 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -35,25 +55,46 @@ export default function LoginScreen() {
 
   const handleSocialLogin = async (provider: 'google' | 'kakao') => {
     setErrorMsg(null);
+    setSocialLoading(provider);
     try {
+      // 디버깅을 위해 리디렉션 주소 로그 출력
+      const debugUrl = Linking.createURL('/');
+      console.log('Redirect URL:', debugUrl);
+
       const { error } = await authService.signInWithSocial(provider);
-      if (error) Alert.alert('로그인 오류', 'Supabase 대시보드에서 해당 Provider 설정을 확인해주세요.');
-    } catch (e) {
-      console.error(e);
+      if (error) {
+        Alert.alert(
+          '로그인 오류',
+          `${provider === 'google' ? 'Google' : '카카오'} 로그인에 실패했습니다.\n\n오류: ${error.message}\n\n리디렉션 주소(${debugUrl})가 Supabase에 등록되어 있는지 확인해주세요.`,
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('오류', `로그인 중 문제가 발생했습니다: ${err.message}`);
+    } finally {
+      setSocialLoading(null);
     }
   };
 
-  const handleDemoLogin = () => {
-    setLoading(true);
-    // Shortcut for testing UI without real backend configured
-    setTimeout(() => {
-      setLoading(false);
-      router.replace('/rooms');
-    }, 800);
+  const handleAppleLogin = async () => {
+    setErrorMsg(null);
+    setSocialLoading('apple');
+    try {
+      const { error } = await authService.signInWithApple();
+      if (error) {
+        Alert.alert('Apple 로그인 오류', error.message);
+      }
+    } catch {
+      Alert.alert('오류', '로그인 중 문제가 발생했습니다.');
+    } finally {
+      setSocialLoading(null);
+    }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>LAON DANCE</Text>
@@ -88,18 +129,23 @@ export default function LoginScreen() {
             placeholderTextColor={Colors.textSecondary}
             secureTextEntry
           />
-          
-          <TouchableOpacity style={styles.forgotBtn} onPress={() => router.push('/forgot-password')}>
+
+          <TouchableOpacity
+            style={styles.forgotBtn}
+            onPress={() => router.push('/forgot-password')}
+          >
             <Text style={styles.forgotText}>비밀번호를 잊으셨나요?</Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.loginBtn, { backgroundColor: Colors.primary }]} 
+        <TouchableOpacity
+          style={[styles.loginBtn, { backgroundColor: Colors.primary }]}
           onPress={handleLogin}
           disabled={loading}
         >
-          {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.loginBtnText}>로그인</Text>}
+          {loading
+            ? <ActivityIndicator color="#000" />
+            : <Text style={styles.loginBtnText}>로그인</Text>}
         </TouchableOpacity>
 
         <View style={styles.dividerContainer}>
@@ -108,17 +154,40 @@ export default function LoginScreen() {
           <View style={styles.divider} />
         </View>
 
-        <View style={styles.socialContainer}>
-          <TouchableOpacity style={[styles.socialBtn, styles.googleBtn]} onPress={() => handleSocialLogin('google')}>
-            <Ionicons name="logo-google" size={20} color="#DB4437" />
-            <Text style={styles.socialBtnText}>Google</Text>
-          </TouchableOpacity>
+        {/* Google */}
+        <TouchableOpacity
+          style={[styles.socialBtn, styles.googleBtn]}
+          onPress={() => handleSocialLogin('google')}
+          disabled={!!socialLoading}
+        >
+          {socialLoading === 'google'
+            ? <ActivityIndicator size="small" color="#DB4437" />
+            : <Ionicons name="logo-google" size={20} color="#DB4437" />}
+          <Text style={[styles.socialBtnText, { color: '#3C1E1E' }]}>Google로 계속하기</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.socialBtn, styles.kakaoBtn]} onPress={() => handleSocialLogin('kakao')}>
-            <Ionicons name="chatbubble" size={20} color="#3C1E1E" />
-            <Text style={styles.kakaoBtnText}>카카오톡</Text>
-          </TouchableOpacity>
-        </View>
+        {/* 카카오 */}
+        <TouchableOpacity
+          style={[styles.socialBtn, styles.kakaoBtn]}
+          onPress={() => handleSocialLogin('kakao')}
+          disabled={!!socialLoading}
+        >
+          {socialLoading === 'kakao'
+            ? <ActivityIndicator size="small" color="#3C1E1E" />
+            : <Ionicons name="chatbubble" size={20} color="#3C1E1E" />}
+          <Text style={[styles.socialBtnText, { color: '#3C1E1E' }]}>카카오로 계속하기</Text>
+        </TouchableOpacity>
+
+        {/* Apple — iOS 네이티브 빌드 전용 */}
+        {Platform.OS === 'ios' && AppleAuthentication && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={12}
+            style={styles.appleBtn}
+            onPress={handleAppleLogin}
+          />
+        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>처음이신가요? </Text>
@@ -126,10 +195,6 @@ export default function LoginScreen() {
             <Text style={styles.registerLink}>회원가입 하기</Text>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity style={styles.demoBtn} onPress={handleDemoLogin}>
-          <Text style={styles.demoText}>테스트용 게스트 입장 (데모 모드)</Text>
-        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -141,27 +206,40 @@ const styles = StyleSheet.create({
   header: { marginBottom: 40 },
   title: { fontSize: 36, fontWeight: '900', color: Colors.text, letterSpacing: 2 },
   subtitle: { fontSize: 16, color: Colors.textSecondary, marginTop: 8 },
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 75, 75, 0.1)', padding: 12, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 75, 75, 0.3)' },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255, 75, 75, 0.1)', padding: 12, borderRadius: 8,
+    marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 75, 75, 0.3)',
+  },
   errorText: { color: '#FF4B4B', fontSize: 14, marginLeft: 8, fontWeight: '500' },
   inputContainer: { marginBottom: 25 },
   label: { fontSize: 14, color: Colors.text, marginBottom: 8, fontWeight: '600' },
-  input: { backgroundColor: Colors.card, borderRadius: 12, padding: 16, color: Colors.text, fontSize: 16, marginBottom: 15, borderWidth: 1, borderColor: Colors.border },
+  input: {
+    backgroundColor: Colors.card, borderRadius: 12, padding: 16,
+    color: Colors.text, fontSize: 16, marginBottom: 15,
+    borderWidth: 1, borderColor: Colors.border,
+  },
   inputError: { borderColor: '#FF4B4B' },
   forgotBtn: { alignSelf: 'flex-end' },
   forgotText: { color: Colors.primary, fontSize: 14 },
-  loginBtn: { borderRadius: 12, padding: 18, alignItems: 'center', marginBottom: 35, height: 60, justifyContent: 'center' },
+  loginBtn: {
+    borderRadius: 12, padding: 18, alignItems: 'center',
+    marginBottom: 35, height: 60, justifyContent: 'center',
+  },
   loginBtnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 30 },
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   divider: { flex: 1, height: 1, backgroundColor: Colors.border },
   dividerText: { marginHorizontal: 15, color: Colors.textSecondary, fontSize: 12 },
-  socialContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 35 },
-  socialBtn: { flex: 0.48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
+  socialBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    padding: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    marginBottom: 12, height: 52,
+  },
   googleBtn: { backgroundColor: '#fff' },
   kakaoBtn: { backgroundColor: '#FEE500', borderColor: '#FEE500' },
-  socialBtnText: { marginLeft: 10, fontWeight: '600', fontSize: 15, color: '#3C1E1E' },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
+  socialBtnText: { marginLeft: 10, fontWeight: '600', fontSize: 15 },
+  appleBtn: { height: 52, marginBottom: 12 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 15 },
   footerText: { color: Colors.textSecondary },
   registerLink: { color: Colors.primary, fontWeight: 'bold' },
-  demoBtn: { marginTop: 40, alignSelf: 'center', padding: 10 },
-  demoText: { color: Colors.textSecondary, fontSize: 12, textDecorationLine: 'underline', opacity: 0.5 },
 });

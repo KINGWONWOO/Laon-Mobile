@@ -2,36 +2,34 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// Lazy load notifications to prevent crash in Expo Go
-let Notifications: any;
-try {
-  Notifications = require('expo-notifications');
-  
-  if (Notifications && Notifications.setNotificationHandler) {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
+const isExpoGo = Constants.appOwnership === 'expo';
+
+// Expo Go에서는 푸시 알림을 완전히 비활성화 (SDK 53부터 지원 안 됨)
+let Notifications: any = null;
+
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+
+    if (Notifications?.setNotificationHandler) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+    }
+  } catch {
+    // Development build이지만 모듈 로드 실패 시 무시
   }
-} catch (e) {
-  console.log('Notifications module not available');
 }
 
 export async function registerForPushNotificationsAsync() {
-  if (!Notifications) return null;
-
-  let token;
-  const isExpoGo = Constants.appOwnership === 'expo';
-
-  if (isExpoGo && Platform.OS === 'android') {
-    console.log('⚠️ Push notifications are not supported in Expo Go for Android.');
-    return null;
-  }
+  if (!Notifications || isExpoGo) return null;
+  if (!Device.isDevice) return null;
 
   if (Platform.OS === 'android') {
     try {
@@ -41,37 +39,30 @@ export async function registerForPushNotificationsAsync() {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FF231F7C',
       });
-    } catch (e) {
-      console.log('Error setting notification channel');
+    } catch {
+      // 채널 설정 실패 시 무시
     }
   }
 
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    
-    if (finalStatus !== 'granted') {
-      return;
-    }
-    
-    try {
-      const projectId =
-        Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-        
-      if (!projectId) return null;
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
 
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId,
-      })).data;
-    } catch (e) {
-      console.log('Error getting push token:', e);
-    }
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
   }
 
-  return token;
+  if (finalStatus !== 'granted') return null;
+
+  try {
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+
+    if (!projectId) return null;
+
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    return token;
+  } catch {
+    return null;
+  }
 }

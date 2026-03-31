@@ -5,12 +5,13 @@ import { useAppContext } from '../../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { DanceButton, StyledBackButton } from '../../components/ui/Interactions';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function RoomsScreen() {
   const router = useRouter();
   const { rooms, currentUser } = useAppContext();
 
-  const myRooms = rooms.filter(r => currentUser && r.members.includes(currentUser.id));
+  const myRooms = rooms;
 
   return (
     <View style={styles.container}>
@@ -94,7 +95,7 @@ export default function RoomsScreen() {
                     <Text style={styles.roomName}>{item.name}</Text>
                     <View style={styles.memberRow}>
                       <Ionicons name="people" size={14} color={Colors.accent} />
-                      <Text style={styles.roomMeta}>{item.members.length} Members</Text>
+                      <Text style={styles.roomMeta}>Members</Text>
                     </View>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
@@ -281,5 +282,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-
-import { LinearGradient } from 'expo-linear-gradient';

@@ -7,10 +7,10 @@
     "icon": "./assets/images/icon.png",
     "scheme": "laondancefeedback",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.laon.dancefeedback",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "댄스 영상 촬영을 위해 카메라 권한이 필요합니다.",
         "NSMicrophoneUsageDescription": "댄스 영상 촬영 시 오디오 녹음을 위해 마이크 권한이 필요합니다.",
@@ -63,8 +63,7 @@
       ],
       "expo-video",
       "expo-audio",
-      "expo-video",
-      "expo-audio"
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

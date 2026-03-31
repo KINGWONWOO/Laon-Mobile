@@ -3,7 +3,7 @@ import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, Alarm, AlarmT
 import * as Crypto from 'expo-crypto';
 import * as Storage from '../services/storage';
 import { getThemeColors } from '../constants/theme';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api, { roomApi, userApi, noticeApi, videoApi } from '../services/api';
 import { supabase } from '../lib/supabase';
 
@@ -91,33 +91,60 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Sync with Supabase Auth
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const user: User = {
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
-          profileImage: session.user.user_metadata?.profile_image,
-        };
-        setCurrentUser(user);
+    let isMounted = true;
+
+    // 5초 안에 응답 없으면 강제로 로딩 해제 (보험용)
+    const timeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn('Auth session check timed out');
+        setIsLoadingUser(false);
       }
-      setIsLoadingUser(false);
+    }, 5000);
+
+    const buildUser = (session: any) => ({
+      id: session.user.id,
+      name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
+      profileImage: session.user.user_metadata?.profile_image,
     });
+
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (isMounted) {
+          if (session?.user) {
+            setCurrentUser(buildUser(session));
+          }
+        }
+      } catch (err) {
+        console.error('Error getting auth session:', err);
+      } finally {
+        if (isMounted) {
+          clearTimeout(timeout);
+          setIsLoadingUser(false);
+        }
+      }
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        const user: User = {
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
-          profileImage: session.user.user_metadata?.profile_image,
-        };
-        setCurrentUser(user);
-      } else {
-        setCurrentUser(null);
+      if (isMounted) {
+        if (session?.user) {
+          setCurrentUser(buildUser(session));
+        } else {
+          setCurrentUser(null);
+        }
+        setIsLoadingUser(false);
       }
-      setIsLoadingUser(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Fetch Rooms via React Query (Filtered by currentUser)
@@ -132,7 +159,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         .eq('user_id', currentUser.id);
       
       if (error) return [];
-      return data.map(item => item.rooms) as Room[];
+      return data.map(item => item.rooms).filter(Boolean) as unknown as Room[];
     },
     enabled: !!currentUser,
     refetchInterval: 5000,
@@ -146,6 +173,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    setCurrentUser(null);
     await supabase.auth.signOut();
     queryClient.clear();
   };
@@ -252,9 +280,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setPhotos(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, photoUrl, createdAt: Date.now() }]);
   };
 
-  const addSchedule = (roomId: string, title: string, options: string[], startDate?: string, endDate?: string) => {
+  const addSchedule = (roomId: string, title: string, options: string[], startDate?: string, endDate?: string, sendNotification?: boolean) => {
     if (!currentUser) return;
-    setSchedules(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, title, options: options.map(opt => ({ id: uuidv4(), dateTime: opt })), responses: {}, viewedBy: [currentUser.id], startDate, endDate, createdAt: Date.now() }]);
+    setSchedules(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, title, options: options.map(opt => ({ id: uuidv4(), dateTime: opt })), responses: {}, viewedBy: [currentUser.id], startDate, endDate, sendNotification, createdAt: Date.now() }]);
   };
 
   const updateSchedule = (scheduleId: string, title: string) => {

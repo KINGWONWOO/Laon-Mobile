@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, Link } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { useAppContext } from '../context/AppContext';
 import { Colors } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,9 +30,25 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'apple') => {
-    const { error } = await authService.signInWithSocial(provider);
-    if (error) Alert.alert('로그인 오류', error.message);
+  const handleSocialLogin = async (provider: 'google' | 'kakao') => {
+    const debugUrl = Linking.createURL('/');
+    console.log(`${provider} Redirect URL:`, debugUrl);
+
+    setLoading(true);
+    try {
+      const { error } = await authService.signInWithSocial(provider);
+      
+      if (error) {
+        Alert.alert(
+          '로그인 실패', 
+          `${provider === 'google' ? 'Google' : '카카오'} 로그인 중 오류가 발생했습니다.\n\n오류: ${error.message}\n\n리디렉션 주소(${debugUrl})가 Supabase Dashboard에 등록되어 있는지 확인해주세요.`
+        );
+      }
+    } catch (e: any) {
+      Alert.alert('에러 발생', `로그인 중 문제가 발생했습니다: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -97,12 +114,12 @@ export default function LoginScreen() {
             <Text style={styles.socialBtnText}>Google</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.socialBtn, styles.appleBtn]} 
-            onPress={() => handleSocialLogin('apple')}
+          <TouchableOpacity
+            style={[styles.socialBtn, styles.kakaoBtn]}
+            onPress={() => handleSocialLogin('kakao')}
           >
-            <Ionicons name="logo-apple" size={20} color="#fff" />
-            <Text style={[styles.socialBtnText, { color: '#fff' }]}>Apple</Text>
+            <Ionicons name="chatbubble" size={20} color="#3C1E1E" />
+            <Text style={[styles.socialBtnText, { color: '#3C1E1E' }]}>카카오톡</Text>
           </TouchableOpacity>
         </View>
 
@@ -212,8 +229,9 @@ const styles = StyleSheet.create({
   googleBtn: {
     backgroundColor: '#fff',
   },
-  appleBtn: {
-    backgroundColor: '#000',
+  kakaoBtn: {
+    backgroundColor: '#FEE500',
+    borderColor: '#FEE500',
   },
   socialBtnText: {
     marginLeft: 10,

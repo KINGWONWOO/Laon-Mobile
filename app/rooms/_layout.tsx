@@ -1,8 +1,50 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { TouchableOpacity, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useAppContext } from '../../context/AppContext';
+import { Colors } from '../../constants/theme';
 
 export default function RoomsLayout() {
+  const { logout } = useAppContext();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    Alert.alert(
+      '로그아웃',
+      '정말 로그아웃 하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '로그아웃',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/');
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const LogoutButton = () => (
+    <TouchableOpacity
+      onPress={handleLogout}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={{ marginRight: 16 }}
+    >
+      <Ionicons name="log-out-outline" size={24} color={Colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
   return (
-    <Stack>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: Colors.background },
+        headerTintColor: Colors.text,
+        headerRight: () => <LogoutButton />,
+      }}
+    >
       <Stack.Screen name="index" options={{ title: '내 방 목록' }} />
       <Stack.Screen name="create" options={{ presentation: 'modal', title: '방 만들기' }} />
       <Stack.Screen name="join" options={{ presentation: 'modal', title: '방 참여하기' }} />

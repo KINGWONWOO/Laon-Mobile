@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, ViewStyle, TextStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { 
   useSharedValue, 
@@ -21,17 +21,19 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'accent' | 'ghost';
   icon?: any;
   soundEffect?: 'tap' | 'success' | 'error' | 'pop';
+  loading?: boolean;
 }
 
-export const DanceButton = ({ 
-  onPress, 
-  title, 
-  children, 
-  style, 
-  textStyle, 
-  variant = 'primary', 
+export const DanceButton = ({
+  onPress,
+  title,
+  children,
+  style,
+  textStyle,
+  variant = 'primary',
   icon,
-  soundEffect = 'tap'
+  soundEffect = 'tap',
+  loading = false,
 }: ButtonProps) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -72,19 +74,26 @@ export const DanceButton = ({
   return (
     <Animated.View style={[animatedStyle, style]}>
       <Pressable
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPress={loading ? undefined : onPress}
+        onPressIn={loading ? undefined : handlePressIn}
+        onPressOut={loading ? undefined : handlePressOut}
         style={[
           styles.button,
           { backgroundColor: getBackgroundColor() },
           variant !== 'ghost' && (variant === 'secondary' ? Shadows.secondary : Shadows.primary),
           variant === 'ghost' && styles.ghostBorder,
+          loading && styles.disabled,
           style
         ]}
       >
-        {icon && <Ionicons name={icon} size={20} color={getTextColor()} style={styles.icon} />}
-        {title ? <Text style={[styles.text, { color: getTextColor() }, textStyle]}>{title}</Text> : children}
+        {loading ? (
+          <ActivityIndicator size="small" color={getTextColor()} />
+        ) : (
+          <>
+            {icon && <Ionicons name={icon} size={20} color={getTextColor()} style={styles.icon} />}
+            {title ? <Text style={[styles.text, { color: getTextColor() }, textStyle]}>{title}</Text> : children}
+          </>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -119,6 +128,9 @@ const styles = StyleSheet.create({
   ghostBorder: {
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  disabled: {
+    opacity: 0.6,
   },
   text: {
     fontSize: 16,
