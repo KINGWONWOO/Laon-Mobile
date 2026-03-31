@@ -14,12 +14,23 @@ export const authService = {
       const redirectTo = Linking.createURL('/');
       console.log(`[Auth] ${provider} login started. Redirect URI:`, redirectTo);
 
+      // KOE205 에러 방지: 카카오의 경우 콘솔 설정과 일치하는 scope만 요청해야 함
+      const options: any = {
+        redirectTo,
+        skipBrowserRedirect: true,
+      };
+
+      if (provider === 'kakao') {
+        // 카카오 콘솔의 '동의 항목'에 설정된 내용에 따라 조정 필요
+        // 기본적으로 profile_nickname, account_email 등을 사용
+        options.queryParams = {
+          scope: 'profile_nickname', // 이메일 동의를 안했다면 이메일은 제외해야 함
+        };
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+        options,
       });
 
       if (error) throw error;
