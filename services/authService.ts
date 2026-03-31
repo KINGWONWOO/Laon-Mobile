@@ -24,9 +24,9 @@ export const authService = {
       };
 
       if (provider === 'kakao') {
-        // KOE205 방지를 위한 최소 권한 설정
+        // 카카오 콘솔에서 '이메일' 항목을 '선택 동의'로 설정해야 정상 작동합니다.
         options.queryParams = {
-          scope: 'profile_nickname',
+          scope: 'profile_nickname,account_email',
         };
       }
 
