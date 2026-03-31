@@ -10,21 +10,23 @@ WebBrowser.maybeCompleteAuthSession();
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
     try {
-      // 💡 로그에 찍혔던 성공한 리디렉션 주소와 동일하게 맞춤
-      const redirectTo = Linking.createURL('/');
+      // 💡 AuthSession을 사용하여 Expo Go와 빌드 환경 모두 대응하는 정확한 주소 생성
+      const redirectTo = AuthSession.makeRedirectUri({
+        scheme: 'laondancefeedback',
+        path: 'auth/callback',
+      });
+      
       console.log(`[Auth] ${provider} login started. Redirect URI:`, redirectTo);
 
-      // KOE205 에러 방지: 카카오의 경우 콘솔 설정과 일치하는 scope만 요청해야 함
       const options: any = {
         redirectTo,
         skipBrowserRedirect: true,
       };
 
       if (provider === 'kakao') {
-        // 카카오 콘솔의 '동의 항목'에 설정된 내용에 따라 조정 필요
-        // 기본적으로 profile_nickname, account_email 등을 사용
+        // KOE205 방지를 위한 최소 권한 설정
         options.queryParams = {
-          scope: 'profile_nickname', // 이메일 동의를 안했다면 이메일은 제외해야 함
+          scope: 'profile_nickname',
         };
       }
 
@@ -36,67 +38,32 @@ export const authService = {
       if (error) throw error;
       if (!data?.url) throw new Error('인증 서버로부터 URL을 받지 못했습니다.');
 
-      // 💡 PKCE code_verifier가 저장소에 기록될 시간을 줌
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // PKCE 보안을 위해 verifier가 저장될 시간을 확보
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
         console.log(`[Auth] Success URL received:`, res.url);
-
-        // 💡 1. 수동으로 URL에서 토큰(Implicit) 또는 코드(PKCE) 추출 시도
-        const parsed = Linking.parse(res.url);
-        const code = parsed.queryParams?.code as string;
         
-        // 만약 fragment(#) 영역에 access_token이 있다면 직접 추출 (백업)
-        const hash = res.url.split('#')[1];
-        let accessToken = '';
-        let refreshToken = '';
-        if (hash) {
-          const hashParams = new URLSearchParams(hash);
-          accessToken = hashParams.get('access_token') || '';
-          refreshToken = hashParams.get('refresh_token') || '';
-        }
-
-        // 💡 2. Implicit Flow 방식 시도 (가장 빠르고 verifier 오류 없음)
-        if (accessToken) {
-          console.log('[Auth] Access token found in hash, setting session manually...');
-          const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (!setSessionError && setSessionData.session) return { data: setSessionData, error: null };
-        }
-
-        // 💡 3. PKCE Flow 방식 시도 (보안 코드 교환)
-        if (code || res.url.includes('code=')) {
-          console.log(`[Auth] Code detected, attempting exchange...`);
-          // 저장소 반영을 위한 추가 대기
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          try {
-            const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
-            if (!sessionError) return { data: sessionData, error: null };
-            console.warn('[Auth] Exchange failed, checking for auto-login:', sessionError.message);
-          } catch (exchangeEx) {
-            console.warn('[Auth] Exchange exception:', exchangeEx);
-          }
-        }
-
-        // 💡 4. 최종 확인: 그래도 세션이 안 잡혔다면 직접 체크
-        const { data: { session: finalSession } } = await supabase.auth.getSession();
-        if (finalSession) {
-          console.log('[Auth] Session found by getSession()');
-          return { data: { session: finalSession }, error: null };
+        // 세션 처리 시도
+        const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
+        
+        if (sessionError) {
+          console.warn('[Auth] Exchange failed, checking backup session:', sessionError.message);
+          // 백업: 직접 세션 확인
+          const { data: { session: backupSession } } = await supabase.auth.getSession();
+          if (backupSession) return { data: { session: backupSession }, error: null };
+          throw sessionError;
         }
         
-        throw new Error('로그인 정보를 세션으로 변환하지 못했습니다. 다시 시도해 주세요.');
+        return { data: sessionData, error: null };
       }
 
       return { data: null, error: null };
     } catch (err: any) {
       console.error(`[Auth] ${provider} Error:`, err);
-      // 마지막 방어
+      // 최종 방어막: 이미 세션이 있는지 확인
       const { data: { session } } = await supabase.auth.getSession();
       if (session) return { data: { session }, error: null };
 
