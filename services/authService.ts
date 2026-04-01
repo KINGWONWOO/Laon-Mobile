@@ -24,9 +24,13 @@ export const authService = {
       };
 
       if (provider === 'kakao') {
-        // 카카오 콘솔에서 '이메일' 항목을 '선택 동의'로 설정해야 정상 작동합니다.
+        // 카카오 로그인 설정 주의사항:
+        // 1. 카카오 콘솔 > 내 애플리케이션 > 제품 설정 > 카카오 로그인: '활성화' ON
+        // 2. 카카오 콘솔 > Redirect URI: 'https://[YOUR_PROJECT_REF].supabase.co/auth/v1/callback' 등록
+        // 3. 카카오 콘솔 > 동의항목: '닉네임', '이메일'을 설정 (이메일은 '선택 동의' 권장)
+        // 4. Supabase 대시보드 > URL Configuration > Redirect URLs: 'laondancefeedback://auth/callback' 등록
         options.queryParams = {
-          scope: 'profile_nickname,account_email',
+          scope: 'openid,profile_nickname,account_email',
         };
       }
 
