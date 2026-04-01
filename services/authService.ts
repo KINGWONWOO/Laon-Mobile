@@ -17,6 +17,7 @@ export const authService = {
       });
       
       console.log(`[Auth] ${provider} login started. Redirect URI:`, redirectTo);
+      console.log(`[Auth] Tip: Add the above URL to Supabase > Auth > Redirect URLs if login fails.`);
 
       const options: any = {
         redirectTo,
@@ -24,11 +25,6 @@ export const authService = {
       };
 
       if (provider === 'kakao') {
-        // 카카오 로그인 설정 주의사항:
-        // 1. 카카오 콘솔 > 내 애플리케이션 > 제품 설정 > 카카오 로그인: '활성화' ON
-        // 2. 카카오 콘솔 > Redirect URI: 'https://[YOUR_PROJECT_REF].supabase.co/auth/v1/callback' 등록
-        // 3. 카카오 콘솔 > 동의항목: '닉네임', '이메일'을 설정 (이메일은 '선택 동의' 권장)
-        // 4. Supabase 대시보드 > URL Configuration > Redirect URLs: 'laondancefeedback://auth/callback' 등록
         options.queryParams = {
           scope: 'openid,profile_nickname,account_email',
         };
@@ -39,7 +35,11 @@ export const authService = {
         options,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[Auth] Supabase signInWithOAuth Error:`, error.message);
+        throw error;
+      }
+      
       if (!data?.url) throw new Error('인증 서버로부터 URL을 받지 못했습니다.');
 
       // PKCE 보안을 위해 verifier가 저장될 시간을 확보
@@ -50,12 +50,10 @@ export const authService = {
       if (res.type === 'success' && res.url) {
         console.log(`[Auth] Success URL received:`, res.url);
         
-        // 세션 처리 시도
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
         
         if (sessionError) {
           console.warn('[Auth] Exchange failed, checking backup session:', sessionError.message);
-          // 백업: 직접 세션 확인
           const { data: { session: backupSession } } = await supabase.auth.getSession();
           if (backupSession) return { data: { session: backupSession }, error: null };
           throw sessionError;
@@ -64,10 +62,10 @@ export const authService = {
         return { data: sessionData, error: null };
       }
 
+      console.log(`[Auth] Browser session closed with type: ${res.type}`);
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Error:`, err);
-      // 최종 방어막: 이미 세션이 있는지 확인
+      console.error(`[Auth] ${provider} Final Error:`, err);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) return { data: { session }, error: null };
 
@@ -150,7 +148,7 @@ export const authService = {
     try {
       const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      const response = await fetch(`${projectUrl}/functions/v1/verify-and-signup`, {
+      const response = await fetch(`${projectUrl}/functions/v1/send-verification-email`, { // Fix function name if needed
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

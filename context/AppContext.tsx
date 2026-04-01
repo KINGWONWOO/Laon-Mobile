@@ -74,6 +74,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [themeType, setThemeType] = useState<ThemeType>('dark');
   const [users, setUsers] = useState<User[]>([]);
+  const [alarms, setAlarms] = useState<Alarm[]>([]);
 
   const theme = getThemeColors(themeType);
 
@@ -123,7 +124,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser]);
 
   // Data Fetching
-  const { data: serverRooms, isLoading: isLoadingRooms } = useQuery({
+  const roomsQuery = useQuery({
     queryKey: ['rooms', currentUser?.id],
     queryFn: async () => {
       if (!currentUser) return [];
@@ -132,7 +133,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     },
     enabled: !!currentUser,
   });
-  const rooms = serverRooms || [];
+  
+  const rooms = roomsQuery.data || [];
+  const isLoadingRooms = roomsQuery.isLoading;
 
   const fetchRoomData = async (table: string) => {
     if (rooms.length === 0) return [];
@@ -140,41 +143,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return data || [];
   };
 
-  const { data: noticesData } = useQuery({ queryKey: ['notices', rooms.map(r => r.id)], queryFn: () => fetchRoomData('notices'), enabled: rooms.length > 0 });
-  const { data: videosData } = useQuery({ queryKey: ['videos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('videos'), enabled: rooms.length > 0 });
-  const { data: photosData } = useQuery({ queryKey: ['photos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('gallery_items'), enabled: rooms.length > 0 });
-  const { data: schedulesData } = useQuery({ queryKey: ['schedules', rooms.map(r => r.id)], queryFn: () => fetchRoomData('schedules'), enabled: rooms.length > 0 });
-  const { data: votesData } = useQuery({ queryKey: ['votes', rooms.map(r => r.id)], queryFn: () => fetchRoomData('votes'), enabled: rooms.length > 0 });
+  const noticesQuery = useQuery({ queryKey: ['notices', rooms.map(r => r.id)], queryFn: () => fetchRoomData('notices'), enabled: rooms.length > 0 });
+  const videosQuery = useQuery({ queryKey: ['videos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('videos'), enabled: rooms.length > 0 });
+  const photosQuery = useQuery({ queryKey: ['photos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('gallery_items'), enabled: rooms.length > 0 });
+  const schedulesQuery = useQuery({ queryKey: ['schedules', rooms.map(r => r.id)], queryFn: () => fetchRoomData('schedules'), enabled: rooms.length > 0 });
+  const votesQuery = useQuery({ queryKey: ['votes', rooms.map(r => r.id)], queryFn: () => fetchRoomData('votes'), enabled: rooms.length > 0 });
 
   // Mapping
-  const notices = (noticesData || []).map(n => ({
+  const notices = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
     isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by, createdAt: new Date(n.created_at).getTime()
   }));
 
-  const videos = (videosData || []).map(v => ({
+  const videos = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.youtube_url || v.storage_path,
     title: v.title, createdAt: new Date(v.created_at).getTime(), comments: []
   }));
 
-  const photos = (photosData || []).map(p => ({
+  const photos = (photosQuery.data || []).map(p => ({
     id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, createdAt: new Date(p.created_at).getTime()
   }));
 
-  const schedules = (schedulesData || []).map(s => ({
+  const schedules = (schedulesQuery.data || []).map(s => ({
     id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, viewedBy: s.viewed_by,
     startDate: s.start_date, endDate: s.end_date, createdAt: new Date(s.created_at).getTime(),
     options: [], responses: {}
   }));
 
-  const votes = (votesData || []).map(v => ({
+  const votes = (votesQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, 
     isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, 
     viewedBy: v.viewed_by, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined,
     createdAt: new Date(v.created_at).getTime(), options: [], responses: {}, comments: []
   }));
-
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
 
   const login = async (email: string, password: string) => { await supabase.auth.signInWithPassword({ email, password }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
@@ -261,7 +262,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteVote = async () => {};
   const markVoteAsViewed = async () => {};
   const addAlarm = async () => {};
-  const markAlarmAsViewed = async () => {};
+  const markAlarmAsViewed = async (alarmId: string) => {};
 
   return (
     <AppContext.Provider value={{
