@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ const itemSize = screenWidth / numColumns - 10;
 export default function ArchiveScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { photos, addPhoto, getUserById, theme } = useAppContext();
+  const [uploading, setUploading] = useState(false);
   
   const roomPhotos = photos
     .filter(p => p.roomId === id)
@@ -19,21 +20,38 @@ export default function ArchiveScreen() {
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ['images', 'videos'],
       allowsEditing: true,
       quality: 0.8,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      addPhoto(id, result.assets[0].uri);
+      setUploading(true);
+      try {
+        await addPhoto(id, result.assets[0].uri);
+      } catch (error: any) {
+        Alert.alert('업로드 실패', error.message || '파일 업로드 중 오류가 발생했습니다.');
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={pickImage}>
-        <Ionicons name="camera-outline" size={24} color={theme.background} />
-        <Text style={[styles.uploadButtonText, { color: theme.background }]}>사진 업로드</Text>
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: theme.primary }]} 
+        onPress={pickImage}
+        disabled={uploading}
+      >
+        {uploading ? (
+          <ActivityIndicator color={theme.background} />
+        ) : (
+          <>
+            <Ionicons name="camera-outline" size={24} color={theme.background} />
+            <Text style={[styles.uploadButtonText, { color: theme.background }]}>사진/영상 업로드</Text>
+          </>
+        )}
       </TouchableOpacity>
 
       <FlatList
@@ -51,14 +69,15 @@ export default function ArchiveScreen() {
             </View>
           </View>
         )}
-        ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>업로드된 사진이 없습니다.</Text>}
+        ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>업로드된 파일이 없습니다. (최대 20개)</Text>}
       />
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12 },
+  uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12, height: 56 },
   uploadButtonText: { fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
   gridContainer: { paddingHorizontal: 5 },
   imageWrapper: { margin: 5, width: itemSize, height: itemSize, borderRadius: 8, overflow: 'hidden', position: 'relative' },

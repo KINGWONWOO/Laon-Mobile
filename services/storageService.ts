@@ -1,67 +1,85 @@
 import { supabase } from '../lib/supabase';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_GALLERY_COUNT = 20;
+const DEFAULT_BUCKET = 'laon-dance';
 
 export const storageService = {
+  /**
+   * 이미지 파일을 압축합니다.
+   */
+  compressImage: async (uri: string) => {
+    try {
+      console.log('[Storage] Compressing image:', uri);
+      const result = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1024 } }], 
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      return result.uri;
+    } catch (e) {
+      console.warn('[Storage] Compression failed:', e);
+      return uri;
+    }
+  },
+
   /**
    * Cloudflare R2에 파일을 업로드합니다.
    */
   uploadToR2: async (bucketPath: string, filePath: string, fileName: string) => {
     try {
-      console.log('[Storage] Starting upload for:', fileName, 'Path:', filePath);
-      
-      // 1. 파일 정보 확인 (SDK 52+ 에 맞춰 getFileInfoAsync 사용)
-      // FileSystem.getInfoAsync 는 최신 버전에서 getFileInfoAsync 로 대체되었습니다.
-      const fileInfo = await FileSystem.getFileInfoAsync(filePath, { size: true });
-      
-      if (!fileInfo.exists) {
-        throw new Error('파일이 존재하지 않습니다.');
-      }
-      
-      const fileSize = fileInfo.size || 0;
-      console.log('[Storage] File size:', fileSize);
-
-      if (fileSize > MAX_FILE_SIZE) {
-        throw new Error('파일 용량은 5MB를 초과할 수 없습니다.');
+      let targetPath = filePath;
+      const lowerName = fileName.toLowerCase();
+      if (lowerName.match(/\.(jpg|jpeg|png)$/)) {
+        targetPath = await storageService.compressImage(filePath);
       }
 
-      const contentType = fileName.toLowerCase().endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
+      console.log(`[Storage] Uploading to R2: ${bucketPath}/${fileName}`);
+      
+      const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true });
+      if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
+
+      const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
       const key = `${bucketPath}/${fileName}`;
 
-      // 2. Supabase Edge Function을 호출하여 pre-signed URL 획득
-      const { data, error: funcError } = await supabase.functions.invoke('get-r2-upload-url', {
-        body: { key, contentType }
-      });
-
-      if (funcError || !data) {
-        console.error('[Storage] Edge Function Error:', funcError);
-        throw new Error('업로드 URL을 가져오지 못했습니다. (Edge Function 확인 필요)');
+      // 💡 401 Unauthorized 에러 방지를 위해 세션 토큰 확인
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
       }
 
-      const { signedUrl, publicUrl } = data;
-      console.log('[Storage] Pre-signed URL received');
+      const { data, error: funcError } = await supabase.functions.invoke('get-r2-upload-url', {
+        body: { bucket: DEFAULT_BUCKET, key, contentType },
+        headers
+      });
 
-      // 3. R2에 직접 업로드 (PUT)
-      // uploadAsync 를 사용하여 바이너리 데이터 전송
-      const uploadResult = await FileSystem.uploadAsync(signedUrl, filePath, {
+      if (funcError) {
+        console.error('[Storage] Edge Function Error:', funcError.message);
+        throw new Error(`서버 인증 실패: ${funcError.message}`);
+      }
+
+      if (!data?.signedUrl) throw new Error('서버로부터 업로드 URL을 받지 못했습니다.');
+
+      const { signedUrl, publicUrl } = data;
+      console.log('[Storage] PUT to R2 started');
+
+      const uploadResult = await FileSystem.uploadAsync(signedUrl, targetPath, {
         httpMethod: 'PUT',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        headers: {
-          'Content-Type': contentType,
-        },
+        headers: { 'Content-Type': contentType },
       });
 
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        console.error('[Storage] R2 Upload Error Body:', uploadResult.body);
-        throw new Error(`R2 업로드 실패 (HTTP ${uploadResult.status})`);
+        throw new Error(`R2 업로드 실패 (${uploadResult.status})`);
       }
 
-      console.log('[Storage] Upload Success! Public URL:', publicUrl);
+      console.log('[Storage] Upload Complete:', publicUrl);
       return publicUrl;
     } catch (err: any) {
-      console.error('[R2 Storage] Final Error:', err.message);
+      console.error('[Storage] Final Error:', err.message);
       throw err;
     }
   },
@@ -70,32 +88,20 @@ export const storageService = {
    * 갤러리 아이템 등록
    */
   uploadToGallery: async (roomId: string, userId: string, filePath: string) => {
-    const { count, error: countError } = await supabase
-      .from('gallery_items')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', roomId);
-
-    if (countError) throw countError;
-    if (count !== null && count >= MAX_GALLERY_COUNT) {
-      throw new Error(`갤러리에는 최대 ${MAX_GALLERY_COUNT}개까지만 올릴 수 있습니다.`);
-    }
+    const { count } = await supabase.from('gallery_items').select('*', { count: 'exact', head: true }).eq('room_id', roomId);
+    if (count !== null && count >= MAX_GALLERY_COUNT) throw new Error(`갤러리 최대 개수를 초과했습니다.`);
 
     const ext = filePath.split('.').pop() || 'jpg';
     const fileName = `${Date.now()}.${ext}`;
     const publicUrl = await storageService.uploadToR2(`gallery/${roomId}`, filePath, fileName);
 
-    const fileInfo = await FileSystem.getFileInfoAsync(filePath);
-    const fileSize = fileInfo.size || 0;
-
-    const { error: dbError } = await supabase.from('gallery_items').insert({
-      room_id: roomId,
-      user_id: userId,
-      file_path: publicUrl,
+    const fileInfo: any = await FileSystem.getInfoAsync(filePath);
+    await supabase.from('gallery_items').insert({
+      room_id: roomId, user_id: userId, file_path: publicUrl,
       file_type: filePath.toLowerCase().endsWith('.mp4') ? 'video' : 'image',
-      file_size: fileSize
+      file_size: fileInfo.size || 0
     });
 
-    if (dbError) throw dbError;
     return publicUrl;
   },
 

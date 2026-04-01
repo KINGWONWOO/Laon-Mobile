@@ -16,7 +16,6 @@ export default function RoomsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <StyledBackButton />
         <View style={styles.profileSection}>
           <Text style={styles.nameText}>{currentUser?.name}</Text>
           <View style={styles.onlineBadge} />

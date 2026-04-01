@@ -34,11 +34,20 @@ export default function CreateRoomScreen() {
       Alert.alert('오류', '방 이름과 비밀번호를 모두 입력해주세요.');
       return;
     }
+    
+    // 💡 이미지 업로드 중임을 알리기 위해 로딩 상태 추가 가능 (현재는 createRoom 내부에서 처리)
     try {
+      // imageUri가 없으면 undefined로 전달하여 기본 로직 수행
       const room = await createRoom(name, passcode, imageUri || undefined);
-      router.replace(`/room/${room.id}` as any);
-    } catch (error) {
-      Alert.alert('오류', '방 생성 중 문제가 발생했습니다.');
+      
+      // 생성 후 목록으로 이동 (중복 스택 방지를 위해 replace 사용)
+      router.replace('/rooms');
+      setTimeout(() => {
+        router.push(`/room/${room.id}` as any);
+      }, 100);
+    } catch (error: any) {
+      console.error('[CreateRoom] Error:', error.message);
+      Alert.alert('오류', `방 생성 중 문제가 발생했습니다.\n${error.message}`);
     }
   };
 

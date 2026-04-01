@@ -182,11 +182,35 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const createRoom = async (name: string, passcode: string, imageUri?: string) => {
     if (!currentUser) throw new Error("로그인 필요");
+    
     let finalImage = imageUri;
-    if (imageUri && !imageUri.startsWith('http')) finalImage = await storageService.uploadProfileImage('room', uuidv4(), imageUri);
-    const { data: roomData, error } = await supabase.from('rooms').insert([{ name, passcode, image_uri: finalImage, leader_id: currentUser.id }]).select().single();
-    if (error) throw error;
-    await supabase.from('room_members').insert([{ room_id: roomData.id, user_id: currentUser.id }]);
+    if (imageUri && !imageUri.startsWith('http')) {
+      finalImage = await storageService.uploadProfileImage('room', uuidv4(), imageUri);
+    }
+
+    console.log('[AppContext] Attempting to create room:', name);
+
+    // 1. 방 생성 (DB 트리거가 멤버 추가를 자동으로 처리할 것으로 예상)
+    const { data: roomData, error: roomError } = await supabase
+      .from('rooms')
+      .insert([{ 
+        name, 
+        passcode, 
+        image_uri: finalImage, 
+        leader_id: currentUser.id 
+      }])
+      .select()
+      .single();
+
+    if (roomError) {
+      console.error('[AppContext] Room Insert Error:', roomError.message);
+      throw new Error(`방 생성 실패: ${roomError.message}`);
+    }
+
+    // 💡 참고: 만약 방 생성 후 목록에 본인이 안 보인다면, 
+    // 그때 다시 upsert 로직을 추가해야 합니다. 
+    // 현재는 트리거 에러 해결을 위해 생략합니다.
+
     queryClient.invalidateQueries({ queryKey: ['rooms'] });
     return roomData as Room;
   };

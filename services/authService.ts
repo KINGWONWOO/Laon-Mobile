@@ -10,14 +10,13 @@ WebBrowser.maybeCompleteAuthSession();
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
     try {
-      // 💡 AuthSession을 사용하여 Expo Go와 빌드 환경 모두 대응하는 정확한 주소 생성
+      // 💡 1. Redirect URI 생성 (Expo Go와 네이티브 환경 모두 대응)
       const redirectTo = AuthSession.makeRedirectUri({
-        scheme: 'laondancefeedback',
         path: 'auth/callback',
       });
       
-      console.log(`[Auth] ${provider} login started. Redirect URI:`, redirectTo);
-      console.log(`[Auth] Tip: Add the above URL to Supabase > Auth > Redirect URLs if login fails.`);
+      console.log(`[Auth] Starting ${provider} login...`);
+      console.log(`[Auth] Redirect URI: ${redirectTo}`);
 
       const options: any = {
         redirectTo,
@@ -26,49 +25,73 @@ export const authService = {
 
       if (provider === 'kakao') {
         options.queryParams = {
-          scope: 'openid,profile_nickname,account_email',
+          scope: 'profile_nickname,account_email',
         };
       }
 
+      // 💡 2. Supabase에 로그인 요청
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options,
       });
 
       if (error) {
-        console.error(`[Auth] Supabase signInWithOAuth Error:`, error.message);
+        console.error(`[Auth] Supabase Error:`, error.status, error.message, error.code);
         throw error;
       }
       
-      if (!data?.url) throw new Error('인증 서버로부터 URL을 받지 못했습니다.');
+      if (!data?.url) throw new Error('인증 URL을 생성할 수 없습니다.');
 
-      // PKCE 보안을 위해 verifier가 저장될 시간을 확보
-      await new Promise(resolve => setTimeout(resolve, 500));
-
+      // 💡 3. 브라우저 인증 실행
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        console.log(`[Auth] Success URL received:`, res.url);
+        console.log(`[Auth] Browser returned URL:`, res.url);
         
+        // URL에서 code 파라미터가 있는지 확인 (PKCE)
+        const parsedUrl = new URL(res.url.replace('#', '?')); // fragment 대응
+        const code = parsedUrl.searchParams.get('code');
+        const error_description = parsedUrl.searchParams.get('error_description');
+
+        if (error_description) {
+          throw new Error(`인증 오류: ${error_description}`);
+        }
+
+        if (!code) {
+          // code가 없는데 access_token이 있다면 Implicit flow로 처리 시도
+          const accessToken = parsedUrl.searchParams.get('access_token');
+          if (accessToken) {
+            console.log('[Auth] Using implicit flow fallback');
+            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: parsedUrl.searchParams.get('refresh_token') || '',
+            });
+            
+            if (sessionError) throw sessionError;
+            
+            // 세션 설정 후 앱 메인으로 이동하도록 유도
+            return { data: sessionData, error: null };
+          }
+          throw new Error('인증 코드를 찾을 수 없습니다. (PKCE code missing)');
+        }
+        
+        // 💡 4. 세션 교환
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
         
         if (sessionError) {
-          console.warn('[Auth] Exchange failed, checking backup session:', sessionError.message);
-          const { data: { session: backupSession } } = await supabase.auth.getSession();
-          if (backupSession) return { data: { session: backupSession }, error: null };
+          console.error('[Auth] Session exchange error:', sessionError.message);
+          // 이미 세션이 있는지 마지막 확인
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) return { data: { session }, error: null };
           throw sessionError;
         }
         
         return { data: sessionData, error: null };
       }
 
-      console.log(`[Auth] Browser session closed with type: ${res.type}`);
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Final Error:`, err);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) return { data: { session }, error: null };
-
+      console.error(`[Auth] ${provider} Error Detail:`, err);
       return { data: null, error: err };
     }
   },
@@ -148,7 +171,7 @@ export const authService = {
     try {
       const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      const response = await fetch(`${projectUrl}/functions/v1/send-verification-email`, { // Fix function name if needed
+      const response = await fetch(`${projectUrl}/functions/v1/send-verification-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
