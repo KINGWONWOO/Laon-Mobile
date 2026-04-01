@@ -4,85 +4,60 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../../context/AppContext';
-import { DanceButton } from '../../../components/ui/Interactions';
-import { Notice, Alarm, ThemeType } from '../../../types';
 import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { rooms, notices, currentUser, updateUserProfile, addNotice, updateNotice, deleteNotice, getUserById, markNoticeAsViewed, alarms, markAlarmAsViewed, theme, themeType, setThemeType } = useAppContext();
+  const { rooms, notices, currentUser, updateUserProfile, addNotice, updateNotice, deleteNotice, getUserById, theme } = useAppContext();
   const router = useRouter();
   const room = rooms.find(r => r.id === id);
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
-  const [showAlarmsModal, setShowAlarmsModal] = useState(false);
-  const [showThemeModal, setShowThemeModal] = useState(false);
   
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
-  const [noticeImages, setNoticeImages] = useState<string[]>([]);
   const [isPinned, setIsPinned] = useState(false);
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
 
   const [newName, setNewName] = useState(currentUser?.name || '');
   const [newImage, setNewImage] = useState<string | undefined>(currentUser?.profileImage);
-  const [expandedReaders, setExpandedReaders] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (currentUser?.name.startsWith('댄서 #')) {
-      setShowProfileModal(true);
-    }
-  }, []);
 
   const handleShareInvite = () => {
-    if (room) {
-      LinkingService.shareRoomInvite(room.name, room.id, room.passcode);
-    }
+    if (room) LinkingService.shareRoomInvite(room.name, room.id, room.passcode);
   };
 
-  const handleProfileSave = () => {
+  const handleProfileSave = async () => {
     if (!newName.trim()) return;
-    updateUserProfile(newName, newImage);
+    await updateUserProfile(newName, newImage);
     setShowProfileModal(false);
   };
 
-  const handleAddNotice = () => {
+  const handleAddNotice = async () => {
     if (!noticeTitle.trim() || !noticeContent.trim() || !id) return;
     if (editingNoticeId) {
-      updateNotice(editingNoticeId, noticeTitle, noticeContent, isPinned);
+      await updateNotice(editingNoticeId, noticeTitle, noticeContent, isPinned);
     } else {
-      addNotice(id, noticeTitle, noticeContent, isPinned, noticeImages);
+      await addNotice(id, noticeTitle, noticeContent, isPinned);
     }
     resetNoticeForm();
   };
 
   const resetNoticeForm = () => {
-    setNoticeTitle('');
-    setNoticeContent('');
-    setNoticeImages([]);
-    setIsPinned(false);
-    setEditingNoticeId(null);
-    setShowNoticeModal(false);
+    setNoticeTitle(''); setNoticeContent(''); setIsPinned(false); setEditingNoticeId(null); setShowNoticeModal(false);
   };
 
   if (!room) return null;
 
   const roomNotices = notices.filter(n => n.roomId === id);
   const pinnedNotice = roomNotices.find(n => n.isPinned);
-  const recentNotice = roomNotices.filter(n => !n.isPinned).sort((a, b) => b.createdAt - a.createdAt)[0];
-  const roomAlarms = alarms.filter(a => a.roomId === id);
-  const unreadAlarmsCount = roomAlarms.filter(a => currentUser && !a.viewedBy.includes(currentUser.id)).length;
+  const recentNotice = roomNotices.filter(n => !n.isPinned)[0];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Room Header Info */}
         <View style={styles.roomHeader}>
-          <Image 
-            source={room.imageUri ? { uri: room.imageUri } : require('../../../assets/images/icon.png')} 
-            style={styles.roomImage} 
-          />
+          <Image source={room.imageUri ? { uri: room.imageUri } : require('../../../assets/images/icon.png')} style={styles.roomImage} />
           <View style={styles.roomInfo}>
             <Text style={[styles.roomName, { color: theme.text }]}>{room.name}</Text>
             <TouchableOpacity style={styles.idBadge} onPress={handleShareInvite}>
@@ -90,40 +65,28 @@ export default function RoomDetailScreen() {
               <Ionicons name="share-social" size={14} color={theme.primary} />
             </TouchableOpacity>
           </View>
-          
-          <TouchableOpacity style={styles.themeBtn} onPress={() => setShowThemeModal(true)}>
-            <Ionicons name="color-palette-outline" size={24} color={theme.text} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.alarmBtn} onPress={() => setShowAlarmsModal(true)}>
-            <Ionicons name="notifications-outline" size={24} color={theme.text} />
-            {unreadAlarmsCount > 0 && <View style={[styles.alarmBadge, { backgroundColor: theme.primary }]}><Text style={styles.alarmBadgeText}>{unreadAlarmsCount}</Text></View>}
+          <TouchableOpacity onPress={() => setShowProfileModal(true)}>
+            <Ionicons name="person-circle-outline" size={32} color={theme.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Notice Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>공지사항</Text>
             <TouchableOpacity onPress={() => setShowNoticeModal(true)} style={[styles.addNoticeBtn, { backgroundColor: theme.primary }]}>
-              <Ionicons name="add-circle" size={18} color={theme.background} />
               <Text style={[styles.addNoticeBtnText, { color: theme.background }]}>공지 추가</Text>
             </TouchableOpacity>
           </View>
-          
           {(pinnedNotice || recentNotice) ? (
             <View>
               {pinnedNotice && <NoticeCard notice={pinnedNotice} getUserById={getUserById} theme={theme} isPinned />}
               {recentNotice && <NoticeCard notice={recentNotice} getUserById={getUserById} theme={theme} />}
             </View>
           ) : (
-            <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>등록된 공지사항이 없습니다.</Text>
-            </View>
+            <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>등록된 공지가 없습니다.</Text></View>
           )}
         </View>
 
-        {/* Menu Grid */}
         <View style={styles.menuGrid}>
           <MenuButton theme={theme} title="피드백 영상" icon="videocam" color="#FF3B30" onPress={() => router.push(`/room/${id}/feedback`)} />
           <MenuButton theme={theme} title="연습 일정" icon="calendar" color="#007AFF" onPress={() => router.push(`/room/${id}/schedule`)} />
@@ -132,16 +95,33 @@ export default function RoomDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Modals are kept in logic but UI is simplified for the invite demonstration */}
+      {/* Profile Edit Modal */}
+      <Modal visible={showProfileModal} animationType="slide">
+        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>프로필 수정</Text>
+          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={newName} onChangeText={setNewName} placeholder="이름" />
+          <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleProfileSave}><Text>저장</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary, marginTop: 20 }}>취소</Text></TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Notice Add Modal */}
+      <Modal visible={showNoticeModal} animationType="fade">
+        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>공지사항 작성</Text>
+          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={noticeTitle} onChangeText={setNoticeTitle} placeholder="제목" />
+          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, height: 100 }]} value={noticeContent} onChangeText={setNoticeContent} placeholder="내용" multiline />
+          <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleAddNotice}><Text>등록</Text></TouchableOpacity>
+          <TouchableOpacity onPress={resetNoticeForm}><Text style={{ color: theme.textSecondary, marginTop: 20 }}>취소</Text></TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 function NoticeCard({ notice, getUserById, theme, isPinned }: any) {
-  const uploader = getUserById(notice.userId);
   return (
     <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: isPinned ? theme.primary : theme.border }]}>
-      <Text style={[styles.uploaderName, { color: theme.primary }]}>{uploader?.name || '알 수 없음'}</Text>
       <Text style={[styles.noticeTitleText, { color: theme.text }]}>{notice.title}</Text>
       <Text style={[styles.noticeText, { color: theme.textSecondary }]} numberOfLines={2}>{notice.content}</Text>
     </View>
@@ -166,23 +146,21 @@ const styles = StyleSheet.create({
   roomName: { fontSize: 22, fontWeight: 'bold' },
   idBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   idText: { fontSize: 13, marginRight: 5, fontWeight: '600' },
-  themeBtn: { marginRight: 15 },
-  alarmBtn: { position: 'relative' },
-  alarmBadge: { position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  alarmBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   section: { marginBottom: 25 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold' },
-  addNoticeBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  addNoticeBtnText: { fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
+  addNoticeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  addNoticeBtnText: { fontSize: 12, fontWeight: 'bold' },
   noticeCard: { borderRadius: 12, padding: 15, borderWidth: 1, marginBottom: 10 },
-  uploaderName: { fontSize: 12, fontWeight: 'bold', marginBottom: 4 },
   noticeTitleText: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   noticeText: { fontSize: 14 },
   emptyCard: { borderRadius: 12, padding: 20, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1 },
-  emptyText: { },
   menuGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   menuButton: { width: '48%', borderRadius: 16, padding: 20, marginBottom: 15, alignItems: 'center', borderWidth: 1 },
   iconContainer: { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   menuTitle: { fontWeight: 'bold', fontSize: 14, textAlign: 'center' },
+  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+  input: { width: '100%', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 15 },
+  saveBtn: { width: '100%', padding: 15, borderRadius: 12, alignItems: 'center' }
 });

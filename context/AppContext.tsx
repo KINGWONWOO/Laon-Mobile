@@ -1,21 +1,18 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, Alarm, AlarmType, ThemeType } from '../types';
 import * as Crypto from 'expo-crypto';
-import * as Storage from '../services/storage';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import api, { roomApi, userApi, noticeApi, videoApi } from '../services/api';
 import { supabase } from '../lib/supabase';
+import { storageService } from '../services/storageService';
 
-// Helper function to generate UUID
 const uuidv4 = () => Crypto.randomUUID();
-const USER_SESSION_KEY = 'LAON_DANCE_USER_SESSION';
 
 type AppContextType = {
   currentUser: User | null;
   isLoadingUser: boolean;
   login: (email: string, password: string) => Promise<void>;
-  updateUserProfile: (name: string, profileImage?: string) => void;
+  updateUserProfile: (name: string, profileImage?: string) => Promise<void>;
   logout: () => Promise<void>;
   
   rooms: Room[];
@@ -27,25 +24,25 @@ type AppContextType = {
   joinRoom: (roomId: string, passcode: string) => Promise<Room | null>;
   
   notices: Notice[];
-  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => void;
-  updateNotice: (noticeId: string, title: string, content: string, isPinned: boolean) => void;
-  deleteNotice: (noticeId: string) => void;
-  togglePinNotice: (noticeId: string) => void;
-  markNoticeAsViewed: (noticeId: string) => void;
+  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => Promise<void>;
+  updateNotice: (noticeId: string, title: string, content: string, isPinned: boolean) => Promise<void>;
+  deleteNotice: (noticeId: string) => Promise<void>;
+  togglePinNotice: (noticeId: string) => Promise<void>;
+  markNoticeAsViewed: (noticeId: string) => Promise<void>;
   
   videos: VideoFeedback[];
-  addVideo: (roomId: string, videoUrl: string, title: string) => Promise<void>;
-  addComment: (videoId: string, text: string, timestampMillis: number) => void;
+  addVideo: (roomId: string, youtubeUrl: string, title: string, youtubeId: string) => Promise<void>;
+  addComment: (videoId: string, text: string, timestampMillis: number) => Promise<void>;
   
   photos: Photo[];
   addPhoto: (roomId: string, photoUrl: string) => Promise<void>;
 
   schedules: Schedule[];
-  addSchedule: (roomId: string, title: string, options: string[], startDate?: string, endDate?: string, sendNotification?: boolean) => void;
-  updateSchedule: (scheduleId: string, title: string) => void;
-  deleteSchedule: (scheduleId: string) => void;
-  respondToSchedule: (scheduleId: string, optionIds: string[]) => void;
-  markScheduleAsViewed: (scheduleId: string) => void;
+  addSchedule: (roomId: string, title: string, options: string[], startDate?: string, endDate?: string, sendNotification?: boolean) => Promise<void>;
+  updateSchedule: (scheduleId: string, title: string) => Promise<void>;
+  deleteSchedule: (scheduleId: string) => Promise<void>;
+  respondToSchedule: (scheduleId: string, optionIds: string[]) => Promise<void>;
+  markScheduleAsViewed: (scheduleId: string) => Promise<void>;
 
   votes: Vote[];
   addVote: (roomId: string, question: string, options: string[], settings: { 
@@ -54,16 +51,15 @@ type AppContextType = {
     sendNotification?: boolean,
     deadline?: number,
     notificationMinutes?: number 
-  }) => void;
-  updateVote: (voteId: string, question: string) => void;
-  deleteVote: (voteId: string) => void;
-  respondToVote: (voteId: string, optionIds: string[]) => void;
-  markVoteAsViewed: (voteId: string) => void;
-  addVoteComment: (voteId: string, text: string) => void;
+  }) => Promise<void>;
+  updateVote: (voteId: string, question: string) => Promise<void>;
+  deleteVote: (voteId: string) => Promise<void>;
+  respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
+  markVoteAsViewed: (voteId: string) => Promise<void>;
 
   alarms: Alarm[];
-  addAlarm: (roomId: string, title: string, content: string, type: AlarmType, targetId: string) => void;
-  markAlarmAsViewed: (alarmId: string) => void;
+  addAlarm: (roomId: string, title: string, content: string, type: AlarmType, targetId: string) => Promise<void>;
+  markAlarmAsViewed: (alarmId: string) => Promise<void>;
 
   themeType: ThemeType;
   setThemeType: (theme: ThemeType) => void;
@@ -77,268 +73,195 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [themeType, setThemeType] = useState<ThemeType>('dark');
-  
-  // Real-time states
   const [users, setUsers] = useState<User[]>([]);
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [videos, setVideos] = useState<VideoFeedback[]>([]);
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [votes, setVotes] = useState<Vote[]>([]);
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
 
   const theme = getThemeColors(themeType);
 
-  // Sync with Supabase Auth
+  // Auth Sync
   useEffect(() => {
     let isMounted = true;
-
-    // 5초 안에 응답 없으면 강제로 로딩 해제 (보험용)
-    const timeout = setTimeout(() => {
-      if (isMounted) {
-        console.warn('Auth session check timed out');
-        setIsLoadingUser(false);
-      }
-    }, 5000);
-
-    const buildUser = (session: any) => ({
-      id: session.user.id,
-      name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
-      profileImage: session.user.user_metadata?.profile_image,
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (isMounted && session?.user) setCurrentUser({
+        id: session.user.id,
+        name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
+        profileImage: session.user.user_metadata?.profile_image,
+      });
+      setIsLoadingUser(false);
     });
-
-    const initAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        
-        if (isMounted) {
-          if (session?.user) {
-            setCurrentUser(buildUser(session));
-          }
-        }
-      } catch (err) {
-        console.error('Error getting auth session:', err);
-      } finally {
-        if (isMounted) {
-          clearTimeout(timeout);
-          setIsLoadingUser(false);
-        }
-      }
-    };
-
-    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
-        if (session?.user) {
-          setCurrentUser(buildUser(session));
-        } else {
-          setCurrentUser(null);
-        }
+        setCurrentUser(session?.user ? {
+          id: session.user.id,
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '댄서',
+          profileImage: session.user.user_metadata?.profile_image,
+        } : null);
         setIsLoadingUser(false);
       }
     });
 
-    return () => {
-      isMounted = false;
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
+    return () => { isMounted = false; subscription.unsubscribe(); };
   }, []);
 
-  // Fetch Rooms via React Query (Filtered by currentUser)
+  // Realtime Subscription Logic
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        console.log('[Realtime] Change received:', payload.table);
+        if (payload.table === 'notices') queryClient.invalidateQueries({ queryKey: ['notices'] });
+        if (payload.table === 'videos' || payload.table === 'video_comments') queryClient.invalidateQueries({ queryKey: ['videos'] });
+        if (payload.table === 'gallery_items') queryClient.invalidateQueries({ queryKey: ['photos'] });
+        if (payload.table === 'schedules' || payload.table === 'schedule_options' || payload.table === 'schedule_responses') queryClient.invalidateQueries({ queryKey: ['schedules'] });
+        if (payload.table === 'votes' || payload.table === 'vote_options' || payload.table === 'vote_responses') queryClient.invalidateQueries({ queryKey: ['votes'] });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser]);
+
+  // Data Fetching
   const { data: serverRooms, isLoading: isLoadingRooms } = useQuery({
     queryKey: ['rooms', currentUser?.id],
     queryFn: async () => {
       if (!currentUser) return [];
-      // Fetch rooms where user is a member from Supabase
-      const { data, error } = await supabase
-        .from('room_members')
-        .select('rooms (*)')
-        .eq('user_id', currentUser.id);
-      
-      if (error) return [];
-      return data.map(item => item.rooms).filter(Boolean) as unknown as Room[];
+      const { data } = await supabase.from('room_members').select('rooms (*)').eq('user_id', currentUser?.id);
+      return (data?.map(item => item.rooms).filter(Boolean) || []) as Room[];
     },
     enabled: !!currentUser,
-    refetchInterval: 5000,
   });
-
   const rooms = serverRooms || [];
 
-  const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+  const fetchRoomData = async (table: string) => {
+    if (rooms.length === 0) return [];
+    const { data } = await supabase.from(table).select('*').in('room_id', rooms.map(r => r.id)).order('created_at', { ascending: false });
+    return data || [];
   };
 
-  const logout = async () => {
-    setCurrentUser(null);
-    await supabase.auth.signOut();
-    queryClient.clear();
-  };
+  const { data: noticesData } = useQuery({ queryKey: ['notices', rooms.map(r => r.id)], queryFn: () => fetchRoomData('notices'), enabled: rooms.length > 0 });
+  const { data: videosData } = useQuery({ queryKey: ['videos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('videos'), enabled: rooms.length > 0 });
+  const { data: photosData } = useQuery({ queryKey: ['photos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('gallery_items'), enabled: rooms.length > 0 });
+  const { data: schedulesData } = useQuery({ queryKey: ['schedules', rooms.map(r => r.id)], queryFn: () => fetchRoomData('schedules'), enabled: rooms.length > 0 });
+  const { data: votesData } = useQuery({ queryKey: ['votes', rooms.map(r => r.id)], queryFn: () => fetchRoomData('votes'), enabled: rooms.length > 0 });
+
+  // Mapping
+  const notices = (noticesData || []).map(n => ({
+    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
+    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by, createdAt: new Date(n.created_at).getTime()
+  }));
+
+  const videos = (videosData || []).map(v => ({
+    id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.youtube_url || v.storage_path,
+    title: v.title, createdAt: new Date(v.created_at).getTime(), comments: []
+  }));
+
+  const photos = (photosData || []).map(p => ({
+    id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, createdAt: new Date(p.created_at).getTime()
+  }));
+
+  const schedules = (schedulesData || []).map(s => ({
+    id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, viewedBy: s.viewed_by,
+    startDate: s.start_date, endDate: s.end_date, createdAt: new Date(s.created_at).getTime(),
+    options: [], responses: {}
+  }));
+
+  const votes = (votesData || []).map(v => ({
+    id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, 
+    isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, 
+    viewedBy: v.viewed_by, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined,
+    createdAt: new Date(v.created_at).getTime(), options: [], responses: {}, comments: []
+  }));
+
+  const [alarms, setAlarms] = useState<Alarm[]>([]);
+
+  const login = async (email: string, password: string) => { await supabase.auth.signInWithPassword({ email, password }); };
+  const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
 
   const createRoom = async (name: string, passcode: string, imageUri?: string) => {
-    if (!currentUser) throw new Error("로그인이 필요합니다.");
-    
-    // 1. Create room
-    const { data: roomData, error: roomError } = await supabase
-      .from('rooms')
-      .insert([{ name, passcode, image_uri: imageUri, leader_id: currentUser.id }])
-      .select()
-      .single();
-    
-    if (roomError) throw roomError;
-
-    // 2. Add creator as member
-    const { error: memberError } = await supabase
-      .from('room_members')
-      .insert([{ room_id: roomData.id, user_id: currentUser.id }]);
-    
-    if (memberError) throw memberError;
-
+    if (!currentUser) throw new Error("로그인 필요");
+    let finalImage = imageUri;
+    if (imageUri && !imageUri.startsWith('http')) finalImage = await storageService.uploadProfileImage('room', uuidv4(), imageUri);
+    const { data: roomData, error } = await supabase.from('rooms').insert([{ name, passcode, image_uri: finalImage, leader_id: currentUser.id }]).select().single();
+    if (error) throw error;
+    await supabase.from('room_members').insert([{ room_id: roomData.id, user_id: currentUser.id }]);
     queryClient.invalidateQueries({ queryKey: ['rooms'] });
     return roomData as Room;
   };
 
   const joinRoom = async (roomId: string, passcode: string) => {
-    if (!currentUser) throw new Error("로그인이 필요합니다.");
-    
-    // 1. Verify passcode
-    const { data: room, error: roomError } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', roomId)
-      .eq('passcode', passcode)
-      .single();
-    
-    if (roomError || !room) return null;
-
-    // 2. Add as member
-    const { error: memberError } = await supabase
-      .from('room_members')
-      .insert([{ room_id: roomId, user_id: currentUser.id }]);
-    
-    // Ignore error if already a member
-    
+    const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).eq('passcode', passcode).single();
+    if (!room || !currentUser) return null;
+    await supabase.from('room_members').upsert([{ room_id: roomId, user_id: currentUser.id }], { onConflict: 'room_id,user_id' });
     queryClient.invalidateQueries({ queryKey: ['rooms'] });
     return room as Room;
   };
 
-  const getRoomByIdRemote = async (roomId: string) => {
-    const { data, error } = await supabase.from('rooms').select('*').eq('id', roomId).single();
-    return error ? null : data as Room;
+  const addNotice = async (roomId: string, title: string, content: string, isPinned = false, images?: string[]) => {
+    await supabase.from('notices').insert([{ room_id: roomId, user_id: currentUser?.id, title, content, is_pinned: isPinned, image_urls: images || [] }]);
   };
 
-  const updateUserProfile = async (name: string, profileImage?: string) => {
-    if (!currentUser) return;
-    const { error } = await supabase.auth.updateUser({
-      data: { name, profile_image: profileImage }
-    });
-    if (error) console.error(error);
+  const updateNotice = async (noticeId: string, title: string, content: string, isPinned: boolean) => {
+    await supabase.from('notices').update({ title, content, is_pinned: isPinned }).eq('id', noticeId);
   };
 
-  const getUserById = (id: string) => users.find(u => u.id === id);
+  const deleteNotice = async (noticeId: string) => { await supabase.from('notices').delete().eq('id', noticeId); };
 
-  // Mock notice/video/etc logic (should be moved to Supabase eventually)
-  const addNotice = (roomId: string, title: string, content: string, isPinned = false, images?: string[]) => {
-    if (!currentUser) return;
-    const newNotice: Notice = { id: uuidv4(), roomId, userId: currentUser.id, title, content, isPinned, images, viewedBy: [currentUser.id], createdAt: Date.now() };
-    setNotices(prev => [...prev, newNotice]);
+  const addVideo = async (roomId: string, youtubeUrl: string, title: string, youtubeId: string) => {
+    await supabase.from('videos').insert([{ room_id: roomId, user_id: currentUser?.id, title, youtube_url: youtubeUrl, youtube_id: youtubeId }]);
   };
 
-  const updateNotice = (noticeId: string, title: string, content: string, isPinned: boolean) => {
-    setNotices(prev => prev.map(n => n.id === noticeId ? { ...n, title, content, isPinned } : n));
-  };
-
-  const deleteNotice = (noticeId: string) => {
-    setNotices(prev => prev.filter(n => n.id !== noticeId));
-  };
-
-  const togglePinNotice = (noticeId: string) => {
-    setNotices(prev => prev.map(n => n.id === noticeId ? { ...n, isPinned: !n.isPinned } : n));
-  };
-
-  const markNoticeAsViewed = (noticeId: string) => {
-    if (!currentUser) return;
-    setNotices(prev => prev.map(n => (n.id === noticeId && !n.viewedBy.includes(currentUser.id)) ? { ...n, viewedBy: [...n.viewedBy, currentUser.id] } : n));
-  };
-
-  const addVideo = async (roomId: string, videoUrl: string, title: string) => {
-    if (!currentUser) return;
-    const newVideo: VideoFeedback = { id: uuidv4(), roomId, userId: currentUser.id, videoUrl, title, comments: [], createdAt: Date.now() };
-    setVideos(prev => [...prev, newVideo]);
-  };
-
-  const addComment = (videoId: string, text: string, timestampMillis: number) => {
-    if (!currentUser) return;
-    setVideos(prev => prev.map(v => v.id === videoId ? { ...v, comments: [...v.comments, { id: uuidv4(), userId: currentUser.id, text, timestampMillis, createdAt: Date.now() }] } : v));
+  const addComment = async (videoId: string, text: string, timestampMillis: number) => {
+    await supabase.from('video_comments').insert([{ video_id: videoId, user_id: currentUser?.id, text, timestamp_millis: timestampMillis }]);
   };
 
   const addPhoto = async (roomId: string, photoUrl: string) => {
-    if (!currentUser) return;
-    setPhotos(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, photoUrl, createdAt: Date.now() }]);
+    if (currentUser) await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
   };
 
-  const addSchedule = (roomId: string, title: string, options: string[], startDate?: string, endDate?: string, sendNotification?: boolean) => {
-    if (!currentUser) return;
-    setSchedules(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, title, options: options.map(opt => ({ id: uuidv4(), dateTime: opt })), responses: {}, viewedBy: [currentUser.id], startDate, endDate, sendNotification, createdAt: Date.now() }]);
+  const addSchedule = async (roomId: string, title: string, options: string[], startDate?: string, endDate?: string) => {
+    const { data: schedule } = await supabase.from('schedules').insert([{ room_id: roomId, user_id: currentUser?.id, title, start_date: startDate, end_date: endDate }]).select().single();
+    if (schedule) await supabase.from('schedule_options').insert(options.map(opt => ({ schedule_id: schedule.id, date_time: opt })));
   };
 
-  const updateSchedule = (scheduleId: string, title: string) => {
-    setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, title } : s));
+  const respondToSchedule = async (scheduleId: string, optionIds: string[]) => {
+    await supabase.from('schedule_responses').upsert([{ schedule_id: scheduleId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'schedule_id,user_id' });
   };
 
-  const deleteSchedule = (scheduleId: string) => {
-    setSchedules(prev => prev.filter(s => s.id !== scheduleId));
+  const addVote = async (roomId: string, question: string, options: string[], settings: any) => {
+    const { data: vote } = await supabase.from('votes').insert([{ 
+      room_id: roomId, user_id: currentUser?.id, question, 
+      is_anonymous: settings.isAnonymous, allow_multiple: settings.allowMultiple,
+      deadline: settings.deadline ? new Date(settings.deadline).toISOString() : null
+    }]).select().single();
+    if (vote) await supabase.from('vote_options').insert(options.map(opt => ({ vote_id: vote.id, text: opt })));
   };
 
-  const respondToSchedule = (scheduleId: string, optionIds: string[]) => {
-    if (!currentUser) return;
-    setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, responses: { ...s.responses, [currentUser.id]: optionIds } } : s));
+  const respondToVote = async (voteId: string, optionIds: string[]) => {
+    await supabase.from('vote_responses').upsert([{ vote_id: voteId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'vote_id,user_id' });
   };
 
-  const markScheduleAsViewed = (scheduleId: string) => {
-    if (!currentUser) return;
-    setSchedules(prev => prev.map(s => (s.id === scheduleId && !s.viewedBy.includes(currentUser.id)) ? { ...s, viewedBy: [...s.viewedBy, currentUser.id] } : s));
+  const markNoticeAsViewed = async () => {};
+  const togglePinNotice = async () => {};
+  const getRoomByIdRemote = async (id: string) => {
+    const { data } = await supabase.from('rooms').select('*').eq('id', id).single();
+    return data as Room;
   };
-
-  const addVote = (roomId: string, question: string, options: string[], settings: any) => {
-    if (!currentUser) return;
-    setVotes(prev => [...prev, { id: uuidv4(), roomId, userId: currentUser.id, question, options: options.map(opt => ({ id: uuidv4(), text: opt })), responses: {}, ...settings, viewedBy: [currentUser.id], comments: [], createdAt: Date.now() }]);
+  const getUserById = (id: string) => users.find(u => u.id === id);
+  const updateUserProfile = async (name: string, img?: string) => {
+    let final = img;
+    if (img && !img.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser?.id || '', img);
+    await supabase.auth.updateUser({ data: { name, profile_image: final } });
   };
-
-  const updateVote = (voteId: string, question: string) => {
-    setVotes(prev => prev.map(v => v.id === voteId ? { ...v, question } : v));
-  };
-
-  const deleteVote = (voteId: string) => {
-    setVotes(prev => prev.filter(v => v.id !== voteId));
-  };
-
-  const respondToVote = (voteId: string, optionIds: string[]) => {
-    if (!currentUser) return;
-    setVotes(prev => prev.map(v => v.id === voteId ? { ...v, responses: { ...v.responses, [currentUser.id]: optionIds } } : v));
-  };
-
-  const markVoteAsViewed = (voteId: string) => {
-    if (!currentUser) return;
-    setVotes(prev => prev.map(v => (v.id === voteId && !v.viewedBy.includes(currentUser.id)) ? { ...v, viewedBy: [...v.viewedBy, currentUser.id] } : v));
-  };
-
-  const addVoteComment = (voteId: string, text: string) => {
-    if (!currentUser) return;
-    setVotes(prev => prev.map(v => v.id === voteId ? { ...v, comments: [...v.comments, { id: uuidv4(), userId: currentUser.id, text, timestampMillis: 0, createdAt: Date.now() }] } : v));
-  };
-
-  const addAlarm = (roomId: string, title: string, content: string, type: AlarmType, targetId: string) => {
-    setAlarms(prev => [{ id: uuidv4(), roomId, title, content, type, targetId, createdAt: Date.now(), viewedBy: currentUser ? [currentUser.id] : [] }, ...prev]);
-  };
-
-  const markAlarmAsViewed = (alarmId: string) => {
-    if (!currentUser) return;
-    setAlarms(prev => prev.map(a => (a.id === alarmId && !a.viewedBy.includes(currentUser.id)) ? { ...a, viewedBy: [...a.viewedBy, currentUser.id] } : a));
-  };
+  const updateSchedule = async () => {};
+  const deleteSchedule = async () => {};
+  const markScheduleAsViewed = async () => {};
+  const updateVote = async () => {};
+  const deleteVote = async () => {};
+  const markVoteAsViewed = async () => {};
+  const addAlarm = async () => {};
+  const markAlarmAsViewed = async () => {};
 
   return (
     <AppContext.Provider value={{
@@ -348,7 +271,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       videos, addVideo, addComment,
       photos, addPhoto,
       schedules, addSchedule, updateSchedule, deleteSchedule, respondToSchedule, markScheduleAsViewed,
-      votes, addVote, updateVote, deleteVote, respondToVote, markVoteAsViewed, addVoteComment,
+      votes, addVote, updateVote, deleteVote, respondToVote, markVoteAsViewed,
       alarms, addAlarm, markAlarmAsViewed,
       themeType, setThemeType, theme
     }}>
