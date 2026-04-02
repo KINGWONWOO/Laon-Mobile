@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, RefreshControl, Animated } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
@@ -8,15 +8,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback, Comment } from '../../../types';
 import { storageService } from '../../../services/storageService';
-import { Colors } from '../../../constants/theme'; // 💡 Colors 임포트 추가
+import { Colors } from '../../../constants/theme';
 
 export default function FeedbackScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed } = useAppContext();
+  const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData } = useAppContext();
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
   const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
   const [isCaching, setIsCaching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [newComment, setNewComment] = useState('');
   const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
@@ -25,8 +26,18 @@ export default function FeedbackScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
+
+  // 💡 댓글 팝업을 위한 상태
+  const [activeBubble, setActiveBubble] = useState<Comment | null>(null);
+  const bubbleAnim = useRef(new Animated.Value(0)).current;
   
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshAllData();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
     async function cacheAndPlay() {
@@ -52,6 +63,30 @@ export default function FeedbackScreen() {
     player.loop = true;
     player.play();
   });
+
+  // 💡 재생 시간 추적 및 댓글 팝업 로직
+  useEffect(() => {
+    if (!player || !selectedVideo) return;
+    
+    const interval = setInterval(() => {
+      const currentTimeMs = Math.floor(player.currentTime * 1000);
+      // 현재 시점의 댓글 찾기 (오차범위 500ms)
+      const hit = selectedVideo.comments.find(c => 
+        !c.parentId && Math.abs(c.timestampMillis - currentTimeMs) < 500
+      );
+
+      if (hit && activeBubble?.id !== hit.id) {
+        setActiveBubble(hit);
+        Animated.sequence([
+          Animated.timing(bubbleAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.delay(2500),
+          Animated.timing(bubbleAnim, { toValue: 0, duration: 300, useNativeDriver: true })
+        ]).start(() => setActiveBubble(null));
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [player, selectedVideo, activeBubble]);
 
   const handlePickVideo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
@@ -98,7 +133,22 @@ export default function FeedbackScreen() {
         </View>
         
         <View style={styles.videoContainer}>
-          {isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.videoPlayer} player={player} allowsFullscreen />}
+          {isCaching ? (
+            <ActivityIndicator size="large" color={theme.primary} />
+          ) : (
+            <>
+              <VideoView style={styles.videoPlayer} player={player} allowsFullscreen />
+              {/* 💡 댓글 팝업 오버레이 */}
+              {activeBubble && (
+                <Animated.View style={[styles.bubbleWrapper, { opacity: bubbleAnim }]}>
+                  <View style={[styles.bubble, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.bubbleUser}>{getUserById(activeBubble.userId)?.name}</Text>
+                    <Text style={styles.bubbleText} numberOfLines={2}>{activeBubble.text}</Text>
+                  </View>
+                </Animated.View>
+              )}
+            </>
+          )}
         </View>
 
         <View style={styles.feedbackActionRow}>
@@ -175,6 +225,7 @@ export default function FeedbackScreen() {
       <FlatList
         data={roomVideos}
         keyExtractor={item => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         renderItem={({ item }) => (
           <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => setSelectedVideo(item)}>
             <View style={styles.videoIconBox}><Ionicons name="play" size={20} color={theme.background} /></View>
@@ -211,6 +262,10 @@ const styles = StyleSheet.create({
   playerTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 10, flex: 1 },
   videoContainer: { width: '100%', aspectRatio: 16/9, backgroundColor: '#000', justifyContent: 'center' },
   videoPlayer: { width: '100%', height: '100%' },
+  bubbleWrapper: { position: 'absolute', bottom: 20, alignSelf: 'center', maxWidth: '80%', zIndex: 100 },
+  bubble: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 20, elevation: 5 },
+  bubbleUser: { fontSize: 10, fontWeight: 'bold', color: 'rgba(0,0,0,0.5)', marginBottom: 2 },
+  bubbleText: { fontSize: 13, fontWeight: 'bold', color: '#000' },
   feedbackActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#222' },
   addCommentBtn: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 15 },
   commentBlock: { padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#111' },

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, Dimensions, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, Dimensions, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, ScrollView, RefreshControl } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -10,19 +10,26 @@ const { width } = Dimensions.get('window');
 
 export default function ArchiveScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, markItemAsAccessed } = useAppContext();
+  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, markItemAsAccessed, refreshAllData } = useAppContext();
   
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [newImageUri, setNewImageUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
   const [activeCommentPhotoId, setActiveCommentPhotoId] = useState<string | null>(null);
   const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
   const [commentText, setCommentText] = useState('');
 
   const roomPhotos = useMemo(() => photos.filter(p => p.roomId === id), [photos, id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshAllData();
+    setRefreshing(false);
+  };
 
   const [isLeader, setIsLeader] = useState(false);
   React.useEffect(() => {
@@ -67,11 +74,10 @@ export default function ArchiveScreen() {
       <FlatList
         data={roomPhotos}
         keyExtractor={item => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         renderItem={({ item }) => {
           const uploader = getUserById(item.userId);
           const canDelete = isLeader || item.userId === currentUser?.id;
-
-          // 💡 답글 로직 (부모 댓글 아래에 배치)
           const mainComments = (item.comments || []).filter(c => !c.parentId);
 
           return (
@@ -159,7 +165,6 @@ export default function ArchiveScreen() {
         }
       />
 
-      {/* 사진 확대 모달 */}
       <Modal visible={!!selectedPhoto} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedPhoto(null)}><Ionicons name="close" size={30} color="#fff" /></TouchableOpacity>
@@ -167,7 +172,6 @@ export default function ArchiveScreen() {
         </View>
       </Modal>
 
-      {/* 업로드 모달 */}
       <Modal visible={showUploadModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.uploadContent}>

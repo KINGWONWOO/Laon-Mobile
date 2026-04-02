@@ -45,6 +45,7 @@ type AppContextType = {
   addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
   respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
 
+  refreshAllData: () => Promise<void>; // 💡 새로고침 함수 추가
   themeType: ThemeType;
   setThemeType: (theme: ThemeType) => void;
   theme: any;
@@ -90,7 +91,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
-  const refreshAllData = async () => { await queryClient.invalidateQueries(); };
+  const refreshAllData = async () => { 
+    await queryClient.invalidateQueries();
+    await queryClient.refetchQueries();
+  };
 
   useEffect(() => {
     if (!currentUser) return;
@@ -237,6 +241,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,
       votes: votesMapped, addVote, respondToVote,
+      refreshAllData, // 💡 새로고침 함수 노출
       themeType, setThemeType, theme
     }}>
       {children}
