@@ -67,8 +67,9 @@ export default function RoomsScreen() {
       <View style={styles.titleRow}>
         <Text style={styles.title}>내 크루룸</Text>
         <View style={{ flexDirection: 'row' }}>
+          {/* 💡 코드로 방 참여하기 버튼 복구 */}
           <TouchableOpacity style={[styles.actionBtn, { marginRight: 10 }]} onPress={() => router.push('/rooms/join')}>
-            <Ionicons name="enter-outline" size={22} color="#000" />
+            <Ionicons name="enter-outline" size={24} color="#000" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/rooms/create')}>
             <Ionicons name="add" size={24} color="#000" />

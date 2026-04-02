@@ -90,14 +90,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
-  const refreshAllData = async () => { 
-    await queryClient.invalidateQueries(); 
-    console.log('[AppContext] All data invalidated');
-  };
+  const refreshAllData = async () => { await queryClient.invalidateQueries(); };
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('global-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
@@ -132,7 +129,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return data || [];
   }, enabled: roomIds.length > 0 });
 
-  // 매핑 로직
+  // 매핑 로직 (데이터가 앱에서 보이도록 확실히 연결)
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
@@ -225,7 +222,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       currentUser, isLoadingUser, login, updateUserProfile, logout,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: async (id) => (await supabase.from('rooms').select('*').eq('id', id).single()).data as Room,
       createRoom, joinRoom, deleteRoom,
-      notices: [], addNotice: async () => {},
+      notices: noticesMapped, addNotice: async () => {},
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,

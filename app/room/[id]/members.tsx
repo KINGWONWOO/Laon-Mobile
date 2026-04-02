@@ -19,12 +19,12 @@ export default function MembersScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadMemberIds() {
+    async function loadMembers() {
       try {
         const room = await getRoomByIdRemote(id || '');
         if (room) setLeaderId(room.leader_id);
 
-        // 💡 관계 쿼리 에러를 피하기 위해 ID만 먼저 가져옵니다.
+        // 💡 관계 캐시 에러를 피하기 위해 ID 리스트를 먼저 가져옵니다.
         const { data, error } = await supabase
           .from('room_members')
           .select('user_id')
@@ -38,10 +38,10 @@ export default function MembersScreen() {
         setIsLoading(false);
       }
     }
-    loadMemberIds();
+    loadMembers();
   }, [id]);
 
-  // 💡 캐시된 전체 유저 정보에서 멤버 ID에 해당하는 정보만 필터링
+  // 💡 Context에서 관리하는 전체 유저 캐시에서 멤버 정보를 필터링합니다.
   const roomMembers = users.filter(u => memberIds.includes(u.id));
 
   if (isLoading) {
