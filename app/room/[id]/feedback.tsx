@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, RefreshControl, Dimensions } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
@@ -28,7 +28,6 @@ export default function FeedbackScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
 
-  // 💡 가로모드 및 사이드바 제어
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   
@@ -45,7 +44,6 @@ export default function FeedbackScreen() {
     setRefreshing(false);
   };
 
-  // 💡 가로모드 전환 로직
   useEffect(() => {
     async function changeOrientation() {
       if (isFullScreen) {
@@ -83,6 +81,45 @@ export default function FeedbackScreen() {
     p.play();
   });
 
+  const handlePickVideo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('권한 필요', '비디오 접근 권한이 필요합니다.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      if (!videoTitle.trim()) {
+        Alert.alert('오류', '영상 제목을 입력해주세요.');
+        return;
+      }
+      
+      setIsLoading(true);
+      try {
+        const videoUri = result.assets[0].uri;
+        const ext = videoUri.split('.').pop() || 'mp4';
+        const fileName = `${Date.now()}.${ext}`;
+        const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
+        
+        await addVideo(id || '', publicUrl, videoTitle);
+        
+        setShowAddModal(false);
+        setVideoTitle('');
+        Alert.alert('업로드 완료', '연습 영상이 업로드되었습니다.');
+      } catch (error: any) {
+        Alert.alert('업로드 실패', error.message || '영상을 올리는 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
     const posMillis = Math.floor((player?.currentTime || 0) * 1000);
@@ -102,14 +139,9 @@ export default function FeedbackScreen() {
     return (
       <Modal visible={true} animationType="slide" transparent={false}>
         <View style={[styles.fullView, { paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
-          
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
-            
-            {/* 비디오 영역 */}
             <View style={[styles.videoSection, isFullScreen && styles.landscapeVideo]}>
               {isCaching ? <ActivityIndicator size="large" color={Colors.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} />}
-              
-              {/* 비디오 컨트롤 오버레이 */}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
@@ -126,7 +158,6 @@ export default function FeedbackScreen() {
               </View>
             </View>
 
-            {/* 댓글 사이드바 (가로모드 시 오른쪽, 세로모드 시 하단) */}
             {(!isFullScreen || showSidebar) && (
               <View style={[styles.sidebar, isFullScreen && styles.landscapeSidebar]}>
                 <View style={styles.sidebarHeader}>
@@ -136,24 +167,20 @@ export default function FeedbackScreen() {
                 <FlatList
                   data={sortedComments}
                   keyExtractor={item => item.id}
-                  renderItem={({ item }) => {
-                    const cUser = getUserById(item.userId);
-                    return (
-                      <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={styles.cItem}>
-                        <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
-                          <Text style={styles.cTime}>{formatTime(item.timestampMillis)}</Text>
-                          <Text style={styles.cUser}>{cUser?.name}</Text>
-                        </View>
-                        <Text style={styles.cText}>{item.text}</Text>
-                      </TouchableOpacity>
-                    );
-                  }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={styles.cItem}>
+                      <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
+                        <Text style={styles.cTime}>{formatTime(item.timestampMillis)}</Text>
+                        <Text style={styles.cUser}>{getUserById(item.userId)?.name}</Text>
+                      </View>
+                      <Text style={styles.cText}>{item.text}</Text>
+                    </TouchableOpacity>
+                  )}
                 />
               </View>
             )}
           </View>
 
-          {/* 댓글 입력창 */}
           <Modal visible={showCommentInput} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <KeyboardAvoidingView behavior="padding" style={styles.modalContent}>
