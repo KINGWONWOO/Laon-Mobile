@@ -37,14 +37,13 @@ export default function CreateRoomScreen() {
     
     // 💡 이미지 업로드 중임을 알리기 위해 로딩 상태 추가 가능 (현재는 createRoom 내부에서 처리)
     try {
-      // imageUri가 없으면 undefined로 전달하여 기본 로직 수행
+      // 1. 방 생성 로직 실행
       const room = await createRoom(name, passcode, imageUri || undefined);
       
-      // 생성 후 목록으로 이동 (중복 스택 방지를 위해 replace 사용)
-      router.replace('/rooms');
-      setTimeout(() => {
-        router.push(`/room/${room.id}` as any);
-      }, 100);
+      // 2. 생성 성공 시 해당 방으로 즉시 이동 (목록을 거치지 않음)
+      console.log('[CreateRoom] Success, navigating to room:', room.id);
+      router.replace(`/room/${room.id}` as any);
+      
     } catch (error: any) {
       console.error('[CreateRoom] Error:', error.message);
       Alert.alert('오류', `방 생성 중 문제가 발생했습니다.\n${error.message}`);

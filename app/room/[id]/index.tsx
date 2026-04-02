@@ -1,166 +1,178 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, KeyboardAvoidingView, Platform, Share, Alert, FlatList } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Share, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../../../context/AppContext';
-import { LinkingService } from '../../../services/LinkingService';
+import { Colors } from '../../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
+import * as Clipboard from 'expo-clipboard';
 
-export default function RoomDetailScreen() {
+export default function RoomMainScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { rooms, notices, currentUser, updateUserProfile, addNotice, updateNotice, deleteNotice, getUserById, theme } = useAppContext();
+  const { rooms } = useAppContext();
   const router = useRouter();
+  
   const room = rooms.find(r => r.id === id);
 
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showNoticeModal, setShowNoticeModal] = useState(false);
-  
-  const [noticeTitle, setNoticeTitle] = useState('');
-  const [noticeContent, setNoticeContent] = useState('');
-  const [isPinned, setIsPinned] = useState(false);
-  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+  if (!room) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#fff' }}>방 정보를 불러올 수 없습니다.</Text>
+      </View>
+    );
+  }
 
-  const [newName, setNewName] = useState(currentUser?.name || '');
-  const [newImage, setNewImage] = useState<string | undefined>(currentUser?.profileImage);
-
-  const handleShareInvite = () => {
-    if (room) LinkingService.shareRoomInvite(room.name, room.id, room.passcode);
+  // 💡 방 ID 복사 함수
+  const copyRoomId = async () => {
+    await Clipboard.setStringAsync(room.id);
+    Alert.alert('복사 완료', '방 고유 ID가 클립보드에 복사되었습니다.');
   };
 
-  const handleProfileSave = async () => {
-    if (!newName.trim()) return;
-    await updateUserProfile(newName, newImage);
-    setShowProfileModal(false);
-  };
+  const handleInvite = async () => {
+    const inviteUrl = Linking.createURL(`/room/${room.id}`, {
+      queryParams: { passcode: room.passcode },
+    });
 
-  const handleAddNotice = async () => {
-    if (!noticeTitle.trim() || !noticeContent.trim() || !id) return;
-    if (editingNoticeId) {
-      await updateNotice(editingNoticeId, noticeTitle, noticeContent, isPinned);
-    } else {
-      await addNotice(id, noticeTitle, noticeContent, isPinned);
+    try {
+      await Share.share({
+        title: `[LAON DANCE] ${room.name} 초대`,
+        message: `[LAON DANCE] '${room.name}' 크루룸 초대장\n\n` +
+                 `1. 앱에서 참여하기:\n- 방 ID: ${room.id}\n- 비밀번호: ${room.passcode}\n\n` +
+                 `2. 링크로 바로가기:\n${inviteUrl}`,
+      });
+    } catch (error) {
+      Alert.alert('오류', '초대장을 공유할 수 없습니다.');
     }
-    resetNoticeForm();
   };
 
-  const resetNoticeForm = () => {
-    setNoticeTitle(''); setNoticeContent(''); setIsPinned(false); setEditingNoticeId(null); setShowNoticeModal(false);
-  };
-
-  if (!room) return null;
-
-  const roomNotices = notices.filter(n => n.roomId === id);
-  const pinnedNotice = roomNotices.find(n => n.isPinned);
-  const recentNotice = roomNotices.filter(n => !n.isPinned)[0];
+  const menuItems = [
+    { title: '일정 맞추기', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B' },
+    { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#4ECDC4' },
+    { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#45B7D1' },
+    { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#F7D794' },
+  ];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.roomHeader}>
-          <Image source={room.imageUri ? { uri: room.imageUri } : require('../../../assets/images/icon.png')} style={styles.roomImage} />
-          <View style={styles.roomInfo}>
-            <Text style={[styles.roomName, { color: theme.text }]}>{room.name}</Text>
-            <TouchableOpacity style={styles.idBadge} onPress={handleShareInvite}>
-              <Text style={[styles.idText, { color: theme.primary }]}>팀원 초대하기</Text>
-              <Ionicons name="share-social" size={14} color={theme.primary} />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={() => setShowProfileModal(true)}>
-            <Ionicons name="person-circle-outline" size={32} color={theme.text} />
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <LinearGradient colors={['#1A1A2E', '#0F0F1B']} style={styles.headerCard}>
+        <View style={styles.roomInitialCircle}>
+          <Text style={styles.roomInitialText}>{room.name[0].toUpperCase()}</Text>
+        </View>
+        <Text style={styles.roomName}>{room.name}</Text>
+        
+        {/* 💡 방 ID 표시 및 복사 버튼 */}
+        <TouchableOpacity style={styles.idContainer} onPress={copyRoomId}>
+          <Text style={styles.roomIdText} numberOfLines={1}>ID: {room.id}</Text>
+          <Ionicons name="copy-outline" size={14} color={Colors.textSecondary} style={{ marginLeft: 5 }} />
+        </TouchableOpacity>
+
+        <Text style={styles.roomCode}>비밀번호: {room.passcode}</Text>
+        
+        <View style={styles.headerActionRow}>
+          <TouchableOpacity style={styles.inviteBtn} onPress={handleInvite}>
+            <Ionicons name="share-social" size={18} color="#000" />
+            <Text style={styles.inviteBtnText}>초대장 보내기</Text>
           </TouchableOpacity>
         </View>
+      </LinearGradient>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>공지사항</Text>
-            <TouchableOpacity onPress={() => setShowNoticeModal(true)} style={[styles.addNoticeBtn, { backgroundColor: theme.primary }]}>
-              <Text style={[styles.addNoticeBtnText, { color: theme.background }]}>공지 추가</Text>
-            </TouchableOpacity>
-          </View>
-          {(pinnedNotice || recentNotice) ? (
-            <View>
-              {pinnedNotice && <NoticeCard notice={pinnedNotice} getUserById={getUserById} theme={theme} isPinned />}
-              {recentNotice && <NoticeCard notice={recentNotice} getUserById={getUserById} theme={theme} />}
+      <View style={styles.grid}>
+        {menuItems.map((item, index) => (
+          <TouchableOpacity 
+            key={index} 
+            style={styles.gridItem}
+            onPress={() => router.push(item.path as any)}
+          >
+            <View style={[styles.iconBox, { backgroundColor: item.color + '20' }]}>
+              <Ionicons name={item.icon as any} size={32} color={item.color} />
             </View>
-          ) : (
-            <View style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>등록된 공지가 없습니다.</Text></View>
-          )}
+            <Text style={styles.itemTitle}>{item.title}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.noticeSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>팀 공지</Text>
+          <TouchableOpacity onPress={() => Alert.alert('준비 중', '공지사항 기능은 곧 업데이트됩니다.')}>
+            <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.menuGrid}>
-          <MenuButton theme={theme} title="피드백 영상" icon="videocam" color="#FF3B30" onPress={() => router.push(`/room/${id}/feedback`)} />
-          <MenuButton theme={theme} title="연습 일정" icon="calendar" color="#007AFF" onPress={() => router.push(`/room/${id}/schedule`)} />
-          <MenuButton theme={theme} title="투표/의사결정" icon="checkbox" color="#34C759" onPress={() => router.push(`/room/${id}/vote`)} />
-          <MenuButton theme={theme} title="아카이브" icon="images" color="#5856D6" onPress={() => router.push(`/room/${id}/archive`)} />
+        <View style={styles.emptyNotice}>
+          <Text style={styles.emptyNoticeText}>등록된 공지사항이 없습니다.</Text>
         </View>
-      </ScrollView>
-
-      {/* Profile Edit Modal */}
-      <Modal visible={showProfileModal} animationType="slide">
-        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>프로필 수정</Text>
-          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={newName} onChangeText={setNewName} placeholder="이름" />
-          <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleProfileSave}><Text>저장</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary, marginTop: 20 }}>취소</Text></TouchableOpacity>
-        </View>
-      </Modal>
-
-      {/* Notice Add Modal */}
-      <Modal visible={showNoticeModal} animationType="fade">
-        <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>공지사항 작성</Text>
-          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={noticeTitle} onChangeText={setNoticeTitle} placeholder="제목" />
-          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, height: 100 }]} value={noticeContent} onChangeText={setNoticeContent} placeholder="내용" multiline />
-          <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleAddNotice}><Text>등록</Text></TouchableOpacity>
-          <TouchableOpacity onPress={resetNoticeForm}><Text style={{ color: theme.textSecondary, marginTop: 20 }}>취소</Text></TouchableOpacity>
-        </View>
-      </Modal>
-    </View>
-  );
-}
-
-function NoticeCard({ notice, getUserById, theme, isPinned }: any) {
-  return (
-    <View style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: isPinned ? theme.primary : theme.border }]}>
-      <Text style={[styles.noticeTitleText, { color: theme.text }]}>{notice.title}</Text>
-      <Text style={[styles.noticeText, { color: theme.textSecondary }]} numberOfLines={2}>{notice.content}</Text>
-    </View>
-  );
-}
-
-function MenuButton({ title, icon, color, onPress, theme }: any) {
-  return (
-    <TouchableOpacity style={[styles.menuButton, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={onPress}>
-      <View style={[styles.iconContainer, { backgroundColor: color }]}><Ionicons name={icon} size={28} color="#fff" /></View>
-      <Text style={[styles.menuTitle, { color: theme.text }]}>{title}</Text>
-    </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { padding: 20, paddingTop: 60 },
-  roomHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 30 },
-  roomImage: { width: 60, height: 60, borderRadius: 30, marginRight: 15 },
-  roomInfo: { flex: 1 },
-  roomName: { fontSize: 22, fontWeight: 'bold' },
-  idBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  idText: { fontSize: 13, marginRight: 5, fontWeight: '600' },
-  section: { marginBottom: 25 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold' },
-  addNoticeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  addNoticeBtnText: { fontSize: 12, fontWeight: 'bold' },
-  noticeCard: { borderRadius: 12, padding: 15, borderWidth: 1, marginBottom: 10 },
-  noticeTitleText: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
-  noticeText: { fontSize: 14 },
-  emptyCard: { borderRadius: 12, padding: 20, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1 },
-  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  menuButton: { width: '48%', borderRadius: 16, padding: 20, marginBottom: 15, alignItems: 'center', borderWidth: 1 },
-  iconContainer: { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  menuTitle: { fontWeight: 'bold', fontSize: 14, textAlign: 'center' },
-  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  input: { width: '100%', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 15 },
-  saveBtn: { width: '100%', padding: 15, borderRadius: 12, alignItems: 'center' }
+  container: { flex: 1, backgroundColor: '#000' },
+  scrollContent: { padding: 20, paddingTop: 40 },
+  headerCard: {
+    padding: 25,
+    borderRadius: 24,
+    alignItems: 'center',
+    marginBottom: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  roomInitialCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  roomInitialText: { fontSize: 24, fontWeight: 'bold', color: '#000' },
+  roomName: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  idContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+    maxWidth: '90%',
+  },
+  roomIdText: { fontSize: 12, color: Colors.textSecondary, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  roomCode: { fontSize: 14, color: Colors.accent, fontWeight: '600', marginBottom: 20 },
+  headerActionRow: { flexDirection: 'row', justifyContent: 'center' },
+  inviteBtn: {
+    flexDirection: 'row',
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  inviteBtnText: { color: '#000', fontWeight: 'bold', marginLeft: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  gridItem: {
+    width: '48%',
+    backgroundColor: '#161622',
+    padding: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  iconBox: { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  itemTitle: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  noticeSection: { marginTop: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  emptyNotice: {
+    backgroundColor: '#161622',
+    padding: 25,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyNoticeText: { color: Colors.textSecondary, fontSize: 14 },
 });

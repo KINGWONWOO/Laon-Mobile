@@ -371,6 +371,9 @@ verify_jwt = false
 [functions.verify-and-signup]
 verify_jwt = false
 
+[functions.get-r2-upload-url]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

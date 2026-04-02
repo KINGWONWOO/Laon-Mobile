@@ -188,9 +188,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       finalImage = await storageService.uploadProfileImage('room', uuidv4(), imageUri);
     }
 
-    console.log('[AppContext] Attempting to create room:', name);
+    console.log('[AppContext] Creating room:', name);
 
-    // 1. 방 생성 (DB 트리거가 멤버 추가를 자동으로 처리할 것으로 예상)
+    // 1. 방 생성
     const { data: roomData, error: roomError } = await supabase
       .from('rooms')
       .insert([{ 
@@ -202,16 +202,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       .select()
       .single();
 
-    if (roomError) {
-      console.error('[AppContext] Room Insert Error:', roomError.message);
-      throw new Error(`방 생성 실패: ${roomError.message}`);
+    if (roomError) throw new Error(`방 생성 실패: ${roomError.message}`);
+
+    // 2. 💡 방 멤버로 본인 강제 등록 (트리거와 상관없이 upsert로 보장)
+    console.log('[AppContext] Adding creator to members...');
+    const { error: memberError } = await supabase
+      .from('room_members')
+      .upsert([{ 
+        room_id: roomData.id, 
+        user_id: currentUser.id 
+      }], { onConflict: 'room_id,user_id' });
+
+    if (memberError) {
+      console.warn('[AppContext] Member registration via upsert failed, but room exists:', memberError.message);
     }
 
-    // 💡 참고: 만약 방 생성 후 목록에 본인이 안 보인다면, 
-    // 그때 다시 upsert 로직을 추가해야 합니다. 
-    // 현재는 트리거 에러 해결을 위해 생략합니다.
-
-    queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    // 3. 캐시 즉시 갱신
+    await queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    
     return roomData as Room;
   };
 
@@ -234,37 +242,113 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteNotice = async (noticeId: string) => { await supabase.from('notices').delete().eq('id', noticeId); };
 
   const addVideo = async (roomId: string, youtubeUrl: string, title: string, youtubeId: string) => {
-    await supabase.from('videos').insert([{ room_id: roomId, user_id: currentUser?.id, title, youtube_url: youtubeUrl, youtube_id: youtubeId }]);
+    console.log('[AppContext] Adding video:', title);
+    const { error } = await supabase.from('videos').insert([{ 
+      room_id: roomId, 
+      user_id: currentUser?.id, 
+      title, 
+      youtube_url: youtubeUrl, 
+      youtube_id: youtubeId 
+    }]);
+    if (error) {
+      console.error('[AppContext] AddVideo Error:', error.message);
+      throw new Error(`영상 추가 실패: ${error.message}`);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['videos'] });
   };
 
   const addComment = async (videoId: string, text: string, timestampMillis: number) => {
-    await supabase.from('video_comments').insert([{ video_id: videoId, user_id: currentUser?.id, text, timestamp_millis: timestampMillis }]);
+    const { error } = await supabase.from('video_comments').insert([{ 
+      video_id: videoId, 
+      user_id: currentUser?.id, 
+      text, 
+      timestamp_millis: timestampMillis 
+    }]);
+    if (error) throw error;
+    await queryClient.invalidateQueries({ queryKey: ['videos'] });
   };
 
   const addPhoto = async (roomId: string, photoUrl: string) => {
-    if (currentUser) await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
+    if (currentUser) {
+      console.log('[AppContext] Uploading photo to gallery...');
+      await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
+      await queryClient.invalidateQueries({ queryKey: ['photos'] });
+    }
   };
 
   const addSchedule = async (roomId: string, title: string, options: string[], startDate?: string, endDate?: string) => {
-    const { data: schedule } = await supabase.from('schedules').insert([{ room_id: roomId, user_id: currentUser?.id, title, start_date: startDate, end_date: endDate }]).select().single();
-    if (schedule) await supabase.from('schedule_options').insert(options.map(opt => ({ schedule_id: schedule.id, date_time: opt })));
+    console.log('[AppContext] Adding schedule:', title);
+    const { data: schedule, error: sError } = await supabase
+      .from('schedules')
+      .insert([{ room_id: roomId, user_id: currentUser?.id, title, start_date: startDate, end_date: endDate }])
+      .select()
+      .single();
+    
+    if (sError) {
+      console.error('[AppContext] AddSchedule Error:', sError.message);
+      throw new Error(`일정 생성 실패: ${sError.message}`);
+    }
+
+    if (schedule && options.length > 0) {
+      const { error: oError } = await supabase.from('schedule_options').insert(
+        options.map(opt => ({ schedule_id: schedule.id, date_time: opt }))
+      );
+      if (oError) {
+        console.error('[AppContext] Schedule Options Error:', oError.message);
+        throw oError;
+      }
+    }
+    
+    await queryClient.invalidateQueries({ queryKey: ['schedules'] });
   };
 
   const respondToSchedule = async (scheduleId: string, optionIds: string[]) => {
-    await supabase.from('schedule_responses').upsert([{ schedule_id: scheduleId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'schedule_id,user_id' });
+    const { error } = await supabase.from('schedule_responses').upsert([{ 
+      schedule_id: scheduleId, 
+      user_id: currentUser?.id, 
+      option_ids: optionIds 
+    }], { onConflict: 'schedule_id,user_id' });
+    if (error) throw error;
+    await queryClient.invalidateQueries({ queryKey: ['schedules'] });
   };
 
   const addVote = async (roomId: string, question: string, options: string[], settings: any) => {
-    const { data: vote } = await supabase.from('votes').insert([{ 
-      room_id: roomId, user_id: currentUser?.id, question, 
-      is_anonymous: settings.isAnonymous, allow_multiple: settings.allowMultiple,
+    console.log('[AppContext] Adding vote:', question);
+    const { data: vote, error: vError } = await supabase.from('votes').insert([{ 
+      room_id: roomId, 
+      user_id: currentUser?.id, 
+      question, 
+      is_anonymous: settings.isAnonymous, 
+      allow_multiple: settings.allowMultiple,
       deadline: settings.deadline ? new Date(settings.deadline).toISOString() : null
     }]).select().single();
-    if (vote) await supabase.from('vote_options').insert(options.map(opt => ({ vote_id: vote.id, text: opt })));
+
+    if (vError) {
+      console.error('[AppContext] AddVote Error:', vError.message);
+      throw new Error(`투표 생성 실패: ${vError.message}`);
+    }
+
+    if (vote && options.length > 0) {
+      const { error: oError } = await supabase.from('vote_options').insert(
+        options.map(opt => ({ vote_id: vote.id, text: opt }))
+      );
+      if (oError) {
+        console.error('[AppContext] Vote Options Error:', oError.message);
+        throw oError;
+      }
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['votes'] });
   };
 
   const respondToVote = async (voteId: string, optionIds: string[]) => {
-    await supabase.from('vote_responses').upsert([{ vote_id: voteId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'vote_id,user_id' });
+    const { error } = await supabase.from('vote_responses').upsert([{ 
+      vote_id: voteId, 
+      user_id: currentUser?.id, 
+      option_ids: optionIds 
+    }], { onConflict: 'vote_id,user_id' });
+    if (error) throw error;
+    await queryClient.invalidateQueries({ queryKey: ['votes'] });
   };
 
   const markNoticeAsViewed = async () => {};

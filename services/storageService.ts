@@ -12,7 +12,6 @@ export const storageService = {
    */
   compressImage: async (uri: string) => {
     try {
-      console.log('[Storage] Compressing image:', uri);
       const result = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: 1024 } }], 
@@ -20,7 +19,6 @@ export const storageService = {
       );
       return result.uri;
     } catch (e) {
-      console.warn('[Storage] Compression failed:', e);
       return uri;
     }
   },
@@ -36,7 +34,7 @@ export const storageService = {
         targetPath = await storageService.compressImage(filePath);
       }
 
-      console.log(`[Storage] Uploading to R2: ${bucketPath}/${fileName}`);
+      console.log(`[Storage] Uploading: ${bucketPath}/${fileName}`);
       
       const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true });
       if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
@@ -44,28 +42,61 @@ export const storageService = {
       const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
       const key = `${bucketPath}/${fileName}`;
 
-      // 💡 401 Unauthorized 에러 방지를 위해 세션 토큰 확인
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-
-      const { data, error: funcError } = await supabase.functions.invoke('get-r2-upload-url', {
-        body: { bucket: DEFAULT_BUCKET, key, contentType },
-        headers
+      // 💡 1. 세션 및 환경 변수 확인
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('[Storage] Auth Diagnosis:', {
+        hasSession: !!session,
+        expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'N/A',
+        hasAccessToken: !!session?.access_token,
+        sessionError: sessionError?.message
       });
 
-      if (funcError) {
-        console.error('[Storage] Edge Function Error:', funcError.message);
-        throw new Error(`서버 인증 실패: ${funcError.message}`);
+      if (!session) {
+        // 세션이 없다면 로그인을 다시 유도해야 합니다.
+        throw new Error('인증 세션이 없습니다. 다시 로그인해 주세요.');
       }
 
-      if (!data?.signedUrl) throw new Error('서버로부터 업로드 URL을 받지 못했습니다.');
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      console.log('[Storage] Project URL:', supabaseUrl);
+
+      // 💡 2. supabase.functions.invoke를 사용하여 Edge Function 호출
+      console.log('[Storage] Requesting signed URL via supabase.functions.invoke...');
+      
+      // invoke는 내부적으로 현재 session.access_token을 Authorization: Bearer <token> 헤더에 담아 보냅니다.
+      const { data, error: invokeError } = await supabase.functions.invoke('get-r2-upload-url', {
+        body: { bucket: DEFAULT_BUCKET, key, contentType }
+      });
+
+      if (invokeError) {
+        console.error('[Storage] Edge Function Invoke Error Detail:', JSON.stringify(invokeError, null, 2));
+        
+        // 💡 Edge Function에서 반환한 상세 에러 메시지 추출 시도
+        let detailedMsg = '';
+        try {
+          if (invokeError instanceof Error && 'context' in invokeError) {
+            const context = (invokeError as any).context;
+            if (context && typeof context.json === 'function') {
+              const body = await context.json();
+              detailedMsg = body.error || body.message || JSON.stringify(body);
+            }
+          }
+        } catch (e) {
+          console.error('[Storage] Failed to parse error body:', e);
+        }
+
+        const errorMsg = detailedMsg || (invokeError instanceof Error ? invokeError.message : JSON.stringify(invokeError));
+        throw new Error(`서버 인증 실패: ${errorMsg}`);
+      }
+
+      if (!data?.signedUrl) {
+        console.error('[Storage] No signedUrl in response:', data);
+        throw new Error('업로드 URL을 생성할 수 없습니다.');
+      }
 
       const { signedUrl, publicUrl } = data;
-      console.log('[Storage] PUT to R2 started');
 
+      // 💡 3. R2에 직접 업로드
       const uploadResult = await FileSystem.uploadAsync(signedUrl, targetPath, {
         httpMethod: 'PUT',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -73,10 +104,9 @@ export const storageService = {
       });
 
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        throw new Error(`R2 업로드 실패 (${uploadResult.status})`);
+        throw new Error(`R2 저장소 업로드 실패 (${uploadResult.status})`);
       }
 
-      console.log('[Storage] Upload Complete:', publicUrl);
       return publicUrl;
     } catch (err: any) {
       console.error('[Storage] Final Error:', err.message);
@@ -96,12 +126,15 @@ export const storageService = {
     const publicUrl = await storageService.uploadToR2(`gallery/${roomId}`, filePath, fileName);
 
     const fileInfo: any = await FileSystem.getInfoAsync(filePath);
-    await supabase.from('gallery_items').insert({
-      room_id: roomId, user_id: userId, file_path: publicUrl,
+    const { error: dbError } = await supabase.from('gallery_items').insert({
+      room_id: roomId, 
+      user_id: userId, 
+      file_path: publicUrl,
       file_type: filePath.toLowerCase().endsWith('.mp4') ? 'video' : 'image',
       file_size: fileInfo.size || 0
     });
 
+    if (dbError) throw dbError;
     return publicUrl;
   },
 

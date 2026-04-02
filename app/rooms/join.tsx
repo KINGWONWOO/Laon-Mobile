@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../../context/AppContext';
 import { Colors } from '../../constants/theme';
 import { DanceButton, StyledBackButton } from '../../components/ui/Interactions';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function JoinRoomScreen() {
   const [roomId, setRoomId] = useState('');
   const [passcode, setPasscode] = useState('');
+  const [loading, setLoading] = useState(false);
   const { joinRoom } = useAppContext();
   const router = useRouter();
 
@@ -16,15 +18,23 @@ export default function JoinRoomScreen() {
       Alert.alert('오류', '방 ID와 비밀번호를 모두 입력해주세요.');
       return;
     }
+
+    setLoading(true);
     try {
-      const room = await joinRoom(roomId.trim(), passcode);
+      const room = await joinRoom(roomId.trim(), passcode.trim());
       if (room) {
-        router.replace(`/room/${room.id}` as any);
+        Alert.alert('참여 성공', `'${room.name}' 크루룸에 참여되었습니다.`);
+        router.replace('/rooms');
+        setTimeout(() => {
+          router.push(`/room/${room.id}` as any);
+        }, 100);
       } else {
-        Alert.alert('오류', '방을 찾을 수 없거나 비밀번호가 틀렸습니다.');
+        Alert.alert('참여 실패', '방 ID 또는 비밀번호가 올바르지 않습니다.');
       }
-    } catch (error) {
-      Alert.alert('오류', '방 참여 중 문제가 발생했습니다.');
+    } catch (error: any) {
+      Alert.alert('오류', error.message || '참여 중 문제가 발생했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -36,77 +46,73 @@ export default function JoinRoomScreen() {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.label}>크루룸 ID</Text>
-        <TextInput
-          style={styles.input}
-          value={roomId}
-          onChangeText={setRoomId}
-          placeholder="공유받은 ID를 입력하세요"
-          placeholderTextColor={Colors.textSecondary}
-        />
+        <Text style={styles.description}>
+          공유받은 크루룸의 고유 ID와 비밀번호를 입력하여 입장하세요.
+        </Text>
 
-        <Text style={styles.label}>비밀번호</Text>
-        <TextInput
-          style={styles.input}
-          value={passcode}
-          onChangeText={setPasscode}
-          placeholder="Passcode"
-          placeholderTextColor={Colors.textSecondary}
-          secureTextEntry
-        />
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>크루룸 고유 ID</Text>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="finger-print" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={roomId}
+              onChangeText={setRoomId}
+              placeholder="방 ID를 입력하세요"
+              placeholderTextColor={Colors.textSecondary}
+              autoCapitalize="none"
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>입장 비밀번호 (4자리)</Text>
+          <View style={styles.inputWrapper}>
+            <Ionicons name="key-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={passcode}
+              onChangeText={setPasscode}
+              placeholder="비밀번호 4자리"
+              placeholderTextColor={Colors.textSecondary}
+              secureTextEntry
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+          </View>
+        </View>
 
         <DanceButton 
-          title="팀에 합류하기" 
+          title={loading ? "확인 중..." : "크루룸 입장하기"} 
           onPress={handleJoin}
-          variant="accent"
+          disabled={loading}
           style={styles.button}
-          textStyle={{ color: Colors.background }}
-        />
+        >
+          {loading && <ActivityIndicator color="#000" style={{ marginRight: 10 }} />}
+        </DanceButton>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
+  container: { flex: 1, backgroundColor: '#000' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, marginBottom: 30 },
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '900', marginLeft: 15, letterSpacing: 1 },
+  content: { paddingHorizontal: 30 },
+  description: { color: Colors.textSecondary, fontSize: 14, lineHeight: 22, marginBottom: 30 },
+  inputGroup: { marginBottom: 25 },
+  label: { fontSize: 14, color: '#fff', marginBottom: 10, fontWeight: 'bold' },
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    marginBottom: 40,
-  },
-  headerTitle: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-    marginLeft: 15,
-    letterSpacing: 1,
-  },
-  content: {
-    paddingHorizontal: 30,
-  },
-  label: {
-    fontSize: 16,
-    color: Colors.text,
-    marginBottom: 10,
-    fontWeight: 'bold',
-  },
-  input: {
-    backgroundColor: Colors.card,
+    backgroundColor: '#161622',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
-    color: Colors.text,
-    marginBottom: 25,
+    paddingHorizontal: 15,
   },
-  button: {
-    width: '100%',
-    marginTop: 20,
-  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, height: 55, color: '#fff', fontSize: 16 },
+  button: { width: '100%', marginTop: 20 },
 });
