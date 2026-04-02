@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, A
 import { useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy'; // 💡 Legacy API 사용 (에러 해결)
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback, Comment } from '../../../types';
@@ -27,15 +27,11 @@ export default function FeedbackScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
 
-  // 팝업을 위한 상태
+  // 💡 팝업을 위한 상태 및 애니메이션
   const [activeBubble, setActiveBubble] = useState<Comment | null>(null);
   const bubbleAnim = useRef(new Animated.Value(0)).current;
   
-  const roomVideos = useMemo(() => {
-    const filtered = videos.filter(v => v.roomId === id);
-    console.log(`[Feedback] Room Videos Count: ${filtered.length} (Room ID: ${id})`);
-    return filtered;
-  }, [videos, id]);
+  const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -54,10 +50,8 @@ export default function FeedbackScreen() {
         const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
         if (fileInfo.exists) {
-          console.log('[Feedback] Playing from cache:', fileUri);
           setCachedVideoUrl(fileUri);
         } else {
-          console.log('[Feedback] Downloading to cache...');
           const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
           setCachedVideoUrl(uri);
         }
@@ -76,34 +70,27 @@ export default function FeedbackScreen() {
     p.play();
   });
 
-  // 💡 댓글 팝업 디버깅 로그 및 로직
+  // 💡 실시간 팝업 워처
   useEffect(() => {
     if (!player || !selectedVideo) return;
     
-    console.log('[Feedback] Starting Popup Watcher...');
     const interval = setInterval(() => {
       if (!player.playing) return;
-
       const currentTimeMs = Math.floor(player.currentTime * 1000);
       
-      // 현재 시점에 딱 맞는 댓글 찾기
       const hit = selectedVideo.comments.find(c => 
-        !c.parentId && Math.abs(c.timestampMillis - currentTimeMs) < 400
+        !c.parentId && Math.abs(c.timestampMillis - currentTimeMs) < 500
       );
 
       if (hit && activeBubble?.id !== hit.id) {
-        console.log(`[Feedback] POPUP HIT! Time: ${currentTimeMs}ms, Text: ${hit.text}`);
         setActiveBubble(hit);
-        
         Animated.sequence([
           Animated.timing(bubbleAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-          Animated.delay(3000),
+          Animated.delay(2500),
           Animated.timing(bubbleAnim, { toValue: 0, duration: 500, useNativeDriver: true })
-        ]).start(() => {
-          setActiveBubble(null);
-        });
+        ]).start(() => setActiveBubble(null));
       }
-    }, 400);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [player, selectedVideo, activeBubble]);
@@ -128,7 +115,6 @@ export default function FeedbackScreen() {
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
     const posMillis = Math.floor((player?.currentTime || 0) * 1000);
-    console.log(`[Feedback] Adding comment at: ${posMillis}ms`);
     await addComment(selectedVideo.id, newComment.trim(), posMillis, replyToId);
     setNewComment('');
     setReplyToId(undefined);
