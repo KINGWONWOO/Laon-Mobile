@@ -24,17 +24,14 @@ type AppContextType = {
   joinRoom: (roomId: string, passcode: string) => Promise<Room | null>;
   deleteRoom: (roomId: string) => Promise<void>;
   
-  notices: Notice[];
-  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => Promise<void>;
-  
   videos: VideoFeedback[];
   addVideo: (roomId: string, videoUrl: string, title: string) => Promise<void>;
-  addComment: (videoId: string, text: string, timestampMillis: number, parentId?: string) => Promise<void>;
+  addComment: (videoId: string, text: string, timestampMillis: number) => Promise<void>;
   
   photos: Photo[];
   addPhoto: (roomId: string, photoUrl: string, description?: string) => Promise<void>;
   deletePhoto: (photoId: string, photoUrl: string) => Promise<void>;
-  addPhotoComment: (photoId: string, text: string, parentId?: string) => Promise<void>;
+  addPhotoComment: (photoId: string, text: string) => Promise<void>;
   markItemAsAccessed: (type: 'video' | 'photo', id: string) => Promise<void>;
 
   schedules: Schedule[];
@@ -63,9 +60,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMyProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
-      setCurrentUser({ id: data.id, name: data.name || '댄서', profileImage: data.profile_image });
-    }
+    if (data) setCurrentUser({ id: data.id, name: data.name || '댄서', profileImage: data.profile_image });
   };
 
   useEffect(() => {
@@ -91,15 +86,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
-  const refreshAllData = async () => { 
-    console.log('[AppContext] Manual Refreshing...');
+  const refreshAllData = async () => {
+    console.log('[AppContext] Manual Refreshing All Data...');
     await queryClient.invalidateQueries();
     await queryClient.refetchQueries();
   };
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    const channel = supabase.channel('realtime-v3').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
@@ -114,52 +109,58 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const roomIds = roomsData.map(r => r.id);
 
-  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
-  }, enabled: roomIds.length > 0 });
-
+  // 💡 [개편] 원자 단위 데이터 조회 로직 (Join 실패 방지)
   const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('videos').select('*, video_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
+    const { data: v } = await supabase.from('videos').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data: c } = await supabase.from('video_comments').select('*').in('video_id', (v || []).map(x => x.id));
+    return (v || []).map(video => ({ ...video, video_comments: (c || []).filter(comment => comment.video_id === video.id) }));
   }, enabled: roomIds.length > 0 });
 
   const photosQuery = useQuery({ queryKey: ['photos', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('gallery_items').select('*, gallery_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
-  }, enabled: roomIds.length > 0 });
-
-  // 💡 쿼리 최적화: 개별 조인 대신 단순화
-  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('schedules').select('*, schedule_options(*, schedule_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
+    const { data: p } = await supabase.from('gallery_items').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data: c } = await supabase.from('gallery_comments').select('*').in('gallery_item_id', (p || []).map(x => x.id));
+    return (p || []).map(photo => ({ ...photo, gallery_comments: (c || []).filter(comment => comment.gallery_item_id === photo.id) }));
   }, enabled: roomIds.length > 0 });
 
   const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('votes').select('*, vote_options(*, vote_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
+    const { data: v } = await supabase.from('votes').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data: o } = await supabase.from('vote_options').select('*').in('vote_id', (v || []).map(x => x.id));
+    const { data: r } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
+    return (v || []).map(vote => ({
+      ...vote,
+      vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({
+        ...opt,
+        vote_responses: (r || []).filter(res => res.option_ids.includes(opt.id))
+      }))
+    }));
   }, enabled: roomIds.length > 0 });
 
-  // 매핑 로직
-  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
-    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
-    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime()
-  }));
+  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
+    const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data: o } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
+    const { data: r } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
+    return (s || []).map(sch => ({
+      ...sch,
+      schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({
+        ...opt,
+        schedule_responses: (r || []).filter(res => res.option_ids.includes(opt.id))
+      }))
+    }));
+  }, enabled: roomIds.length > 0 });
 
+  // 매핑 로직 (UI 타입으로 변환)
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
     comments: (v.video_comments || []).map((c: any) => ({
-      id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, createdAt: new Date(c.created_at).getTime(), parentId: c.parent_id
+      id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, createdAt: new Date(c.created_at).getTime()
     }))
   }));
 
   const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({
     id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, description: p.description,
     createdAt: new Date(p.created_at).getTime(),
-    comments: (p.gallery_comments || []).map((c: any) => ({
-      id: c.id, userId: c.user_id, text: c.text, createdAt: new Date(c.created_at).getTime(), parentId: c.parent_id
-    }))
+    comments: (p.gallery_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, createdAt: new Date(c.created_at).getTime() }))
   }));
 
   const schedulesMapped: Schedule[] = (schedulesQuery.data || []).map(s => {
@@ -186,13 +187,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   });
 
-  console.log('[AppContext] Synced State:', { 
+  console.log('[AppContext] Full Synced State:', { 
     rooms: roomsData.length, videos: videosMapped.length, photos: photosMapped.length, 
     schedules: schedulesMapped.length, votes: votesMapped.length 
   });
 
   // 비즈니스 로직
-  const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
   const updateUserProfile = async (n: string, i?: string) => {
     let final = i;
@@ -209,28 +209,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     refreshAllData();
     return data as Room;
   };
-  const joinRoom = async (rid: string, pc: string) => {
-    const { data: room } = await supabase.from('rooms').select('*').eq('id', rid).eq('passcode', pc).single();
-    if (room && currentUser) {
-      await supabase.from('room_members').upsert([{ room_id: rid, user_id: currentUser.id }], { onConflict: 'room_id,user_id' });
-      refreshAllData();
-      return room as Room;
-    }
-    return null;
-  };
   const deleteRoom = async (id: string) => { await supabase.from('rooms').delete().eq('id', id); refreshAllData(); };
   const addVideo = async (rid: string, url: string, t: string) => { await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser?.id, title: t, storage_path: url }]); refreshAllData(); };
-  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser?.id, text: t, timestamp_millis: ts, parent_id: pid }]); refreshAllData(); };
+  const addComment = async (vid: string, t: string, ts: number) => { await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser?.id, text: t, timestamp_millis: ts }]); refreshAllData(); };
   const addPhoto = async (rid: string, url: string, d?: string) => { await storageService.uploadToGallery(rid, currentUser!.id, url, d); refreshAllData(); };
   const deletePhoto = async (id: string) => { await supabase.from('gallery_items').delete().eq('id', id); refreshAllData(); };
-  const addPhotoComment = async (phid: string, t: string, pid?: string) => { await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser?.id, text: t, parent_id: pid }]); refreshAllData(); };
+  const addPhotoComment = async (phid: string, t: string) => { await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser?.id, text: t }]); refreshAllData(); };
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
     const { data: v } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser?.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
     if (v) await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
     refreshAllData();
   };
-  const respondToVote = async (vid: string, ids: string[]) => { await supabase.from('vote_responses').upsert([{ vote_id: vid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'vote_id,user_id' }); refreshAllData(); };
+  const respondToVote = async (vid: string, ids: string[]) => { await supabase.from('vote_responses').upsert([{ vote_id: vid, user_id: currentUser?.id, option_ids: ids }], { onConflict: vote_id,user_id' }); refreshAllData(); };
   const addSchedule = async (rid: string, t: string, opts: string[]) => {
     const { data: s } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser?.id, title: t }]).select().single();
     if (s) await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
@@ -240,16 +231,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AppContext.Provider value={{
-      currentUser, isLoadingUser, login, updateUserProfile, logout,
+      currentUser, isLoadingUser, login: async (e, p) => { await supabase.auth.signInWithPassword({ email: e, password: p }); }, updateUserProfile, logout,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: async (id) => (await supabase.from('rooms').select('*').eq('id', id).single()).data as Room,
-      createRoom, joinRoom, deleteRoom,
+      createRoom, joinRoom: async (rid, pc) => {
+        const { data: room } = await supabase.from('rooms').select('*').eq('id', rid).eq('passcode', pc).single();
+        if (room && currentUser) { await supabase.from('room_members').upsert([{ room_id: rid, user_id: currentUser.id }], { onConflict: 'room_id,user_id' }); refreshAllData(); return room as Room; }
+        return null;
+      }, deleteRoom,
       notices: noticesMapped, addNotice: async () => {},
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,
       votes: votesMapped, addVote, respondToVote,
-      refreshAllData,
-      themeType, setThemeType, theme
+      refreshAllData, themeType, setThemeType, theme
     }}>
       {children}
     </AppContext.Provider>
