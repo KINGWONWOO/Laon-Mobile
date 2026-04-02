@@ -10,7 +10,7 @@ const { width } = Dimensions.get('window');
 
 export default function ArchiveScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, theme } = useAppContext();
+  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, theme, markItemAsAccessed } = useAppContext();
   
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -125,7 +125,10 @@ export default function ArchiveScreen() {
                 )}
               </View>
 
-              <TouchableOpacity onPress={() => setSelectedPhoto(item.photoUrl)}>
+              <TouchableOpacity onPress={() => {
+                setSelectedPhoto(item.photoUrl);
+                markItemAsAccessed('photo', item.id);
+              }}>
                 <Image source={{ uri: item.photoUrl }} style={styles.feedImage} />
               </TouchableOpacity>
 
