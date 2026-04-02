@@ -10,7 +10,7 @@ const { width } = Dimensions.get('window');
 
 export default function ArchiveScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, theme, markItemAsAccessed } = useAppContext();
+  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, markItemAsAccessed } = useAppContext();
   
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -19,40 +19,19 @@ export default function ArchiveScreen() {
   const [description, setDescription] = useState('');
   
   const [activeCommentPhotoId, setActiveCommentPhotoId] = useState<string | null>(null);
+  const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
   const [commentText, setCommentText] = useState('');
 
-  // 💡 즉시 갱신을 위한 useMemo
-  const roomPhotos = useMemo(() => {
-    return photos.filter(p => p.roomId === id);
-  }, [photos, id]);
+  const roomPhotos = useMemo(() => photos.filter(p => p.roomId === id), [photos, id]);
 
   const [isLeader, setIsLeader] = useState(false);
   React.useEffect(() => {
-    if (id) {
-      getRoomByIdRemote(id as string).then(room => {
-        if (room && room.leader_id === currentUser?.id) {
-          setIsLeader(true);
-        }
-      });
-    }
+    if (id) getRoomByIdRemote(id as string).then(room => { if (room && room.leader_id === currentUser?.id) setIsLeader(true); });
   }, [id, currentUser]);
 
   const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setNewImageUri(result.assets[0].uri);
-      setShowUploadModal(true);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
+    if (!result.canceled) { setNewImageUri(result.assets[0].uri); setShowUploadModal(true); }
   };
 
   const handleUpload = async () => {
@@ -63,40 +42,24 @@ export default function ArchiveScreen() {
       setShowUploadModal(false);
       setNewImageUri(null);
       setDescription('');
-    } catch (error: any) {
-      console.error('[Archive] Upload Error:', error);
-      Alert.alert('업로드 실패', error.message || '서버와의 통신에 실패했습니다.');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDelete = (photoId: string, photoUrl: string) => {
-    Alert.alert('사진 삭제', '이 사진을 정말 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
-        try {
-          await deletePhoto(photoId, photoUrl);
-        } catch (e: any) {
-          Alert.alert('삭제 실패', e.message);
-        }
-      }}
-    ]);
+    } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsUploading(false); }
   };
 
   const submitComment = async () => {
     if (!activeCommentPhotoId || !commentText.trim()) return;
-    try {
-      await addPhotoComment(activeCommentPhotoId, commentText.trim());
-      setCommentText('');
-    } catch (e: any) {
-      Alert.alert('댓글 실패', e.message);
-    }
+    await addPhotoComment(activeCommentPhotoId, commentText.trim(), replyToId);
+    setCommentText('');
+    setReplyToId(undefined);
   };
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
-    return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return '방금 전';
+    if (diff < 3600000) return `${Math.floor(diff/60000)}분 전`;
+    if (diff < 86400000) return `${Math.floor(diff/3600000)}시간 전`;
+    return `${d.getMonth()+1}월 ${d.getDate()}일`;
   };
 
   return (
@@ -108,116 +71,113 @@ export default function ArchiveScreen() {
           const uploader = getUserById(item.userId);
           const canDelete = isLeader || item.userId === currentUser?.id;
 
+          // 💡 답글 로직 (부모 댓글 아래에 배치)
+          const mainComments = (item.comments || []).filter(c => !c.parentId);
+
           return (
             <View style={styles.feedCard}>
               <View style={styles.feedHeader}>
                 <View style={styles.uploaderInfo}>
-                  <View style={styles.avatar}><Text style={styles.avatarText}>{uploader?.name?.[0] || '?'}</Text></View>
+                  {uploader?.profileImage ? (
+                    <Image source={{ uri: uploader.profileImage }} style={styles.avatarImg} />
+                  ) : (
+                    <View style={[styles.avatar, { backgroundColor: Colors.primary }]}><Text style={styles.avatarText}>{uploader?.name?.[0]}</Text></View>
+                  )}
                   <View>
                     <Text style={styles.uploaderName}>{uploader?.name || '알 수 없음'}</Text>
                     <Text style={styles.timeText}>{formatTime(item.createdAt)}</Text>
                   </View>
                 </View>
                 {canDelete && (
-                  <TouchableOpacity onPress={() => handleDelete(item.id, item.photoUrl)}>
-                    <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+                  <TouchableOpacity onPress={() => deletePhoto(item.id, item.photoUrl)}>
+                    <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
                   </TouchableOpacity>
                 )}
               </View>
 
-              <TouchableOpacity onPress={() => {
-                setSelectedPhoto(item.photoUrl);
-                markItemAsAccessed('photo', item.id);
-              }}>
+              <TouchableOpacity onPress={() => { setSelectedPhoto(item.photoUrl); markItemAsAccessed('photo', item.id); }}>
                 <Image source={{ uri: item.photoUrl }} style={styles.feedImage} />
               </TouchableOpacity>
 
               <View style={styles.feedFooter}>
-                {item.description ? (
-                  <Text style={styles.descriptionText}>
-                    <Text style={{fontWeight: 'bold', color: '#fff'}}>{uploader?.name} </Text>
-                    {item.description}
-                  </Text>
-                ) : null}
+                {item.description && (
+                  <View style={styles.descRow}>
+                    <Text style={styles.descName}>{uploader?.name}</Text>
+                    <Text style={styles.descText}>{item.description}</Text>
+                  </View>
+                )}
 
-                <View style={styles.commentsSection}>
-                  {(item.comments || []).map(c => {
+                <View style={styles.commentsList}>
+                  {mainComments.map(c => {
                     const cUser = getUserById(c.userId);
+                    const replies = (item.comments || []).filter(r => r.parentId === c.id);
                     return (
-                      <Text key={c.id} style={styles.commentText}>
-                        <Text style={{fontWeight: 'bold', color: '#fff'}}>{cUser?.name} </Text>
-                        {c.text}
-                      </Text>
+                      <View key={c.id} style={styles.commentContainer}>
+                        <View style={styles.commentRow}>
+                          <Text style={styles.cName}>{cUser?.name}</Text>
+                          <Text style={styles.cText}>{c.text}</Text>
+                          <TouchableOpacity onPress={() => { setActiveCommentPhotoId(item.id); setReplyToId(c.id); setCommentText(`@${cUser?.name} `); }}>
+                            <Text style={styles.replyBtnText}>답글</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {replies.map(r => {
+                          const rUser = getUserById(r.userId);
+                          return (
+                            <View key={r.id} style={styles.replyRow}>
+                              <Ionicons name="return-down-forward" size={12} color="#444" style={{marginRight: 5}}/>
+                              <Text style={styles.cName}>{rUser?.name}</Text>
+                              <Text style={styles.cText}>{r.text}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
                     );
                   })}
                 </View>
 
-                {activeCommentPhotoId === item.id ? (
-                  <View style={styles.commentInputRow}>
-                    <TextInput 
-                      style={styles.commentInput} 
-                      placeholder="댓글 달기..." 
-                      placeholderTextColor="#666"
-                      value={commentText}
-                      onChangeText={setCommentText}
-                      autoFocus
-                    />
-                    <TouchableOpacity onPress={submitComment}><Text style={{color: Colors.primary, fontWeight: 'bold'}}>게시</Text></TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity onPress={() => setActiveCommentPhotoId(item.id)}>
-                    <Text style={styles.addCommentHint}>댓글 달기...</Text>
-                  </TouchableOpacity>
-                )}
+                <View style={styles.commentInputRow}>
+                  <TextInput 
+                    style={styles.commentInput} 
+                    placeholder={replyToId ? "답글 남기는 중..." : "댓글 달기..."} 
+                    placeholderTextColor="#444"
+                    value={activeCommentPhotoId === item.id ? commentText : ''}
+                    onChangeText={(t) => { setActiveCommentPhotoId(item.id); setCommentText(t); }}
+                  />
+                  {activeCommentPhotoId === item.id && commentText.trim() && (
+                    <TouchableOpacity onPress={submitComment}><Text style={{color: Colors.primary}}>게시</Text></TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
           );
         }}
         ListHeaderComponent={
-          <TouchableOpacity 
-            style={[styles.uploadBox, { borderColor: Colors.primary + '40' }]} 
-            onPress={handlePickImage}
-          >
-            <Ionicons name="add" size={40} color={Colors.primary} />
-            <Text style={{ color: Colors.primary, marginTop: 8, fontWeight: 'bold' }}>새 추억 올리기</Text>
+          <TouchableOpacity style={styles.uploadBox} onPress={handlePickImage}>
+            <Ionicons name="camera" size={30} color={Colors.primary} />
+            <Text style={{ color: Colors.primary, marginLeft: 10, fontWeight: 'bold' }}>새로운 추억 공유하기</Text>
           </TouchableOpacity>
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="images-outline" size={60} color={Colors.textSecondary} />
-            <Text style={styles.emptyText}>아직 등록된 사진이 없습니다.</Text>
-          </View>
         }
       />
 
-      {/* 사진 크게 보기 모달 */}
+      {/* 사진 확대 모달 */}
       <Modal visible={!!selectedPhoto} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedPhoto(null)}>
-            <Ionicons name="close" size={30} color="#fff" />
-          </TouchableOpacity>
+          <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedPhoto(null)}><Ionicons name="close" size={30} color="#fff" /></TouchableOpacity>
           {selectedPhoto && <Image source={{ uri: selectedPhoto }} style={styles.fullImage} resizeMode="contain" />}
         </View>
       </Modal>
 
-      {/* 업로드 및 글 작성 모달 */}
+      {/* 업로드 모달 */}
       <Modal visible={showUploadModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.uploadModalContent}>
-            <Text style={styles.uploadTitle}>새 게시물 작성</Text>
-            {newImageUri && <Image source={{ uri: newImageUri }} style={styles.previewImage} />}
-            <TextInput 
-              style={styles.descInput}
-              placeholder="문구를 입력해주세요..."
-              placeholderTextColor="#666"
-              multiline
-              value={description}
-              onChangeText={setDescription}
-            />
-            <View style={styles.uploadBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowUploadModal(false)}><Text style={{color: '#999'}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={handleUpload} disabled={isUploading}>
-                {isUploading ? <ActivityIndicator color="#000" /> : <Text style={{color: '#000', fontWeight: 'bold'}}>공유하기</Text>}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.uploadContent}>
+            <Text style={styles.uploadTitle}>새 게시물</Text>
+            {newImageUri && <Image source={{ uri: newImageUri }} style={styles.previewImg} />}
+            <TextInput style={styles.descInput} placeholder="설명을 입력하세요..." placeholderTextColor="#666" multiline value={description} onChangeText={setDescription} />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setShowUploadModal(false)} style={styles.btnCancel}><Text style={{color: '#666'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpload} style={styles.btnSubmit} disabled={isUploading}>
+                {isUploading ? <ActivityIndicator color="#000" /> : <Text style={{fontWeight: 'bold'}}>공유</Text>}
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -229,33 +189,38 @@ export default function ArchiveScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  uploadBox: { height: 100, margin: 15, borderWidth: 2, borderStyle: 'dashed', borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#161622' },
-  feedCard: { marginBottom: 20, backgroundColor: '#0A0A0A', borderBottomWidth: 1, borderBottomColor: '#222' },
+  uploadBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#161622', margin: 15, padding: 20, borderRadius: 20, borderStyle: 'dashed', borderWidth: 1, borderColor: '#333' },
+  feedCard: { marginBottom: 15, backgroundColor: '#000' },
   feedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 },
   uploaderInfo: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  avatarText: { fontWeight: 'bold', color: '#000' },
-  uploaderName: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  timeText: { color: '#666', fontSize: 11 },
+  avatar: { width: 34, height: 34, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  avatarImg: { width: 34, height: 34, borderRadius: 12, marginRight: 10 },
+  avatarText: { fontWeight: 'bold', fontSize: 14 },
+  uploaderName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  timeText: { color: '#444', fontSize: 10 },
   feedImage: { width: width, height: width },
   feedFooter: { padding: 12 },
-  descriptionText: { color: '#ccc', fontSize: 14, marginBottom: 8, lineHeight: 20 },
-  commentsSection: { marginBottom: 8 },
-  commentText: { color: '#aaa', fontSize: 13, marginBottom: 4 },
-  addCommentHint: { color: '#666', fontSize: 13 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-  commentInput: { flex: 1, color: '#fff', borderBottomWidth: 1, borderBottomColor: '#333', paddingVertical: 5, marginRight: 10 },
-  emptyContainer: { alignItems: 'center', marginTop: 100 },
-  emptyText: { color: Colors.textSecondary, marginTop: 15, fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' },
-  closeBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
+  descRow: { flexDirection: 'row', marginBottom: 10 },
+  descName: { color: '#fff', fontWeight: 'bold', marginRight: 8, fontSize: 14 },
+  descText: { color: '#ccc', flex: 1, fontSize: 14 },
+  commentsList: { marginBottom: 10 },
+  commentContainer: { marginBottom: 8 },
+  commentRow: { flexDirection: 'row', alignItems: 'center' },
+  replyRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 20, marginTop: 4 },
+  cName: { color: '#fff', fontWeight: 'bold', fontSize: 12, marginRight: 6 },
+  cText: { color: '#aaa', fontSize: 12, flex: 1 },
+  replyBtnText: { color: '#444', fontSize: 10, marginLeft: 10 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 0.5, borderTopColor: '#222', paddingTop: 10 },
+  commentInput: { flex: 1, color: '#fff', fontSize: 13, marginRight: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center' },
+  closeBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
   fullImage: { width: '100%', height: '80%' },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  uploadModalContent: { backgroundColor: '#1A1A2E', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  uploadTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-  previewImage: { width: '100%', height: 200, borderRadius: 12, marginBottom: 15 },
-  descInput: { backgroundColor: '#000', color: '#fff', padding: 15, borderRadius: 12, height: 100, textAlignVertical: 'top', marginBottom: 20 },
-  uploadBtns: { flexDirection: 'row', justifyContent: 'space-between' },
-  cancelBtn: { flex: 1, padding: 15, alignItems: 'center' },
-  submitBtn: { flex: 2, backgroundColor: Colors.primary, padding: 15, borderRadius: 12, alignItems: 'center' },
+  uploadContent: { backgroundColor: '#1A1A2E', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  uploadTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  previewImg: { width: '100%', height: 250, borderRadius: 15, marginBottom: 20 },
+  descInput: { backgroundColor: '#000', color: '#fff', padding: 15, borderRadius: 12, height: 80, marginBottom: 20 },
+  modalActions: { flexDirection: 'row' },
+  btnCancel: { flex: 1, alignItems: 'center', padding: 15 },
+  btnSubmit: { flex: 2, backgroundColor: Colors.primary, alignItems: 'center', padding: 15, borderRadius: 12 }
 });

@@ -11,13 +11,14 @@ import { storageService } from '../../../services/storageService';
 
 export default function FeedbackScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { videos, addVideo, addComment, getUserById, theme, markItemAsAccessed } = useAppContext();
+  const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed } = useAppContext();
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
   const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
   const [isCaching, setIsCaching] = useState(false);
 
   const [newComment, setNewComment] = useState('');
+  const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
   const [showCommentInput, setShowCommentInput] = useState(false);
   
   const [isLoading, setIsLoading] = useState(false);
@@ -28,10 +29,7 @@ export default function FeedbackScreen() {
 
   useEffect(() => {
     async function cacheAndPlay() {
-      if (!selectedVideo) {
-        setCachedVideoUrl(null);
-        return;
-      }
+      if (!selectedVideo) { setCachedVideoUrl(null); return; }
       markItemAsAccessed('video', selectedVideo.id);
       setIsCaching(true);
       try {
@@ -39,17 +37,12 @@ export default function FeedbackScreen() {
         const fileName = remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4';
         const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (fileInfo.exists) {
-          setCachedVideoUrl(fileUri);
-        } else {
+        if (fileInfo.exists) setCachedVideoUrl(fileUri);
+        else {
           const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
           setCachedVideoUrl(uri);
         }
-      } catch (error) {
-        setCachedVideoUrl(selectedVideo.videoUrl);
-      } finally {
-        setIsCaching(false);
-      }
+      } catch (error) { setCachedVideoUrl(selectedVideo.videoUrl); } finally { setIsCaching(false); }
     }
     cacheAndPlay();
   }, [selectedVideo]);
@@ -60,97 +53,94 @@ export default function FeedbackScreen() {
   });
 
   const handlePickVideo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('권한 필요', '비디오 접근 권한이 필요합니다.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
-      allowsEditing: true,
-      quality: 1,
-    });
-
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      if (!videoTitle.trim()) {
-        Alert.alert('오류', '먼저 영상 제목을 입력해주세요.');
-        return;
-      }
-      
+      if (!videoTitle.trim()) { Alert.alert('오류', '영상 제목을 입력해주세요.'); return; }
       setIsLoading(true);
       try {
         const videoUri = result.assets[0].uri;
         const ext = videoUri.split('.').pop() || 'mp4';
         const fileName = `${Date.now()}.${ext}`;
         const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
-        
-        await addVideo(id || '', publicUrl, videoTitle, 'direct_upload');
-        
+        await addVideo(id || '', publicUrl, videoTitle, 'direct');
         setShowAddModal(false);
         setVideoTitle('');
-        Alert.alert('업로드 완료', '연습 영상이 업로드되었습니다.');
-      } catch (error: any) {
-        Alert.alert('업로드 실패', error.message || '영상을 올리는 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
-      }
+      } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsLoading(false); }
     }
   };
 
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
     const posMillis = Math.floor((player?.currentTime || 0) * 1000);
-    await addComment(selectedVideo.id, newComment.trim(), posMillis);
+    await addComment(selectedVideo.id, newComment.trim(), posMillis, replyToId);
     setNewComment('');
+    setReplyToId(undefined);
     setShowCommentInput(false);
   };
 
   const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
   };
 
   if (selectedVideo) {
+    const mainComments = selectedVideo.comments.filter(c => !c.parentId);
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.playerHeader}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setSelectedVideo(null)}>
-            <Ionicons name="arrow-back" size={24} color={theme.primary} />
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSelectedVideo(null)}><Ionicons name="arrow-back" size={24} color={theme.primary} /></TouchableOpacity>
           <Text style={[styles.playerTitle, { color: theme.text }]} numberOfLines={1}>{selectedVideo.title}</Text>
         </View>
         <View style={styles.videoContainer}>
-          {isCaching ? (
-            <View style={styles.cachingOverlay}><ActivityIndicator size="large" color={theme.primary} /></View>
-          ) : (
-            <VideoView style={styles.videoPlayer} player={player} allowsFullscreen allowsPictureInPicture />
-          )}
+          {isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.videoPlayer} player={player} allowsFullscreen />}
         </View>
         <View style={styles.feedbackActionRow}>
-          <Text style={[styles.currentTimeText, { color: theme.text }]}>현재 시간: {formatTime(Math.floor((player?.currentTime || 0) * 1000))}</Text>
+          <Text style={{color: theme.text}}>현재 시점: {formatTime(Math.floor((player?.currentTime || 0)*1000))}</Text>
           <TouchableOpacity style={[styles.addCommentBtn, { backgroundColor: theme.primary }]} onPress={() => setShowCommentInput(true)}>
-            <Text style={[styles.addCommentBtnText, { color: theme.background }]}>피드백 남기기</Text>
+            <Text style={{color: theme.background, fontWeight: 'bold'}}>피드백 남기기</Text>
           </TouchableOpacity>
         </View>
         <FlatList
-          data={selectedVideo.comments}
+          data={mainComments}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={[styles.commentItem, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.timestampText, { color: theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
-              <Text style={[styles.commentText, { color: theme.text }]}>{item.text}</Text>
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const cUser = getUserById(item.userId);
+            const rpl = selectedVideo.comments.filter(r => r.parentId === item.id);
+            return (
+              <View style={styles.commentBlock}>
+                <View style={styles.commentMain}>
+                  <View style={styles.cUserRow}>
+                    {cUser?.profileImage ? <Image source={{uri: cUser.profileImage}} style={styles.cAvatar}/> : <View style={[styles.cAvatar, {backgroundColor: theme.primary}]} />}
+                    <Text style={[styles.cName, {color: theme.text}]}>{cUser?.name}</Text>
+                    <Text style={styles.cTime}>{formatTime(item.timestampMillis)}</Text>
+                  </View>
+                  <Text style={[styles.cText, {color: theme.textSecondary}]}>{item.text}</Text>
+                  <TouchableOpacity onPress={() => { setReplyToId(item.id); setNewComment(`@${cUser?.name} `); setShowCommentInput(true); }}>
+                    <Text style={{color: theme.primary, fontSize: 10, marginTop: 5}}>답글 달기</Text>
+                  </TouchableOpacity>
+                </View>
+                {rpl.map(r => {
+                  const rUser = getUserById(r.userId);
+                  return (
+                    <View key={r.id} style={styles.replyMain}>
+                      <Ionicons name="return-down-forward" size={12} color="#444" />
+                      <Text style={[styles.cName, {color: theme.text, marginLeft: 5}]}>{rUser?.name}</Text>
+                      <Text style={[styles.cText, {color: theme.textSecondary}]}>{r.text}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          }}
         />
         <Modal visible={showCommentInput} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-              <TextInput style={[styles.commentInput, { color: theme.text, borderColor: theme.border }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 내용" />
-              <TouchableOpacity onPress={handleAddComment}><Text style={{ color: theme.primary }}>등록</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowCommentInput(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
+              <TextInput style={[styles.commentInput, { color: theme.text, borderColor: theme.border }]} value={newComment} onChangeText={setNewComment} placeholder="내용 입력..." placeholderTextColor="#666" />
+              <View style={{flexDirection: 'row', justifyContent: 'flex-end'}}>
+                <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color: '#666'}}>취소</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddComment}><Text style={{color: theme.primary, fontWeight: 'bold'}}>등록</Text></TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -161,23 +151,29 @@ export default function FeedbackScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
-        <Text style={[styles.uploadButtonText, { color: theme.background }]}>영상 업로드</Text>
+        <Ionicons name="videocam" size={20} color={theme.background} />
+        <Text style={[styles.uploadButtonText, { color: theme.background }]}>연습 영상 올리기</Text>
       </TouchableOpacity>
       <FlatList
         data={roomVideos}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => setSelectedVideo(item)}>
-            <Text style={{ color: theme.text }}>{item.title}</Text>
+            <Ionicons name="play-circle" size={24} color={theme.primary} />
+            <View style={{marginLeft: 15}}>
+              <Text style={{color: theme.text, fontWeight: 'bold'}}>{item.title}</Text>
+              <Text style={{color: theme.textSecondary, fontSize: 11}}>{getUserById(item.userId)?.name} • {new Date(item.createdAt).toLocaleDateString()}</Text>
+            </View>
           </TouchableOpacity>
         )}
       />
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="제목" value={videoTitle} onChangeText={setVideoTitle} />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={{ padding: 20, backgroundColor: theme.primary }}><Text>영상 선택</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => setShowAddModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
+            <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>영상 업로드</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor="#666" value={videoTitle} onChangeText={setVideoTitle} />
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold'}}>파일 선택</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: '#666', textAlign: 'center'}}>취소</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -189,24 +185,26 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   playerHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 50 },
   playerTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 10, flex: 1 },
-  backButton: { padding: 5 },
   videoContainer: { width: '100%', aspectRatio: 16/9, backgroundColor: '#000', justifyContent: 'center' },
-  cachingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   videoPlayer: { width: '100%', height: '100%' },
-  feedbackActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-  currentTimeText: { fontSize: 14, fontWeight: '600' },
-  addCommentBtn: { padding: 10, borderRadius: 20 },
-  addCommentBtnText: { fontWeight: 'bold' },
-  commentItem: { padding: 15, borderBottomWidth: 1, flexDirection: 'row' },
-  timestampText: { fontWeight: 'bold', marginRight: 10 },
-  commentText: { flex: 1 },
+  feedbackActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#222' },
+  addCommentBtn: { paddingVertical: 6, paddingHorizontal: 15, borderRadius: 15 },
+  commentBlock: { padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#111' },
+  commentMain: { marginBottom: 5 },
+  replyMain: { flexDirection: 'row', alignItems: 'center', marginLeft: 30, marginTop: 10 },
+  cUserRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  cAvatar: { width: 24, height: 24, borderRadius: 8, marginRight: 8 },
+  cName: { fontSize: 12, fontWeight: 'bold' },
+  cTime: { fontSize: 10, color: '#444', marginLeft: 8 },
+  cText: { fontSize: 13, lineHeight: 18 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 25 },
-  modalContent: { borderRadius: 24, padding: 25 },
+  modalContent: { borderRadius: 20, padding: 25 },
   commentInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
-  uploadButton: { padding: 15, margin: 15, borderRadius: 12, alignItems: 'center' },
-  uploadButtonText: { fontWeight: 'bold' },
-  videoCard: { padding: 20, marginHorizontal: 15, marginBottom: 10, borderRadius: 12 },
+  uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12 },
+  uploadButtonText: { fontWeight: 'bold', marginLeft: 8 },
+  videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 10, borderRadius: 15 },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContentUpload: { padding: 25, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 15 },
+  modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
+  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' }
 });
