@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback, Comment } from '../../../types';
 import { storageService } from '../../../services/storageService';
+import { Colors } from '../../../constants/theme'; // 💡 Colors 임포트 추가
 
 export default function FeedbackScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

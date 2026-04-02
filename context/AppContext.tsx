@@ -109,6 +109,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const roomIds = roomsData.map(r => r.id);
 
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
+
   const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
     const { data } = await supabase.from('videos').select('*, video_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
     return data || [];
@@ -129,7 +134,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return data || [];
   }, enabled: roomIds.length > 0 });
 
-  // 매핑 로직 (데이터가 앱에서 보이도록 확실히 연결)
+  // 매핑 로직
+  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
+    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
+    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime()
+  }));
+
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
