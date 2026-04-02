@@ -114,7 +114,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser]);
 
   // 방 목록 로딩
-  const { data: roomsData = [] } = useQuery({
+  const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
     queryKey: ['rooms', currentUser?.id],
     queryFn: async () => {
       const { data } = await supabase.from('room_members').select('rooms (*)').eq('user_id', currentUser?.id);
