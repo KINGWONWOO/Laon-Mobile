@@ -45,7 +45,7 @@ type AppContextType = {
   addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
   respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
 
-  refreshAllData: () => Promise<void>; // 💡 새로고침 함수 추가
+  refreshAllData: () => Promise<void>;
   themeType: ThemeType;
   setThemeType: (theme: ThemeType) => void;
   theme: any;
@@ -92,13 +92,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
   const refreshAllData = async () => { 
+    console.log('[AppContext] Manual Refresh Triggered');
     await queryClient.invalidateQueries();
     await queryClient.refetchQueries();
   };
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+      console.log('[AppContext] Realtime Change Detected:', payload.table);
+      refreshAllData();
+    }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
@@ -184,13 +188,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   });
 
+  // 💡 데이터 매핑 디버그 로그
+  console.log('[AppContext] Data State:', {
+    rooms: roomsData.length,
+    videos: videosMapped.length,
+    photos: photosMapped.length,
+    schedules: schedulesMapped.length,
+    votes: votesMapped.length
+  });
+
   // 비즈니스 로직
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
   const updateUserProfile = async (n: string, i?: string) => {
     let final = i;
     if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i);
-    await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id);
+    const { error } = await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id);
+    if (error) throw error;
     await fetchMyProfile(currentUser!.id);
     refreshAllData();
   };
@@ -212,21 +226,43 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return null;
   };
   const deleteRoom = async (id: string) => { await supabase.from('rooms').delete().eq('id', id); refreshAllData(); };
-  const addVideo = async (rid: string, url: string, t: string) => { await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser?.id, title: t, storage_path: url }]); refreshAllData(); };
-  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser?.id, text: t, timestamp_millis: ts, parent_id: pid }]); refreshAllData(); };
+  const addVideo = async (rid: string, url: string, t: string) => { 
+    const { error } = await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser?.id, title: t, storage_path: url }]); 
+    console.log('[AppContext] AddVideo Result:', error ? error.message : 'Success');
+    refreshAllData(); 
+  };
+  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { 
+    const { error } = await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser?.id, text: t, timestamp_millis: ts, parent_id: pid }]); 
+    console.log('[AppContext] AddComment Result:', error ? error.message : 'Success');
+    refreshAllData(); 
+  };
   const addPhoto = async (rid: string, url: string, d?: string) => { await storageService.uploadToGallery(rid, currentUser!.id, url, d); refreshAllData(); };
   const deletePhoto = async (id: string) => { await supabase.from('gallery_items').delete().eq('id', id); refreshAllData(); };
   const addPhotoComment = async (phid: string, t: string, pid?: string) => { await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser?.id, text: t, parent_id: pid }]); refreshAllData(); };
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
+  
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
-    const { data: v } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser?.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
-    if (v) await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
+    console.log('[AppContext] Adding Vote to DB...');
+    const { data: v, error } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser?.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
+    if (error) { console.error('[AppContext] Vote Insert Error:', error.message); throw error; }
+    if (v) {
+      const { error: optError } = await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
+      if (optError) console.error('[AppContext] Vote Options Error:', optError.message);
+    }
+    console.log('[AppContext] Vote Created Successfully');
     refreshAllData();
   };
   const respondToVote = async (vid: string, ids: string[]) => { await supabase.from('vote_responses').upsert([{ vote_id: vid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'vote_id,user_id' }); refreshAllData(); };
+  
   const addSchedule = async (rid: string, t: string, opts: string[]) => {
-    const { data: s } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser?.id, title: t }]).select().single();
-    if (s) await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
+    console.log('[AppContext] Adding Schedule to DB...');
+    const { data: s, error } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser?.id, title: t }]).select().single();
+    if (error) { console.error('[AppContext] Schedule Insert Error:', error.message); throw error; }
+    if (s) {
+      const { error: optError } = await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
+      if (optError) console.error('[AppContext] Schedule Options Error:', optError.message);
+    }
+    console.log('[AppContext] Schedule Created Successfully');
     refreshAllData();
   };
   const respondToSchedule = async (sid: string, ids: string[]) => { await supabase.from('schedule_responses').upsert([{ schedule_id: sid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'schedule_id,user_id' }); refreshAllData(); };
@@ -241,7 +277,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,
       votes: votesMapped, addVote, respondToVote,
-      refreshAllData, // 💡 새로고침 함수 노출
+      refreshAllData,
       themeType, setThemeType, theme
     }}>
       {children}
