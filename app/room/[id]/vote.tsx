@@ -3,10 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, S
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function VoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { votes, addVote, respondToVote, currentUser, theme, refreshAllData } = useAppContext();
+  const insets = useSafeAreaInsets();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [question, setQuestion] = useState('');
@@ -33,11 +35,13 @@ export default function VoteScreen() {
       setShowAddModal(false);
       setQuestion('');
       setOptions(['', '']);
+      // 💡 생성 즉시 데이터 갱신 유도
+      setTimeout(() => refreshAllData(), 500);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom + 80 }]}>
       <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
         <Ionicons name="stats-chart" size={24} color={theme.background} />
         <Text style={[styles.addButtonText, { color: theme.background }]}>새 투표 만들기</Text>

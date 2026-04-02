@@ -4,7 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as ScreenOrientation from 'expo-screen-orientation'; // 💡 화면 회전 제어
+import * as ScreenOrientation from 'expo-screen-orientation'; 
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback } from '../../../types';
@@ -115,9 +115,11 @@ export default function FeedbackScreen() {
                   <Ionicons name="chevron-back" size={28} color="#fff" />
                 </TouchableOpacity>
                 <View style={{flex: 1}} />
-                <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
-                  <Ionicons name="chatbubbles" size={24} color={showSidebar ? Colors.primary : "#fff"} />
-                </TouchableOpacity>
+                {isFullScreen && (
+                  <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
+                    <Ionicons name="chatbubbles" size={24} color={showSidebar ? Colors.primary : "#fff"} />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity onPress={() => setIsFullScreen(!isFullScreen)}>
                   <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                 </TouchableOpacity>
@@ -125,7 +127,7 @@ export default function FeedbackScreen() {
             </View>
 
             {/* 댓글 사이드바 (가로모드 시 오른쪽, 세로모드 시 하단) */}
-            {showSidebar && (
+            {(!isFullScreen || showSidebar) && (
               <View style={[styles.sidebar, isFullScreen && styles.landscapeSidebar]}>
                 <View style={styles.sidebarHeader}>
                   <Text style={styles.sidebarTitle}>피드백 {sortedComments.length}</Text>
@@ -134,15 +136,18 @@ export default function FeedbackScreen() {
                 <FlatList
                   data={sortedComments}
                   keyExtractor={item => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={styles.cItem}>
-                      <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
-                        <Text style={styles.cTime}>{formatTime(item.timestampMillis)}</Text>
-                        <Text style={styles.cUser}>{getUserById(item.userId)?.name}</Text>
-                      </View>
-                      <Text style={styles.cText}>{item.text}</Text>
-                    </TouchableOpacity>
-                  )}
+                  renderItem={({ item }) => {
+                    const cUser = getUserById(item.userId);
+                    return (
+                      <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={styles.cItem}>
+                        <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
+                          <Text style={styles.cTime}>{formatTime(item.timestampMillis)}</Text>
+                          <Text style={styles.cUser}>{cUser?.name}</Text>
+                        </View>
+                        <Text style={styles.cText}>{item.text}</Text>
+                      </TouchableOpacity>
+                    );
+                  }}
                 />
               </View>
             )}
@@ -167,7 +172,7 @@ export default function FeedbackScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom + 60 }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom + 80 }]}>
       <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
         <Ionicons name="videocam" size={20} color={theme.background} />
         <Text style={[styles.uploadButtonText, { color: theme.background }]}>연습 영상 올리기</Text>
@@ -186,7 +191,16 @@ export default function FeedbackScreen() {
           </TouchableOpacity>
         )}
       />
-      {/* 업로드 모달 생략 (동일) */}
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalOverlayUpload}>
+          <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
+            <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>영상 업로드</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor="#666" value={videoTitle} onChangeText={setVideoTitle} />
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold', color: '#000'}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: '#666', textAlign: 'center'}}>취소</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -199,7 +213,7 @@ const styles = StyleSheet.create({
   videoSection: { width: '100%', aspectRatio: 16/9, backgroundColor: '#000', justifyContent: 'center' },
   landscapeVideo: { flex: 1, aspectRatio: undefined },
   vPlayer: { flex: 1 },
-  vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1, backgroundColor: '#0A0A0A' },
   landscapeSidebar: { width: 300, borderLeftWidth: 1, borderLeftColor: '#222' },
   sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#111' },
@@ -214,4 +228,8 @@ const styles = StyleSheet.create({
   uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12 },
   uploadButtonText: { fontWeight: 'bold', marginLeft: 8 },
   videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 10, borderRadius: 15 },
+  modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+  modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20, color: '#fff' },
+  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' }
 });

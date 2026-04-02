@@ -3,10 +3,13 @@ import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, M
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ScheduleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { schedules, addSchedule, respondToSchedule, theme, currentUser, refreshAllData } = useAppContext();
+  const insets = useSafeAreaInsets();
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -31,11 +34,14 @@ export default function ScheduleScreen() {
       setShowAddModal(false);
       setTitle('');
       setOptions(['']);
+      setTimeout(() => refreshAllData(), 500);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
+  const addOptionField = () => setOptions([...options, '']);
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom + 80 }]}>
       <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
         <Ionicons name="calendar" size={24} color={theme.background} />
         <Text style={[styles.addButtonText, { color: theme.background }]}>새 일정 투표</Text>
@@ -78,7 +84,7 @@ export default function ScheduleScreen() {
             {options.map((opt, index) => (
               <TextInput key={index} style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder={`시간 옵션 ${index + 1}`} placeholderTextColor="#666" value={opt} onChangeText={text => { const newOpts = [...options]; newOpts[index] = text; setOptions(newOpts); }} />
             ))}
-            <TouchableOpacity onPress={() => setOptions([...options, ''])} style={styles.addOptionBtn}><Text style={{ color: theme.primary }}>+ 시간 추가</Text></TouchableOpacity>
+            <TouchableOpacity onPress={addOptionField} style={styles.addOptionBtn}><Text style={{ color: theme.primary }}>+ 시간 추가</Text></TouchableOpacity>
             <View style={styles.modalButtons}>
               <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.cancelBtn}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
               <TouchableOpacity onPress={handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]}><Text style={{ color: theme.background }}>등록</Text></TouchableOpacity>
