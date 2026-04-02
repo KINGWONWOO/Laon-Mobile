@@ -1,84 +1,123 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, useWindowDimensions, KeyboardAvoidingView, Platform, Animated, Image } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { WebView } from 'react-native-webview'; // 유튜브 플레이어용
+import { useVideoPlayer, VideoView } from 'expo-video'; 
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system'; // 💡 캐싱을 위한 추가
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback, Comment } from '../../../types';
-import { youtubeService } from '../../../services/youtubeService';
+import { storageService } from '../../../services/storageService';
+import { Video as VideoCompressor } from 'react-native-compressor'; 
 
 export default function FeedbackScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { videos, addVideo, addComment, getUserById, theme } = useAppContext();
-  const { width } = useWindowDimensions();
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
+  const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); // 💡 캐싱된 로컬 URL 저장
+  const [isCaching, setIsCaching] = useState(false);
+
   const [newComment, setNewComment] = useState('');
-  const [currentPosition, setCurrentPosition] = useState(0);
-  const [activeBubble, setActiveBubble] = useState<Comment | null>(null);
   const [showCommentInput, setShowCommentInput] = useState(false);
   
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [videoTitle, setVideoTitle] = useState('');
   
-  const webViewRef = useRef<any>(null);
-  const bubbleOpacity = useRef(new Animated.Value(0)).current;
+  const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
-  const roomVideos = videos.filter(v => v.roomId === id);
+  // 💡 비디오 선택 시 캐싱 로직 실행
+  useEffect(() => {
+    async function cacheAndPlay() {
+      if (!selectedVideo) {
+        setCachedVideoUrl(null);
+        return;
+      }
 
-  // 유튜브 플레이어로부터 메시지 수신 (재생 시간 등)
-  const onMessage = (event: any) => {
-    const data = JSON.parse(event.nativeEvent.data);
-    if (data.type === 'timeupdate') {
-      const pos = data.time * 1000;
-      setCurrentPosition(pos);
-      checkBubbles(pos);
+      setIsCaching(true);
+      try {
+        const remoteUrl = selectedVideo.videoUrl;
+        const fileName = remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4';
+        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+        const fileInfo = await FileSystem.getInfoAsync(fileUri);
+        if (fileInfo.exists) {
+          console.log('[Cache] Playing from local cache:', fileUri);
+          setCachedVideoUrl(fileUri);
+        } else {
+          console.log('[Cache] Downloading to cache...');
+          const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
+          console.log('[Cache] Download complete:', uri);
+          setCachedVideoUrl(uri);
+        }
+      } catch (error) {
+        console.error('[Cache] Error:', error);
+        // 에러 시 원본 URL로 폴백
+        setCachedVideoUrl(selectedVideo.videoUrl);
+      } finally {
+        setIsCaching(false);
+      }
     }
-  };
+    cacheAndPlay();
+  }, [selectedVideo]);
 
-  const checkBubbles = (pos: number) => {
-    if (!selectedVideo) return;
-    const upcomingComment = selectedVideo.comments.find(c => {
-      const diff = c.timestampMillis - pos;
-      return diff > 500 && diff < 1500;
-    });
+  const player = useVideoPlayer(cachedVideoUrl || '', player => {
+    player.loop = true;
+    player.play();
+  });
 
-    if (upcomingComment && !activeBubble) {
-      setActiveBubble(upcomingComment);
-      Animated.timing(bubbleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-      setTimeout(() => {
-        Animated.timing(bubbleOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-          setActiveBubble(null);
-        });
-      }, 3000);
-    }
-  };
-
-  const handleAddVideo = async () => {
-    const videoId = youtubeService.extractVideoId(youtubeUrl);
-    if (!videoId) {
-      alert('올바른 유튜브 URL을 입력해주세요.');
+  const handlePickVideo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('권한 필요', '비디오 접근 권한이 필요합니다.');
       return;
     }
-    setIsLoading(true);
-    await addVideo(id, youtubeUrl, videoTitle || '새 연습 영상', videoId);
-    setIsLoading(false);
-    setShowAddModal(false);
-    setYoutubeUrl('');
-    setVideoTitle('');
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      if (!videoTitle.trim()) {
+        Alert.alert('오류', '먼저 영상 제목을 입력해주세요.');
+        return;
+      }
+      
+      setIsLoading(true);
+      try {
+        const originalUri = result.assets[0].uri;
+        const compressedUri = await VideoCompressor.compress(originalUri, { compressionMethod: 'auto' });
+        
+        const ext = compressedUri.split('.').pop() || 'mp4';
+        const fileName = `${Date.now()}.${ext}`;
+        const publicUrl = await storageService.uploadToR2(`videos/${id}`, compressedUri, fileName);
+        
+        await addVideo(id || '', publicUrl, videoTitle, 'direct_upload');
+        
+        setShowAddModal(false);
+        setVideoTitle('');
+        Alert.alert('업로드 완료', '연습 영상이 성공적으로 업로드되었습니다.');
+      } catch (error: any) {
+        Alert.alert('업로드 실패', error.message || '영상을 올리는 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
-    await addComment(selectedVideo.id, newComment.trim(), currentPosition);
+    const posMillis = Math.floor((player?.currentTime || 0) * 1000);
+    await addComment(selectedVideo.id, newComment.trim(), posMillis);
     setNewComment('');
     setShowCommentInput(false);
   };
 
-  const seekTo = (seconds: number) => {
-    webViewRef.current?.injectJavaScript(`player.seekTo(${seconds}, true); true;`);
+  const seekTo = (millis: number) => {
+    if (player) player.currentTime = millis / 1000;
   };
 
   const formatTime = (ms: number) => {
@@ -88,67 +127,7 @@ export default function FeedbackScreen() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const videoHeight = (width * 9) / 16;
-
   if (selectedVideo) {
-    const videoId = youtubeService.extractVideoId(selectedVideo.videoUrl);
-    const embedHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>body { margin: 0; background: black; }</style>
-        </head>
-        <body>
-          <div id="player"></div>
-          <script>
-            var tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
-            var firstScriptTag = document.getElementsByTagName('script')[0];
-            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-            var player;
-            function onYouTubeIframeAPIReady() {
-              player = new YT.Player('player', {
-                height: '100%',
-                width: '100%',
-                videoId: '${videoId}',
-                playerVars: { 
-                  'autoplay': 1, 
-                  'controls': 1, 
-                  'playsinline': 1,
-                  'origin': 'https://www.youtube.com', // 💡 재생 오류 153 해결을 위한 origin 설정
-                  'enablejsapi': 1
-                },
-                events: {
-                  'onReady': onPlayerReady,
-                  'onError': onPlayerError
-                }
-              });
-            }
-
-            function onPlayerError(event) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'error',
-                data: event.data
-              }));
-            }
-
-            function onPlayerReady(event) {
-              setInterval(function() {
-                try {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'timeupdate',
-                    time: player.getCurrentTime()
-                  }));
-                } catch(e) {}
-              }, 500);
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.playerHeader}>
@@ -158,29 +137,26 @@ export default function FeedbackScreen() {
           <Text style={[styles.playerTitle, { color: theme.text }]} numberOfLines={1}>{selectedVideo.title}</Text>
         </View>
 
-        <View style={{ height: videoHeight, backgroundColor: '#000' }}>
-          <WebView
-            ref={webViewRef}
-            source={{ html: embedHtml, baseUrl: 'https://www.youtube.com' }} // 💡 origin 도메인 일치화
-            onMessage={onMessage}
-            style={styles.videoPlayer}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            originWhitelist={['*']}
-          />
-          
-          {activeBubble && (
-            <Animated.View style={[styles.bubbleContainer, { opacity: bubbleOpacity }]} pointerEvents="none">
-              <View style={[styles.bubble, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.bubbleUser, { color: theme.background }]}>{getUserById(activeBubble.userId)?.name}</Text>
-                <Text style={[styles.bubbleText, { color: theme.background }]}>{activeBubble.text}</Text>
-              </View>
-            </Animated.View>
+        <View style={styles.videoContainer}>
+          {isCaching ? (
+            <View style={styles.cachingOverlay}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={{ color: theme.text, marginTop: 10 }}>영상을 로딩 중입니다 (데이터 절약)</Text>
+            </View>
+          ) : (
+            <VideoView 
+              style={styles.videoPlayer} 
+              player={player} 
+              allowsFullscreen 
+              allowsPictureInPicture 
+            />
           )}
         </View>
 
         <View style={styles.feedbackActionRow}>
-          <Text style={[styles.currentTimeText, { color: theme.text }]}>현재 시간: {formatTime(currentPosition)}</Text>
+          <Text style={[styles.currentTimeText, { color: theme.text }]}>
+            현재 시간: {formatTime(Math.floor((player?.currentTime || 0) * 1000))}
+          </Text>
           <TouchableOpacity 
             style={[styles.addCommentBtn, { backgroundColor: theme.primary }]} 
             onPress={() => setShowCommentInput(true)}
@@ -193,7 +169,7 @@ export default function FeedbackScreen() {
         <Modal visible={showCommentInput} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>{formatTime(currentPosition)} 시점에 피드백 추가</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>피드백 추가</Text>
               <TextInput
                 style={[styles.commentInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={newComment}
@@ -218,7 +194,7 @@ export default function FeedbackScreen() {
           data={selectedVideo.comments}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <TouchableOpacity style={[styles.commentItem, { borderBottomColor: theme.border }]} onPress={() => seekTo(item.timestampMillis / 1000)}>
+            <TouchableOpacity style={[styles.commentItem, { borderBottomColor: theme.border }]} onPress={() => seekTo(item.timestampMillis)}>
               <View style={[styles.timestampBadge, { backgroundColor: theme.primary + '20' }]}>
                 <Text style={[styles.timestampText, { color: theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
               </View>
@@ -238,36 +214,32 @@ export default function FeedbackScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
-        <Ionicons name="logo-youtube" size={24} color={theme.background} />
-        <Text style={[styles.uploadButtonText, { color: theme.background }]}>유튜브 영상 추가</Text>
+        <Ionicons name="cloud-upload" size={24} color={theme.background} />
+        <Text style={[styles.uploadButtonText, { color: theme.background }]}>기기에서 영상 업로드</Text>
       </TouchableOpacity>
 
       <FlatList
         data={roomVideos}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => {
-          const vId = youtubeService.extractVideoId(item.videoUrl);
-          return (
-            <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setSelectedVideo(item)}>
-              <Image 
-                source={{ uri: youtubeService.getThumbnailUrl(vId || '') }} 
-                style={styles.thumbnail}
-              />
-              <View style={styles.videoInfo}>
-                <Text style={[styles.uploaderName, { color: theme.primary }]}>{getUserById(item.userId)?.name}</Text>
-                <Text style={[styles.videoTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[styles.videoMeta, { color: theme.textSecondary }]}>피드백 {item.comments.length}개</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setSelectedVideo(item)}>
+            <View style={styles.videoPlaceholder}>
+              <Ionicons name="play-circle" size={40} color={theme.primary} />
+            </View>
+            <View style={styles.videoInfo}>
+              <Text style={[styles.uploaderName, { color: theme.primary }]}>{getUserById(item.userId)?.name}</Text>
+              <Text style={[styles.videoTitle, { color: theme.text }]}>{item.title}</Text>
+              <Text style={[styles.videoMeta, { color: theme.textSecondary }]}>피드백 {item.comments.length}개</Text>
+            </View>
+          </TouchableOpacity>
+        )}
         ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>등록된 영상이 없습니다.</Text>}
       />
 
       <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>새 연습 영상 추가</Text>
+        <View style={styles.modalOverlayUpload}>
+          <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>새 연습 영상 업로드</Text>
             <TextInput 
               style={[styles.titleInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]} 
               placeholder="영상 제목 (예: 정기 연습 1차)"
@@ -275,20 +247,21 @@ export default function FeedbackScreen() {
               value={videoTitle} 
               onChangeText={setVideoTitle} 
             />
-            <TextInput 
-              style={[styles.titleInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]} 
-              placeholder="유튜브 URL 주소"
-              placeholderTextColor={theme.textSecondary}
-              value={youtubeUrl} 
-              onChangeText={setYoutubeUrl} 
-              autoCapitalize="none"
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.cancelBtn}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleAddVideo} style={[styles.confirmBtn, { backgroundColor: theme.primary }]} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color={theme.background} /> : <Text style={{ color: theme.background, fontWeight: 'bold' }}>추가하기</Text>}
+            {isLoading ? (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                <Text style={{ color: theme.text, marginTop: 10 }}>영상을 압축하고 업로드 중입니다...</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>앱을 종료하지 마세요.</Text>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={handlePickVideo} style={[styles.pickVideoBtn, { backgroundColor: theme.primary }]}>
+                <Ionicons name="videocam" size={24} color={theme.background} />
+                <Text style={{ color: theme.background, fontWeight: 'bold', marginLeft: 10 }}>갤러리에서 영상 선택</Text>
               </TouchableOpacity>
-            </View>
+            )}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={styles.cancelBtnUpload}>
+              <Text style={{ color: theme.textSecondary }}>취소</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -301,11 +274,9 @@ const styles = StyleSheet.create({
   playerHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingTop: 50 },
   playerTitle: { fontSize: 16, fontWeight: 'bold', marginLeft: 10, flex: 1 },
   backButton: { padding: 5 },
+  videoContainer: { width: '100%', aspectRatio: 16/9, backgroundColor: '#000', justifyContent: 'center' },
+  cachingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)' },
   videoPlayer: { width: '100%', height: '100%' },
-  bubbleContainer: { position: 'absolute', top: 20, alignSelf: 'center', maxWidth: '80%' },
-  bubble: { padding: 12, borderRadius: 15, elevation: 5 },
-  bubbleUser: { fontSize: 10, fontWeight: 'bold', marginBottom: 2 },
-  bubbleText: { fontSize: 13, fontWeight: '500' },
   feedbackActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   currentTimeText: { fontSize: 14, fontWeight: '600' },
   addCommentBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20 },
@@ -327,11 +298,16 @@ const styles = StyleSheet.create({
   uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12 },
   uploadButtonText: { fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
   videoCard: { flexDirection: 'row', marginHorizontal: 15, marginBottom: 10, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1 },
-  thumbnail: { width: 100, height: 60, borderRadius: 8, marginRight: 15 },
+  videoPlaceholder: { width: 100, height: 60, borderRadius: 8, marginRight: 15, backgroundColor: '#222', justifyContent: 'center', alignItems: 'center' },
   videoInfo: { flex: 1 },
   videoTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
   uploaderName: { fontSize: 12, fontWeight: 'bold' },
   videoMeta: { fontSize: 12 },
   emptyText: { textAlign: 'center', marginTop: 30, paddingHorizontal: 40 },
   titleInput: { width: '100%', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 15 },
+  modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+  modalContentUpload: { padding: 25, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  pickVideoBtn: { flexDirection: 'row', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  cancelBtnUpload: { padding: 15, alignItems: 'center', marginTop: 10 },
+  loadingBox: { alignItems: 'center', marginVertical: 20 },
 });

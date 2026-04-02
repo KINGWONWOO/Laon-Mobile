@@ -36,7 +36,9 @@ type AppContextType = {
   addComment: (videoId: string, text: string, timestampMillis: number) => Promise<void>;
   
   photos: Photo[];
-  addPhoto: (roomId: string, photoUrl: string) => Promise<void>;
+  addPhoto: (roomId: string, photoUrl: string, description?: string) => Promise<void>;
+  deletePhoto: (photoId: string, photoUrl: string) => Promise<void>;
+  addPhotoComment: (photoId: string, text: string) => Promise<void>;
 
   schedules: Schedule[];
   addSchedule: (roomId: string, title: string, options: string[], startDate?: string, endDate?: string, sendNotification?: boolean) => Promise<void>;
@@ -234,9 +236,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     queryClient.invalidateQueries();
   };
 
-  const addPhoto = async (roomId: string, photoUrl: string) => {
+  const addPhoto = async (roomId: string, photoUrl: string, description?: string) => {
     if (!currentUser) return;
-    await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
+    await storageService.uploadToGallery(roomId, currentUser.id, photoUrl, description);
+    queryClient.invalidateQueries();
+  };
+
+  const deletePhoto = async (photoId: string, photoUrl: string) => {
+    // R2에서 파일 삭제 (선택적)
+    const key = photoUrl.split('laon-dance/')[1] || photoUrl.split('/').pop();
+    if (key) {
+      await supabase.functions.invoke('delete-r2-objects', { body: { prefix: key } }).catch(() => {});
+    }
+    // DB에서 삭제
+    const { error } = await supabase.from('gallery_items').delete().eq('id', photoId);
+    if (error) throw error;
+    queryClient.invalidateQueries();
+  };
+
+  const addPhotoComment = async (photoId: string, text: string) => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('gallery_comments').insert([{
+      gallery_item_id: photoId,
+      user_id: currentUser.id,
+      text
+    }]);
+    if (error) throw error;
     queryClient.invalidateQueries();
   };
 
@@ -308,7 +333,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       rooms: roomsData, isLoadingRooms, users, getUserById, getRoomByIdRemote, createRoom, joinRoom, deleteRoom,
       notices: noticesMapped, addNotice, updateNotice, deleteNotice, togglePinNotice, markNoticeAsViewed,
       videos: videosMapped, addVideo, addComment,
-      photos: photosMapped, addPhoto,
+      photos: photosMapped, addPhoto, deletePhoto, addPhotoComment,
       schedules: schedulesMapped, addSchedule, updateSchedule, deleteSchedule, respondToSchedule, markScheduleAsViewed,
       votes: votesMapped, addVote, updateVote, deleteVote, respondToVote, markVoteAsViewed,
       alarms, addAlarm, markAlarmAsViewed,

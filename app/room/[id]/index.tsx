@@ -72,6 +72,7 @@ export default function RoomMainScreen() {
   };
 
   const menuItems = [
+    { title: '멤버 목록', icon: 'people', path: `/room/${id}/members`, color: '#A06CD5' }, // 💡 멤버 탭 추가
     { title: '일정 맞추기', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B' },
     { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#4ECDC4' },
     { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#45B7D1' },

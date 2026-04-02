@@ -43,11 +43,20 @@ export type VideoFeedback = {
   createdAt: number;
 };
 
+export type PhotoComment = {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: number;
+};
+
 export type Photo = {
   id: string;
   roomId: string;
   userId: string; // ID of the user who uploaded the photo
   photoUrl: string;
+  description?: string; // 💡 SNS형 텍스트
+  comments?: PhotoComment[]; // 💡 사진 댓글
   createdAt: number;
 };
 

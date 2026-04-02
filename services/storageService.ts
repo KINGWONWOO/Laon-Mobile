@@ -117,7 +117,7 @@ export const storageService = {
   /**
    * 갤러리 아이템 등록
    */
-  uploadToGallery: async (roomId: string, userId: string, filePath: string) => {
+  uploadToGallery: async (roomId: string, userId: string, filePath: string, description?: string) => {
     const { count } = await supabase.from('gallery_items').select('*', { count: 'exact', head: true }).eq('room_id', roomId);
     if (count !== null && count >= MAX_GALLERY_COUNT) throw new Error(`갤러리 최대 개수를 초과했습니다.`);
 
@@ -131,7 +131,8 @@ export const storageService = {
       user_id: userId, 
       file_path: publicUrl,
       file_type: filePath.toLowerCase().endsWith('.mp4') ? 'video' : 'image',
-      file_size: fileInfo.size || 0
+      file_size: fileInfo.size || 0,
+      description // 💡 내용 추가
     });
 
     if (dbError) throw dbError;
