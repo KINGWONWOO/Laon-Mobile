@@ -114,6 +114,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const roomIds = roomsData.map(r => r.id);
 
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
+
   const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
     const { data } = await supabase.from('videos').select('*, video_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
     return data || [];
@@ -124,30 +129,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return data || [];
   }, enabled: roomIds.length > 0 });
 
-  // 💡 투표/일정 쿼리 보강 (더 상세하게)
+  // 💡 쿼리 최적화: 개별 조인 대신 단순화
   const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('schedules').select(`
-      *,
-      schedule_options (
-        *,
-        schedule_responses (*)
-      )
-    `).in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data } = await supabase.from('schedules').select('*, schedule_options(*, schedule_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
     return data || [];
   }, enabled: roomIds.length > 0 });
 
   const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('votes').select(`
-      *,
-      vote_options (
-        *,
-        vote_responses (*)
-      )
-    `).in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data } = await supabase.from('votes').select('*, vote_options(*, vote_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
     return data || [];
   }, enabled: roomIds.length > 0 });
 
   // 매핑 로직
+  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
+    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
+    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime()
+  }));
+
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
@@ -168,7 +166,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const resp: Record<string, string[]> = {};
     (s.schedule_options || []).forEach((o: any) => (o.schedule_responses || []).forEach((r: any) => {
       if (!resp[r.user_id]) resp[r.user_id] = [];
-      if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id);
+      resp[r.user_id].push(o.id);
     }));
     return {
       id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})),
@@ -180,7 +178,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const resp: Record<string, string[]> = {};
     (v.vote_options || []).forEach((o: any) => (o.vote_responses || []).forEach((r: any) => {
       if (!resp[r.user_id]) resp[r.user_id] = [];
-      if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id);
+      resp[r.user_id].push(o.id);
     }));
     return {
       id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple,
@@ -193,7 +191,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     schedules: schedulesMapped.length, votes: votesMapped.length 
   });
 
-  // 비즈니스 로직 (함수 본체는 동일하므로 생략하지 않고 유지)
+  // 비즈니스 로직
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
   const updateUserProfile = async (n: string, i?: string) => {
@@ -245,7 +243,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       currentUser, isLoadingUser, login, updateUserProfile, logout,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: async (id) => (await supabase.from('rooms').select('*').eq('id', id).single()).data as Room,
       createRoom, joinRoom, deleteRoom,
-      notices: [], addNotice: async () => {},
+      notices: noticesMapped, addNotice: async () => {},
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,
