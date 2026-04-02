@@ -1,31 +1,39 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, Switch, ScrollView, Alert } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Switch, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 
 export default function VoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, theme, currentUser } = useAppContext();
+  const { votes, addVote, respondToVote, currentUser, theme } = useAppContext();
+
   const [showAddModal, setShowAddModal] = useState(false);
-  
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultiple, setAllowMultiple] = useState(false);
 
-  const roomVotes = votes.filter(v => v.roomId === id);
+  // 💡 useMemo를 사용하여 votes 데이터가 바뀔 때마다 즉시 리스트 갱신
+  const roomVotes = useMemo(() => {
+    return votes.filter(v => v.roomId === id);
+  }, [votes, id]);
 
   const handleCreateVote = async () => {
     if (!question.trim() || options.some(opt => !opt.trim())) {
       Alert.alert('오류', '질문과 모든 선택지 내용을 입력해주세요.');
       return;
     }
-    await addVote(id || '', question, options, { isAnonymous, allowMultiple });
-    setShowAddModal(false);
-    setQuestion('');
-    setOptions(['', '']);
+    try {
+      await addVote(id || '', question, options, { isAnonymous, allowMultiple });
+      setShowAddModal(false);
+      setQuestion('');
+      setOptions(['', '']);
+    } catch (e: any) {
+      Alert.alert('오류', e.message || '투표를 생성할 수 없습니다.');
+    }
   };
+
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

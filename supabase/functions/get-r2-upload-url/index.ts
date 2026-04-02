@@ -1,76 +1,73 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.341.0";
-import { getSignedUrl } from "https://esm.sh/@aws-sdk/s3-request-presigner@3.341.0";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.19";
 
-const R2_ACCOUNT_ID = Deno.env.get("R2_ACCOUNT_ID") || "";
-const R2_ACCESS_KEY_ID = Deno.env.get("R2_ACCESS_KEY_ID") || "";
-const R2_SECRET_ACCESS_KEY = Deno.env.get("R2_SECRET_ACCESS_KEY") || "";
-const R2_BUCKET_NAME = Deno.env.get("R2_BUCKET_NAME") || "laon-dance";
-const R2_PUBLIC_URL = Deno.env.get("R2_PUBLIC_URL") || "";
-
-console.log("[Edge] Function initialized");
-console.log("[Edge] R2_ACCOUNT_ID length:", R2_ACCOUNT_ID.length);
-console.log("[Edge] R2_ACCESS_KEY_ID length:", R2_ACCESS_KEY_ID.length);
-console.log("[Edge] R2_SECRET_ACCESS_KEY length:", R2_SECRET_ACCESS_KEY.length);
-
-// S3Client는 한 번만 초기화하지만, 변수가 있을 때만 유효하게 동작하도록 합니다.
-const createS3Client = () => {
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: R2_ACCESS_KEY_ID,
-      secretAccessKey: R2_SECRET_ACCESS_KEY,
-    },
-  });
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
-  // CORS 처리
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
-  }
+Deno.serve(async (req) => {
+  // 1. CORS 처리
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const body = await req.json();
-    const { bucket, key, contentType } = body;
-    console.log("[Edge] Request Body:", JSON.stringify({ bucket, key, contentType }));
+    // 2. 환경 변수 로드
+    const R2_ACCOUNT_ID = Deno.env.get("R2_ACCOUNT_ID")?.trim();
+    const R2_ACCESS_KEY_ID = Deno.env.get("R2_ACCESS_KEY_ID")?.trim();
+    const R2_SECRET_ACCESS_KEY = Deno.env.get("R2_SECRET_ACCESS_KEY")?.trim();
+    const R2_BUCKET_NAME = Deno.env.get("R2_BUCKET_NAME")?.trim() || "laon-dance";
+    const R2_PUBLIC_URL = (Deno.env.get("R2_PUBLIC_URL") || "").trim().replace(/\/$/, "");
 
-    const missingVars = [];
-    if (!R2_ACCOUNT_ID) missingVars.push("R2_ACCOUNT_ID");
-    if (!R2_ACCESS_KEY_ID) missingVars.push("R2_ACCESS_KEY_ID");
-    if (!R2_SECRET_ACCESS_KEY) missingVars.push("R2_SECRET_ACCESS_KEY");
-
-    if (missingVars.length > 0) {
-      throw new Error(`R2 설정(환경 변수)이 누락되었습니다: ${missingVars.join(", ")}`);
+    if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+      throw new Error("R2 서버 설정(환경 변수)이 누락되었습니다.");
     }
 
-    const s3 = createS3Client();
-    const command = new PutObjectCommand({
-      Bucket: bucket || R2_BUCKET_NAME,
-      Key: key,
-      ContentType: contentType,
+    // 3. 데이터 파싱
+    const body = await req.json();
+    const { key, contentType } = body;
+    if (!key) throw new Error("업로드할 파일 경로(key)가 없습니다.");
+
+    console.log(`[Edge] Generating ultra-light presigned URL for: ${key}`);
+
+    // 4. 초경량 aws4fetch 클라이언트 초기화 (무거운 SDK 로딩 없음!)
+    const aws = new AwsClient({
+      accessKeyId: R2_ACCESS_KEY_ID,
+      secretAccessKey: R2_SECRET_ACCESS_KEY,
+      service: "s3",
+      region: "auto",
     });
 
-    console.log("[Edge] Generating signed URL...");
-    // 1시간(3600초) 유효한 업로드용 pre-signed URL 생성
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    console.log("[Edge] Signed URL generated successfully");
-
-    return new Response(JSON.stringify({ signedUrl, publicUrl: `${R2_PUBLIC_URL}/${key}` }), {
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    // R2 업로드용 엔드포인트 생성
+    const url = new URL(`https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}/${key}`);
+    
+    // 5. URL 서명 (쿼리 파라미터 방식)
+    const signedRequest = await aws.sign(url, {
+      method: "PUT",
+      aws: { signQuery: true }, // URL 자체에 서명을 포함
+      headers: {
+        "Content-Type": contentType || "application/octet-stream",
+      }
     });
+
+    console.log("[Edge] URL successfully signed using aws4fetch.");
+
+    // 6. 성공 응답
+    return new Response(JSON.stringify({ 
+      signedUrl: signedRequest.url, 
+      publicUrl: `${R2_PUBLIC_URL}/${key}` 
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   } catch (error: any) {
-    console.error("[Edge] Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    console.error("[Edge Error]", error);
+    return new Response(JSON.stringify({ 
+      error: error.message || "서버 에러",
+      details: error.stack 
+    }), {
+      status: 400, // 500 에러 원천 차단
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

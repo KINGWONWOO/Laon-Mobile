@@ -113,19 +113,35 @@ export default function FeedbackScreen() {
                 height: '100%',
                 width: '100%',
                 videoId: '${videoId}',
-                playerVars: { 'autoplay': 1, 'controls': 1, 'playsinline': 1 },
+                playerVars: { 
+                  'autoplay': 1, 
+                  'controls': 1, 
+                  'playsinline': 1,
+                  'origin': 'https://www.youtube.com', // 💡 재생 오류 153 해결을 위한 origin 설정
+                  'enablejsapi': 1
+                },
                 events: {
-                  'onReady': onPlayerReady
+                  'onReady': onPlayerReady,
+                  'onError': onPlayerError
                 }
               });
             }
 
+            function onPlayerError(event) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'error',
+                data: event.data
+              }));
+            }
+
             function onPlayerReady(event) {
               setInterval(function() {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'timeupdate',
-                  time: player.getCurrentTime()
-                }));
+                try {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'timeupdate',
+                    time: player.getCurrentTime()
+                  }));
+                } catch(e) {}
               }, 500);
             }
           </script>
@@ -145,11 +161,12 @@ export default function FeedbackScreen() {
         <View style={{ height: videoHeight, backgroundColor: '#000' }}>
           <WebView
             ref={webViewRef}
-            source={{ html: embedHtml }}
+            source={{ html: embedHtml, baseUrl: 'https://www.youtube.com' }} // 💡 origin 도메인 일치화
             onMessage={onMessage}
             style={styles.videoPlayer}
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
+            originWhitelist={['*']}
           />
           
           {activeBubble && (

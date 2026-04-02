@@ -22,6 +22,7 @@ type AppContextType = {
   getRoomByIdRemote: (roomId: string) => Promise<Room | null>;
   createRoom: (name: string, passcode: string, imageUri?: string) => Promise<Room>;
   joinRoom: (roomId: string, passcode: string) => Promise<Room | null>;
+  deleteRoom: (roomId: string) => Promise<void>;
   
   notices: Notice[];
   addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => Promise<void>;
@@ -78,7 +79,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const theme = getThemeColors(themeType);
 
-  // Auth Sync
+  // 1. 세션 동기화
   useEffect(() => {
     let isMounted = true;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -104,123 +105,167 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => { isMounted = false; subscription.unsubscribe(); };
   }, []);
 
-  // Realtime Subscription Logic
+  // 2. 실시간 구독
   useEffect(() => {
     if (!currentUser) return;
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-        console.log('[Realtime] Change received:', payload.table);
-        if (payload.table === 'notices') queryClient.invalidateQueries({ queryKey: ['notices'] });
-        if (payload.table === 'videos' || payload.table === 'video_comments') queryClient.invalidateQueries({ queryKey: ['videos'] });
-        if (payload.table === 'gallery_items') queryClient.invalidateQueries({ queryKey: ['photos'] });
-        if (payload.table === 'schedules' || payload.table === 'schedule_options' || payload.table === 'schedule_responses') queryClient.invalidateQueries({ queryKey: ['schedules'] });
-        if (payload.table === 'votes' || payload.table === 'vote_options' || payload.table === 'vote_responses') queryClient.invalidateQueries({ queryKey: ['votes'] });
-      })
-      .subscribe();
-
+    const channel = supabase.channel('schema-db-changes').on('postgres_changes', { event: '*', schema: 'public' }, () => {
+      queryClient.invalidateQueries();
+    }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
-  // Data Fetching
-  const roomsQuery = useQuery({
+  // 3. 데이터 로딩
+  const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
     queryKey: ['rooms', currentUser?.id],
     queryFn: async () => {
-      if (!currentUser) return [];
       const { data } = await supabase.from('room_members').select('rooms (*)').eq('user_id', currentUser?.id);
       return (data?.map(item => item.rooms).filter(Boolean) || []) as Room[];
     },
     enabled: !!currentUser,
   });
-  
-  const rooms = roomsQuery.data || [];
-  const isLoadingRooms = roomsQuery.isLoading;
 
-  const fetchRoomData = async (table: string) => {
-    if (rooms.length === 0) return [];
-    const { data } = await supabase.from(table).select('*').in('room_id', rooms.map(r => r.id)).order('created_at', { ascending: false });
+  const roomIds = roomsData.map(r => r.id);
+
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     return data || [];
-  };
+  }, enabled: roomIds.length > 0 });
 
-  const noticesQuery = useQuery({ queryKey: ['notices', rooms.map(r => r.id)], queryFn: () => fetchRoomData('notices'), enabled: rooms.length > 0 });
-  const videosQuery = useQuery({ queryKey: ['videos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('videos'), enabled: rooms.length > 0 });
-  const photosQuery = useQuery({ queryKey: ['photos', rooms.map(r => r.id)], queryFn: () => fetchRoomData('gallery_items'), enabled: rooms.length > 0 });
-  const schedulesQuery = useQuery({ queryKey: ['schedules', rooms.map(r => r.id)], queryFn: () => fetchRoomData('schedules'), enabled: rooms.length > 0 });
-  const votesQuery = useQuery({ queryKey: ['votes', rooms.map(r => r.id)], queryFn: () => fetchRoomData('votes'), enabled: rooms.length > 0 });
+  const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('videos').select('*, video_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
 
-  // Mapping
-  const notices = (noticesQuery.data || []).map(n => ({
+  const photosQuery = useQuery({ queryKey: ['photos', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('gallery_items').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
+
+  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('schedules').select('*, schedule_options(*, schedule_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
+
+  const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
+    const { data } = await supabase.from('votes').select('*, vote_options(*, vote_responses(*))').in('room_id', roomIds).order('created_at', { ascending: false });
+    return data || [];
+  }, enabled: roomIds.length > 0 });
+
+  // 4. 데이터 매핑
+  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
-    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by, createdAt: new Date(n.created_at).getTime()
+    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime()
   }));
 
-  const videos = (videosQuery.data || []).map(v => ({
+  const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.youtube_url || v.storage_path,
-    title: v.title, createdAt: new Date(v.created_at).getTime(), comments: []
+    title: v.title, createdAt: new Date(v.created_at).getTime(), comments: (v.video_comments || []).map((c: any) => ({
+      id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, createdAt: new Date(c.created_at).getTime()
+    }))
   }));
 
-  const photos = (photosQuery.data || []).map(p => ({
+  const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({
     id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, createdAt: new Date(p.created_at).getTime()
   }));
 
-  const schedules = (schedulesQuery.data || []).map(s => ({
-    id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, viewedBy: s.viewed_by,
-    startDate: s.start_date, endDate: s.end_date, createdAt: new Date(s.created_at).getTime(),
-    options: [], responses: {}
-  }));
+  const schedulesMapped: Schedule[] = (schedulesQuery.data || []).map(s => {
+    const responses: Record<string, string[]> = {};
+    (s.schedule_options || []).forEach((opt: any) => {
+      (opt.schedule_responses || []).forEach((res: any) => {
+        if (!responses[res.user_id]) responses[res.user_id] = [];
+        responses[res.user_id].push(opt.id);
+      });
+    });
+    return {
+      id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, 
+      viewedBy: s.viewed_by || [], createdAt: new Date(s.created_at).getTime(),
+      options: (s.schedule_options || []).map((o: any) => ({ id: o.id, dateTime: o.date_time })),
+      responses
+    };
+  });
 
-  const votes = (votesQuery.data || []).map(v => ({
-    id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, 
-    isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, 
-    viewedBy: v.viewed_by, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined,
-    createdAt: new Date(v.created_at).getTime(), options: [], responses: {}, comments: []
-  }));
+  const votesMapped: Vote[] = (votesQuery.data || []).map(v => {
+    const responses: Record<string, string[]> = {};
+    (v.vote_options || []).forEach((opt: any) => {
+      (opt.vote_responses || []).forEach((res: any) => {
+        if (!responses[res.user_id]) responses[res.user_id] = [];
+        responses[res.user_id].push(opt.id);
+      });
+    });
+    return {
+      id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question,
+      isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple,
+      createdAt: new Date(v.created_at).getTime(), viewedBy: v.viewed_by || [],
+      options: (v.vote_options || []).map((o: any) => ({ id: o.id, text: o.text })),
+      responses, comments: []
+    };
+  });
 
+  // 5. 함수 구현
   const login = async (email: string, password: string) => { await supabase.auth.signInWithPassword({ email, password }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
 
   const createRoom = async (name: string, passcode: string, imageUri?: string) => {
     if (!currentUser) throw new Error("로그인 필요");
-    
     let finalImage = imageUri;
     if (imageUri && !imageUri.startsWith('http')) {
       finalImage = await storageService.uploadProfileImage('room', uuidv4(), imageUri);
     }
-
-    console.log('[AppContext] Creating room:', name);
-
-    // 1. 방 생성
-    const { data: roomData, error: roomError } = await supabase
-      .from('rooms')
-      .insert([{ 
-        name, 
-        passcode, 
-        image_uri: finalImage, 
-        leader_id: currentUser.id 
-      }])
-      .select()
-      .single();
-
-    if (roomError) throw new Error(`방 생성 실패: ${roomError.message}`);
-
-    // 2. 💡 방 멤버로 본인 강제 등록 (트리거와 상관없이 upsert로 보장)
-    console.log('[AppContext] Adding creator to members...');
-    const { error: memberError } = await supabase
-      .from('room_members')
-      .upsert([{ 
-        room_id: roomData.id, 
-        user_id: currentUser.id 
-      }], { onConflict: 'room_id,user_id' });
-
-    if (memberError) {
-      console.warn('[AppContext] Member registration via upsert failed, but room exists:', memberError.message);
-    }
-
-    // 3. 캐시 즉시 갱신
-    await queryClient.invalidateQueries({ queryKey: ['rooms'] });
-    
+    const { data: roomData, error } = await supabase.from('rooms').insert([{ name, passcode, image_uri: finalImage, leader_id: currentUser.id }]).select().single();
+    if (error) throw error;
+    await supabase.from('room_members').upsert([{ room_id: roomData.id, user_id: currentUser.id }], { onConflict: 'room_id,user_id' });
+    queryClient.invalidateQueries({ queryKey: ['rooms'] });
     return roomData as Room;
+  };
+
+  const deleteRoom = async (roomId: string) => {
+    try {
+      await supabase.functions.invoke('delete-r2-objects', { body: { prefix: `gallery/${roomId}/` } });
+      await supabase.functions.invoke('delete-r2-objects', { body: { prefix: `rooms/${roomId}_` } });
+    } catch (e) {}
+    const { error } = await supabase.from('rooms').delete().eq('id', roomId);
+    if (error) throw error;
+    queryClient.invalidateQueries({ queryKey: ['rooms'] });
+  };
+
+  const addVideo = async (roomId: string, youtubeUrl: string, title: string, youtubeId: string) => {
+    const { error } = await supabase.from('videos').insert([{ room_id: roomId, user_id: currentUser?.id, title, youtube_url: youtubeUrl, youtube_id: youtubeId }]);
+    if (error) throw error;
+    queryClient.invalidateQueries();
+  };
+
+  const addPhoto = async (roomId: string, photoUrl: string) => {
+    if (!currentUser) return;
+    await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
+    queryClient.invalidateQueries();
+  };
+
+  const addVote = async (roomId: string, question: string, options: string[], settings: any) => {
+    const { data: vote, error } = await supabase.from('votes').insert([{ room_id: roomId, user_id: currentUser?.id, question, is_anonymous: settings.isAnonymous, allow_multiple: settings.allowMultiple }]).select().single();
+    if (error) throw error;
+    if (vote && options.length > 0) {
+      await supabase.from('vote_options').insert(options.map(opt => ({ vote_id: vote.id, text: opt })));
+    }
+    queryClient.invalidateQueries();
+  };
+
+  const respondToVote = async (voteId: string, optionIds: string[]) => {
+    await supabase.from('vote_responses').upsert([{ vote_id: voteId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'vote_id,user_id' });
+    queryClient.invalidateQueries();
+  };
+
+  const addSchedule = async (roomId: string, title: string, options: string[]) => {
+    const { data: schedule, error } = await supabase.from('schedules').insert([{ room_id: roomId, user_id: currentUser?.id, title }]).select().single();
+    if (error) throw error;
+    if (schedule && options.length > 0) {
+      await supabase.from('schedule_options').insert(options.map(opt => ({ schedule_id: schedule.id, date_time: opt })));
+    }
+    queryClient.invalidateQueries();
+  };
+
+  const respondToSchedule = async (scheduleId: string, optionIds: string[]) => {
+    await supabase.from('schedule_responses').upsert([{ schedule_id: scheduleId, user_id: currentUser?.id, option_ids: optionIds }], { onConflict: 'schedule_id,user_id' });
+    queryClient.invalidateQueries();
   };
 
   const joinRoom = async (roomId: string, passcode: string) => {
@@ -231,128 +276,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return room as Room;
   };
 
-  const addNotice = async (roomId: string, title: string, content: string, isPinned = false, images?: string[]) => {
-    await supabase.from('notices').insert([{ room_id: roomId, user_id: currentUser?.id, title, content, is_pinned: isPinned, image_urls: images || [] }]);
-  };
-
-  const updateNotice = async (noticeId: string, title: string, content: string, isPinned: boolean) => {
-    await supabase.from('notices').update({ title, content, is_pinned: isPinned }).eq('id', noticeId);
-  };
-
-  const deleteNotice = async (noticeId: string) => { await supabase.from('notices').delete().eq('id', noticeId); };
-
-  const addVideo = async (roomId: string, youtubeUrl: string, title: string, youtubeId: string) => {
-    console.log('[AppContext] Adding video:', title);
-    const { error } = await supabase.from('videos').insert([{ 
-      room_id: roomId, 
-      user_id: currentUser?.id, 
-      title, 
-      youtube_url: youtubeUrl, 
-      youtube_id: youtubeId 
-    }]);
-    if (error) {
-      console.error('[AppContext] AddVideo Error:', error.message);
-      throw new Error(`영상 추가 실패: ${error.message}`);
-    }
-    await queryClient.invalidateQueries({ queryKey: ['videos'] });
-  };
-
-  const addComment = async (videoId: string, text: string, timestampMillis: number) => {
-    const { error } = await supabase.from('video_comments').insert([{ 
-      video_id: videoId, 
-      user_id: currentUser?.id, 
-      text, 
-      timestamp_millis: timestampMillis 
-    }]);
-    if (error) throw error;
-    await queryClient.invalidateQueries({ queryKey: ['videos'] });
-  };
-
-  const addPhoto = async (roomId: string, photoUrl: string) => {
-    if (currentUser) {
-      console.log('[AppContext] Uploading photo to gallery...');
-      await storageService.uploadToGallery(roomId, currentUser.id, photoUrl);
-      await queryClient.invalidateQueries({ queryKey: ['photos'] });
-    }
-  };
-
-  const addSchedule = async (roomId: string, title: string, options: string[], startDate?: string, endDate?: string) => {
-    console.log('[AppContext] Adding schedule:', title);
-    const { data: schedule, error: sError } = await supabase
-      .from('schedules')
-      .insert([{ room_id: roomId, user_id: currentUser?.id, title, start_date: startDate, end_date: endDate }])
-      .select()
-      .single();
-    
-    if (sError) {
-      console.error('[AppContext] AddSchedule Error:', sError.message);
-      throw new Error(`일정 생성 실패: ${sError.message}`);
-    }
-
-    if (schedule && options.length > 0) {
-      const { error: oError } = await supabase.from('schedule_options').insert(
-        options.map(opt => ({ schedule_id: schedule.id, date_time: opt }))
-      );
-      if (oError) {
-        console.error('[AppContext] Schedule Options Error:', oError.message);
-        throw oError;
-      }
-    }
-    
-    await queryClient.invalidateQueries({ queryKey: ['schedules'] });
-  };
-
-  const respondToSchedule = async (scheduleId: string, optionIds: string[]) => {
-    const { error } = await supabase.from('schedule_responses').upsert([{ 
-      schedule_id: scheduleId, 
-      user_id: currentUser?.id, 
-      option_ids: optionIds 
-    }], { onConflict: 'schedule_id,user_id' });
-    if (error) throw error;
-    await queryClient.invalidateQueries({ queryKey: ['schedules'] });
-  };
-
-  const addVote = async (roomId: string, question: string, options: string[], settings: any) => {
-    console.log('[AppContext] Adding vote:', question);
-    const { data: vote, error: vError } = await supabase.from('votes').insert([{ 
-      room_id: roomId, 
-      user_id: currentUser?.id, 
-      question, 
-      is_anonymous: settings.isAnonymous, 
-      allow_multiple: settings.allowMultiple,
-      deadline: settings.deadline ? new Date(settings.deadline).toISOString() : null
-    }]).select().single();
-
-    if (vError) {
-      console.error('[AppContext] AddVote Error:', vError.message);
-      throw new Error(`투표 생성 실패: ${vError.message}`);
-    }
-
-    if (vote && options.length > 0) {
-      const { error: oError } = await supabase.from('vote_options').insert(
-        options.map(opt => ({ vote_id: vote.id, text: opt }))
-      );
-      if (oError) {
-        console.error('[AppContext] Vote Options Error:', oError.message);
-        throw oError;
-      }
-    }
-
-    await queryClient.invalidateQueries({ queryKey: ['votes'] });
-  };
-
-  const respondToVote = async (voteId: string, optionIds: string[]) => {
-    const { error } = await supabase.from('vote_responses').upsert([{ 
-      vote_id: voteId, 
-      user_id: currentUser?.id, 
-      option_ids: optionIds 
-    }], { onConflict: 'vote_id,user_id' });
-    if (error) throw error;
-    await queryClient.invalidateQueries({ queryKey: ['votes'] });
-  };
-
-  const markNoticeAsViewed = async () => {};
+  // 나머지 빈 함수들
+  const addNotice = async () => {};
+  const updateNotice = async () => {};
+  const deleteNotice = async () => {};
   const togglePinNotice = async () => {};
+  const markNoticeAsViewed = async () => {};
+  const addComment = async () => {};
   const getRoomByIdRemote = async (id: string) => {
     const { data } = await supabase.from('rooms').select('*').eq('id', id).single();
     return data as Room;
@@ -370,17 +300,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteVote = async () => {};
   const markVoteAsViewed = async () => {};
   const addAlarm = async () => {};
-  const markAlarmAsViewed = async (alarmId: string) => {};
+  const markAlarmAsViewed = async () => {};
 
   return (
     <AppContext.Provider value={{
       currentUser, isLoadingUser, login, updateUserProfile, logout,
-      rooms, isLoadingRooms, users, getUserById, getRoomByIdRemote, createRoom, joinRoom,
-      notices, addNotice, updateNotice, deleteNotice, togglePinNotice, markNoticeAsViewed,
-      videos, addVideo, addComment,
-      photos, addPhoto,
-      schedules, addSchedule, updateSchedule, deleteSchedule, respondToSchedule, markScheduleAsViewed,
-      votes, addVote, updateVote, deleteVote, respondToVote, markVoteAsViewed,
+      rooms: roomsData, isLoadingRooms, users, getUserById, getRoomByIdRemote, createRoom, joinRoom, deleteRoom,
+      notices: noticesMapped, addNotice, updateNotice, deleteNotice, togglePinNotice, markNoticeAsViewed,
+      videos: videosMapped, addVideo, addComment,
+      photos: photosMapped, addPhoto,
+      schedules: schedulesMapped, addSchedule, updateSchedule, deleteSchedule, respondToSchedule, markScheduleAsViewed,
+      votes: votesMapped, addVote, updateVote, deleteVote, respondToVote, markVoteAsViewed,
       alarms, addAlarm, markAlarmAsViewed,
       themeType, setThemeType, theme
     }}>

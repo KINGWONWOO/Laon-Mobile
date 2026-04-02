@@ -10,7 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 
 export default function RoomMainScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { rooms } = useAppContext();
+  const { rooms, currentUser, deleteRoom } = useAppContext();
   const router = useRouter();
   
   const room = rooms.find(r => r.id === id);
@@ -22,6 +22,31 @@ export default function RoomMainScreen() {
       </View>
     );
   }
+
+  const isLeader = room.leader_id === currentUser?.id;
+
+  const handleDeleteRoom = () => {
+    Alert.alert(
+      '방 삭제',
+      `'${room.name}' 방을 정말 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '삭제', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteRoom(room.id);
+              Alert.alert('삭제 완료', '방이 성공적으로 삭제되었습니다.');
+              router.replace('/rooms');
+            } catch (error: any) {
+              Alert.alert('오류', error.message || '방을 삭제할 수 없습니다.');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // 💡 방 ID 복사 함수
   const copyRoomId = async () => {
@@ -59,7 +84,14 @@ export default function RoomMainScreen() {
         <View style={styles.roomInitialCircle}>
           <Text style={styles.roomInitialText}>{room.name[0].toUpperCase()}</Text>
         </View>
-        <Text style={styles.roomName}>{room.name}</Text>
+        <View style={styles.roomNameRow}>
+          <Text style={styles.roomName}>{room.name}</Text>
+          {isLeader && (
+            <TouchableOpacity onPress={handleDeleteRoom} style={styles.deleteIconBtn}>
+              <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+            </TouchableOpacity>
+          )}
+        </View>
         
         {/* 💡 방 ID 표시 및 복사 버튼 */}
         <TouchableOpacity style={styles.idContainer} onPress={copyRoomId}>
@@ -128,7 +160,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   roomInitialText: { fontSize: 24, fontWeight: 'bold', color: '#000' },
-  roomName: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  roomNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  roomName: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  deleteIconBtn: { marginLeft: 10, padding: 5 },
   idContainer: {
     flexDirection: 'row',
     alignItems: 'center',

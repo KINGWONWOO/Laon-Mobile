@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,17 +12,24 @@ export default function ScheduleScreen() {
   const [title, setTitle] = useState('');
   const [options, setOptions] = useState(['']);
 
-  const roomSchedules = schedules.filter(s => s.roomId === id);
+  // 💡 useMemo를 사용하여 schedules 데이터가 바뀔 때마다 즉시 리스트 갱신
+  const roomSchedules = useMemo(() => {
+    return schedules.filter(s => s.roomId === id);
+  }, [schedules, id]);
 
   const handleAddSchedule = async () => {
     if (!title.trim() || options.some(opt => !opt.trim())) {
       Alert.alert('오류', '제목과 모든 시간 옵션을 입력해주세요.');
       return;
     }
-    await addSchedule(id || '', title, options);
-    setShowAddModal(false);
-    setTitle('');
-    setOptions(['']);
+    try {
+      await addSchedule(id || '', title, options);
+      setShowAddModal(false);
+      setTitle('');
+      setOptions(['']);
+    } catch (e: any) {
+      Alert.alert('오류', e.message || '일정을 생성할 수 없습니다.');
+    }
   };
 
   const addOptionField = () => setOptions([...options, '']);
