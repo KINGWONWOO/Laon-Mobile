@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
@@ -8,50 +8,41 @@ import { Ionicons } from '@expo/vector-icons';
 type Member = {
   id: string;
   name: string;
-  email: string;
-  profile_image: string | null;
-  joined_at: string;
+  profileImage: string | null;
 };
 
 export default function MembersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { theme, getRoomByIdRemote } = useAppContext();
-  const [members, setMembers] = useState<Member[]>([]);
+  const { theme, users, getRoomByIdRemote } = useAppContext();
+  const [memberIds, setMemberIds] = useState<string[]>([]);
   const [leaderId, setLeaderId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadMembers() {
+    async function loadMemberIds() {
       try {
         const room = await getRoomByIdRemote(id || '');
         if (room) setLeaderId(room.leader_id);
 
+        // 💡 관계 쿼리 에러를 피하기 위해 ID만 먼저 가져옵니다.
         const { data, error } = await supabase
           .from('room_members')
-          .select('joined_at, profiles(id, name, email, profile_image)')
+          .select('user_id')
           .eq('room_id', id);
 
         if (error) throw error;
-        
-        if (data) {
-          const formatted = data.map((item: any) => ({
-            id: item.profiles.id,
-            name: item.profiles.name || '알 수 없는 유저',
-            email: item.profiles.email,
-            profile_image: item.profiles.profile_image,
-            joined_at: item.joined_at
-          }));
-          setMembers(formatted);
-        }
+        setMemberIds(data.map(m => m.user_id));
       } catch (e) {
-        console.error('Failed to load members:', e);
+        console.error('Failed to load member IDs:', e);
       } finally {
         setIsLoading(false);
       }
     }
-    
-    loadMembers();
+    loadMemberIds();
   }, [id]);
+
+  // 💡 캐시된 전체 유저 정보에서 멤버 ID에 해당하는 정보만 필터링
+  const roomMembers = users.filter(u => memberIds.includes(u.id));
 
   if (isLoading) {
     return (
@@ -63,18 +54,22 @@ export default function MembersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>참여 중인 멤버 ({members.length})</Text>
+      <Text style={[styles.title, { color: theme.text }]}>참여 중인 멤버 ({roomMembers.length})</Text>
       
       <FlatList
-        data={members}
+        data={roomMembers}
         keyExtractor={item => item.id}
         renderItem={({ item }) => {
           const isLeader = item.id === leaderId;
           return (
             <View style={[styles.memberCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-                <Text style={styles.avatarText}>{item.name[0]?.toUpperCase()}</Text>
-              </View>
+              {item.profileImage ? (
+                <Image source={{ uri: item.profileImage }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.avatarText}>{item.name[0]?.toUpperCase()}</Text>
+                </View>
+              )}
               <View style={styles.info}>
                 <View style={styles.nameRow}>
                   <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
@@ -85,26 +80,25 @@ export default function MembersScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={[styles.email, { color: theme.textSecondary }]}>{item.email}</Text>
               </View>
             </View>
           );
         }}
+        ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>멤버 정보를 불러오는 중...</Text>}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, marginTop: 10 },
+  container: { flex: 1, padding: 20, paddingTop: 60 },
+  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
   memberCard: { flexDirection: 'row', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, alignItems: 'center' },
   avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   avatarText: { fontSize: 20, fontWeight: 'bold', color: '#000' },
   info: { flex: 1, justifyContent: 'center' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: 'bold', marginRight: 8 },
-  email: { fontSize: 12 },
   leaderBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
   leaderText: { fontSize: 10, fontWeight: 'bold', color: '#000', marginLeft: 2 }
 });

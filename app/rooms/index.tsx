@@ -41,7 +41,7 @@ export default function RoomsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: '#000' }]}>
-      {/* 💡 상단 헤더: 프로필 설정 */}
+      {/* 상단 헤더: 프로필 설정 */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.profileBtn} onPress={() => {
           setNewName(currentUser?.name || '');
@@ -66,9 +66,14 @@ export default function RoomsScreen() {
 
       <View style={styles.titleRow}>
         <Text style={styles.title}>내 크루룸</Text>
-        <TouchableOpacity style={styles.createBtn} onPress={() => router.push('/rooms/create')}>
-          <Ionicons name="add" size={24} color="#000" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity style={[styles.actionBtn, { marginRight: 10 }]} onPress={() => router.push('/rooms/join')}>
+            <Ionicons name="enter-outline" size={22} color="#000" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/rooms/create')}>
+            <Ionicons name="add" size={24} color="#000" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -94,19 +99,18 @@ export default function RoomsScreen() {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <TouchableOpacity style={styles.emptyCard} onPress={() => router.push('/rooms/join')}>
-            <Ionicons name="enter-outline" size={40} color={Colors.primary} />
-            <Text style={styles.emptyText}>참여 중인 방이 없습니다. 코드로 입장하기</Text>
-          </TouchableOpacity>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={60} color="#222" />
+            <Text style={styles.emptyText}>참여 중인 방이 없습니다.{"\n"}방을 만들거나 참여해 보세요!</Text>
+          </View>
         }
       />
 
-      {/* 💡 프로필 설정 모달 */}
+      {/* 프로필 설정 모달 */}
       <Modal visible={showProfileModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContent}>
             <Text style={styles.modalTitle}>프로필 설정</Text>
-            
             <TouchableOpacity style={styles.avatarPicker} onPress={handlePickImage}>
               {newImage || currentUser?.profileImage ? (
                 <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.largeAvatar} />
@@ -115,23 +119,12 @@ export default function RoomsScreen() {
                   <Ionicons name="camera" size={30} color="#000" />
                 </View>
               )}
-              <View style={styles.cameraBadge}><Ionicons name="pencil" size={14} color="#fff" /></View>
             </TouchableOpacity>
-
-            <TextInput 
-              style={styles.input} 
-              value={newName} 
-              onChangeText={setNewName} 
-              placeholder="이름을 입력하세요" 
-              placeholderTextColor="#666" 
-            />
-
+            <TextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="이름을 입력하세요" placeholderTextColor="#666" />
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}>
-                <Text style={{ color: '#999' }}>취소</Text>
-              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}><Text style={{ color: '#999' }}>취소</Text></TouchableOpacity>
               <TouchableOpacity style={styles.submitBtn} onPress={handleUpdateProfile} disabled={isUpdating}>
-                {isUpdating ? <ActivityIndicator color="#000" /> : <Text style={{ fontWeight: 'bold' }}>저장하기</Text>}
+                {isUpdating ? <ActivityIndicator color="#000" /> : <Text style={{ fontWeight: 'bold' }}>저장</Text>}
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -152,20 +145,19 @@ const styles = StyleSheet.create({
   userName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   title: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  createBtn: { backgroundColor: Colors.primary, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  actionBtn: { backgroundColor: Colors.primary, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   roomCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#161622', padding: 15, borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#222' },
   roomImage: { width: 50, height: 50, borderRadius: 15 },
   roomInfo: { flex: 1, marginLeft: 15 },
   roomName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   roomMeta: { color: '#666', fontSize: 12, marginTop: 2 },
-  emptyCard: { padding: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#161622', borderRadius: 24, borderStyle: 'dashed', borderWidth: 2, borderColor: '#333', marginTop: 20 },
-  emptyText: { color: '#666', marginTop: 15, textAlign: 'center' },
+  emptyContainer: { alignItems: 'center', marginTop: 100 },
+  emptyText: { color: '#333', marginTop: 15, textAlign: 'center', fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1A1A2E', padding: 30, borderRadius: 30, alignItems: 'center' },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 25 },
   avatarPicker: { marginBottom: 25 },
   largeAvatar: { width: 100, height: 100, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  cameraBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#333', padding: 6, borderRadius: 12, borderWidth: 2, borderColor: '#1A1A2E' },
   input: { width: '100%', backgroundColor: '#000', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 25, textAlign: 'center' },
   modalBtns: { flexDirection: 'row', width: '100%' },
   cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },

@@ -57,18 +57,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [themeType, setThemeType] = useState<ThemeType>('dark');
-  const [users, setUsers] = useState<User[]>([]);
 
   const theme = getThemeColors(themeType);
 
   const fetchMyProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data) {
-      setCurrentUser({
-        id: data.id,
-        name: data.name || '댄서',
-        profileImage: data.profile_image,
-      });
+      setCurrentUser({ id: data.id, name: data.name || '댄서', profileImage: data.profile_image });
     }
   };
 
@@ -95,11 +90,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
-  const refreshAllData = async () => { await queryClient.invalidateQueries(); };
+  const refreshAllData = async () => { 
+    await queryClient.invalidateQueries(); 
+    console.log('[AppContext] All data invalidated');
+  };
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('global').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    const channel = supabase.channel('global-updates').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
@@ -113,11 +111,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const roomIds = roomsData.map(r => r.id);
-
-  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
-    const { data } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    return data || [];
-  }, enabled: roomIds.length > 0 });
 
   const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
     const { data } = await supabase.from('videos').select('*, video_comments(*)').in('room_id', roomIds).order('created_at', { ascending: false });
@@ -140,11 +133,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, enabled: roomIds.length > 0 });
 
   // 매핑 로직
-  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
-    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
-    isPinned: n.is_pinned, images: n.image_urls, viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime()
-  }));
-
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
@@ -193,7 +181,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i);
     await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id);
     await fetchMyProfile(currentUser!.id);
-    queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    refreshAllData();
   };
   const createRoom = async (n: string, p: string, i?: string) => {
     const final = (i && !i.startsWith('http')) ? await storageService.uploadProfileImage('room', uuidv4(), i) : i;
@@ -237,7 +225,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       currentUser, isLoadingUser, login, updateUserProfile, logout,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: async (id) => (await supabase.from('rooms').select('*').eq('id', id).single()).data as Room,
       createRoom, joinRoom, deleteRoom,
-      notices: noticesMapped, addNotice: async () => {},
+      notices: [], addNotice: async () => {},
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule,
