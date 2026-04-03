@@ -17,7 +17,7 @@ export default function ScheduleScreen() {
   
   // 생성 관련 상태
   const [title, setTitle] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [startTime, setStartTime] = useState(14); // 2 PM
   const [endTime, setEndTime] = useState(18);   // 6 PM
 
@@ -30,9 +30,22 @@ export default function ScheduleScreen() {
     setRefreshing(false);
   };
 
+  const toggleDate = (date: Date) => {
+    const exists = selectedDates.find(d => d.toDateString() === date.toDateString());
+    if (exists) {
+      setSelectedDates(selectedDates.filter(d => d.toDateString() !== date.toDateString()));
+    } else {
+      setSelectedDates([...selectedDates, date].sort((a, b) => a.getTime() - b.getTime()));
+    }
+  };
+
   const handleAddSchedule = async () => {
     if (!title.trim()) {
       Alert.alert('오류', '제목을 입력해주세요.');
+      return;
+    }
+    if (selectedDates.length === 0) {
+      Alert.alert('오류', '최소 하룻 이상의 날짜를 선택해주세요.');
       return;
     }
     if (startTime >= endTime) {
@@ -40,16 +53,19 @@ export default function ScheduleScreen() {
       return;
     }
 
-    const dateStr = selectedDate.toISOString().split('T')[0];
-    const opts = [];
-    for (let h = startTime; h < endTime; h++) {
-      opts.push(`${dateStr} ${h.toString().padStart(2, '0')}:00`);
-    }
+    const opts: string[] = [];
+    selectedDates.forEach(date => {
+      const dateStr = date.toISOString().split('T')[0];
+      for (let h = startTime; h < endTime; h++) {
+        opts.push(`${dateStr} ${h.toString().padStart(2, '0')}:00`);
+      }
+    });
 
     try {
       await addSchedule(id || '', title, opts);
       setShowAddModal(false);
       setTitle('');
+      setSelectedDates([]);
       setTimeout(() => refreshAllData(), 500);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
@@ -61,21 +77,32 @@ export default function ScheduleScreen() {
     ]);
   };
 
-  const getRankedSlots = (schedule: any) => {
-    const counts = schedule.options.map((opt: any) => {
-      const voters = Object.entries(schedule.responses)
-        .filter(([_, ids]: any) => ids.includes(opt.id))
-        .map(([uId]) => uId);
-      return { ...opt, votes: voters.length, voters };
-    });
-    return counts.sort((a: any, b: any) => b.votes - a.votes);
-  };
-
   const renderScheduleCard = ({ item: schedule }: { item: any }) => {
-    const rankedSlots = getRankedSlots(schedule);
     const participants = Object.keys(schedule.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
     const isOwner = schedule.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
+
+    // 데이터 가공: 날짜별/시간별 매트릭스 생성
+    const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => o.dateTime.split(' ')[0]))).sort();
+    const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt(o.dateTime.split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b);
+
+    const getHeatmapColor = (votes: number) => {
+      if (votes === 0) return 'transparent';
+      const opacity = Math.min(0.2 + (votes / Math.max(participants.length, 1)) * 0.8, 1);
+      return theme.primary + Math.floor(opacity * 255).toString(16).padStart(2, '0');
+    };
+
+    const getRankedSlots = () => {
+      const counts = schedule.options.map((opt: any) => {
+        const voters = Object.entries(schedule.responses)
+          .filter(([_, ids]: any) => ids.includes(opt.id))
+          .map(([uId]) => uId);
+        return { ...opt, votes: voters.length };
+      });
+      return counts.sort((a: any, b: any) => b.votes - a.votes);
+    };
+
+    const ranked = getRankedSlots();
 
     return (
       <View style={[styles.scheduleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -87,91 +114,81 @@ export default function ScheduleScreen() {
             </TouchableOpacity>
           )}
         </View>
-        
-        <View style={styles.contentRow}>
-          {/* 왼쪽: 투표 그리드 (1시간 단위) */}
-          <View style={styles.gridContainer}>
-            {schedule.options.map((opt: any) => {
-              const voters = Object.entries(schedule.responses)
-                .filter(([_, ids]: any) => ids.includes(opt.id))
-                .map(([uId]) => uId);
-              
-              const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
-              
-              // Safe time extraction
-              const dateTimeParts = (opt.dateTime || '').split(' ');
-              const timeStr = dateTimeParts.length > 1 ? dateTimeParts[1] : '00:00';
-              const hour = parseInt(timeStr.split(':')[0]) || 0;
 
-              return (
-                <TouchableOpacity 
-                  key={opt.id} 
-                  style={[styles.gridSlot, { 
-                    backgroundColor: isSelected ? theme.primary + '33' : 'transparent',
-                    borderColor: isSelected ? theme.primary : theme.border 
-                  }]}
-                  onPress={() => {
-                    const currentRes = schedule.responses[currentUser?.id || ''] || [];
-                    const nextRes = isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id];
-                    respondToSchedule(schedule.id, nextRes);
-                  }}
-                >
-                  <View style={styles.slotInfo}>
-                    <Text style={[styles.slotTime, { color: theme.text }]}>{hour}:00 - {hour+1}:00</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
+          <View>
+            {/* 헤더: 날짜 */}
+            <View style={styles.matrixRow}>
+              <View style={styles.timeLabelCell} />
+              {uniqueDates.map(date => {
+                const d = new Date(date as string);
+                return (
+                  <View key={date as string} style={styles.dateHeaderCell}>
+                    <Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                    <Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text>
                   </View>
-                  
-                  <View style={styles.slotVoters}>
-                    {voters.map(vId => {
-                      const voter = getUserById(vId);
-                      return voter?.profileImage ? (
-                        <Image key={vId} source={{ uri: voter.profileImage }} style={styles.slotAvatar} />
-                      ) : (
-                        <View key={vId} style={[styles.slotAvatar, { backgroundColor: theme.border, justifyContent: 'center', alignItems: 'center' }]}>
-                          <Ionicons name="person" size={10} color={theme.textSecondary} />
-                        </View>
-                      );
-                    })}
-                  </View>
-                  
-                  {isSelected && <Ionicons name="checkmark-circle" size={16} color={theme.primary} style={styles.checkIcon} />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* 오른쪽: 골든 타임 랭킹 */}
-          <View style={[styles.rankingSidebar, { backgroundColor: theme.background + '88' }]}>
-            <View style={styles.rankingHeader}>
-              <Ionicons name="star" size={14} color={theme.primary} />
-              <Text style={[styles.rankingTitle, { color: theme.primary }]}> 추천 시간</Text>
+                );
+              })}
             </View>
-            {rankedSlots.slice(0, 3).map((slot: any, idx: number) => (
-              <View key={slot.id} style={styles.rankingItem}>
-                <Text style={[styles.rankText, { color: theme.textSecondary }]}>{idx + 1}위</Text>
-                <Text style={[styles.rankTime, { color: theme.text, fontSize: 12 }]}>{parseInt(slot.dateTime.split(' ')[1]) || 0}시</Text>
-                <Text style={[styles.rankVotes, { color: theme.primary }]}>{slot.votes}명</Text>
+
+            {/* 본문: 시간 그리드 */}
+            {hours.map(hour => (
+              <View key={hour as number} style={styles.matrixRow}>
+                <View style={styles.timeLabelCell}>
+                  <Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text>
+                </View>
+                {uniqueDates.map(date => {
+                  const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                  const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                  if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+
+                  const voters = Object.entries(schedule.responses)
+                    .filter(([_, ids]: any) => ids.includes(opt.id))
+                    .map(([uId]) => uId);
+                  
+                  const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
+
+                  return (
+                    <TouchableOpacity
+                      key={date as string}
+                      style={[styles.gridCell, { 
+                        backgroundColor: getHeatmapColor(voters.length),
+                        borderColor: isSelected ? theme.primary : theme.border + '44'
+                      }]}
+                      onPress={() => {
+                        const currentRes = schedule.responses[currentUser?.id || ''] || [];
+                        const nextRes = isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id];
+                        respondToSchedule(schedule.id, nextRes);
+                      }}
+                    >
+                      {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             ))}
           </View>
-        </View>
+        </ScrollView>
 
-        {/* 하단 참여자 정보 */}
-        <View style={[styles.footer, { borderTopColor: theme.border }]}>
-          <View style={styles.participationRow}>
-            <Text style={[styles.footerLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text>
-            <View style={styles.namesRow}>
-              {participants.map(vId => (
-                <Text key={vId} style={[styles.participantName, { color: theme.textSecondary }]}>{getUserById(vId)?.name || '...'} </Text>
-              ))}
-            </View>
+        <View style={styles.summaryRow}>
+          <View style={[styles.rankingBox, { backgroundColor: theme.background + '88' }]}>
+            <Text style={[styles.rankingTitle, { color: theme.primary }]}>Best Times</Text>
+            {ranked.slice(0, 3).map((r: any, idx: number) => (
+              <Text key={r.id} style={[styles.rankingItemText, { color: theme.text }]}>
+                {idx+1}. {r.dateTime.split(' ')[0].slice(5)} {parseInt(r.dateTime.split(' ')[1])}시 ({r.votes}명)
+              </Text>
+            ))}
           </View>
-          <View style={[styles.participationRow, { marginTop: 8 }]}>
-            <Text style={[styles.footerLabel, { color: theme.error }]}>미참여({nonParticipants.length})</Text>
-            <View style={styles.namesRow}>
-              {nonParticipants.map(vId => (
-                <Text key={vId} style={[styles.participantName, { color: theme.error }]}>{getUserById(vId)?.name || '...'} </Text>
-              ))}
-            </View>
+          
+          <View style={styles.voterSummary}>
+            <Text style={[styles.footerLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text>
+            <Text style={[styles.voterNames, { color: theme.textSecondary }]} numberOfLines={1}>
+              {participants.map(vId => getUserById(vId)?.name).join(', ')}
+            </Text>
+            <Text style={[styles.footerLabel, { color: theme.error, marginTop: 4 }]}>미참여({nonParticipants.length})</Text>
+            <Text style={[styles.voterNames, { color: theme.error }]} numberOfLines={1}>
+              {nonParticipants.map(vId => getUserById(vId)?.name).join(', ')}
+            </Text>
           </View>
         </View>
       </View>
@@ -183,7 +200,7 @@ export default function ScheduleScreen() {
       <View style={styles.header}>
         <View>
           <Text style={[styles.headerTitle, { color: theme.text }]}>일정 투표</Text>
-          <Text style={[styles.headerSub, { color: theme.textSecondary }]}>연습 가능한 시간을 알려주세요!</Text>
+          <Text style={[styles.headerSub, { color: theme.textSecondary }]}>가능한 시간을 드래그/클릭 해주세요!</Text>
         </View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
           <Ionicons name="add" size={24} color={theme.background} />
@@ -209,19 +226,19 @@ export default function ScheduleScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>제목</Text>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="예: 토요일 보강 연습" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
+              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="예: 정기 연습 일정" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
 
-              <Text style={[styles.label, { color: theme.textSecondary }]}>날짜 선택</Text>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>날짜 선택 (여러 날짜 선택 가능)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
                 {Array.from({length: 31}).map((_, day) => {
                   const d = new Date();
                   d.setDate(d.getDate() + day);
-                  const isSelected = d.toDateString() === selectedDate.toDateString();
+                  const isSelected = !!selectedDates.find(sd => sd.toDateString() === d.toDateString());
                   return (
                     <TouchableOpacity 
                       key={day} 
                       style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]}
-                      onPress={() => setSelectedDate(d)}
+                      onPress={() => toggleDate(d)}
                     >
                       <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
                       <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
@@ -270,41 +287,26 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 26, fontWeight: 'bold' },
   headerSub: { fontSize: 13, marginTop: 4 },
   addButton: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', elevation: 5 },
-  scheduleCard: { borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, overflow: 'hidden' },
-  scheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
-  scheduleTitle: { fontSize: 19, fontWeight: 'bold' },
+  scheduleCard: { borderRadius: 24, padding: 15, marginBottom: 20, borderWidth: 1 },
+  scheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
+  scheduleTitle: { fontSize: 18, fontWeight: 'bold' },
   deleteBtn: { padding: 4, marginLeft: 10 },
-  contentRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  gridContainer: { flex: 1, marginRight: 15 },
-  gridSlot: { 
-    height: 60, 
-    borderRadius: 15, 
-    borderWidth: 1, 
-    marginBottom: 8, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 12 
-  },
-  slotInfo: { marginRight: 12 },
-  slotTime: { fontSize: 15, fontWeight: '700' },
-  slotDate: { fontSize: 10, fontWeight: '600' },
-  slotVoters: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  slotAvatar: { width: 22, height: 22, borderRadius: 11, marginRight: -8, borderWidth: 2, borderColor: '#fff' },
-  moreVoters: { fontSize: 11, fontWeight: '700', marginLeft: 12 },
-  noVoters: { fontSize: 11, fontStyle: 'italic' },
-  checkIcon: { marginLeft: 5 },
-  rankingSidebar: { width: 90, borderRadius: 18, padding: 12, height: '100%' },
-  rankingHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  rankingTitle: { fontSize: 11, fontWeight: 'bold' },
-  rankingItem: { marginBottom: 12 },
-  rankText: { fontSize: 10, fontWeight: '600', opacity: 0.7 },
-  rankTime: { fontSize: 13, fontWeight: '700' },
-  rankVotes: { fontSize: 11, fontWeight: '800' },
-  footer: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, alignItems: 'flex-start' },
-  participationRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  footerLabel: { fontSize: 12, fontWeight: '700', width: 60 },
-  namesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-  participantName: { fontSize: 12, marginRight: 8 },
+  matrixContainer: { marginBottom: 15 },
+  matrixRow: { flexDirection: 'row', alignItems: 'center' },
+  timeLabelCell: { width: 45, alignItems: 'center', justifyContent: 'center', height: 35 },
+  timeLabelText: { fontSize: 10, fontWeight: '600' },
+  dateHeaderCell: { width: 45, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  dateHeaderText: { fontSize: 10, fontWeight: '600' },
+  dateHeaderDay: { fontSize: 14, fontWeight: 'bold' },
+  gridCell: { width: 45, height: 35, borderWidth: 0.5, alignItems: 'center', justifyContent: 'center' },
+  gridCellEmpty: { width: 45, height: 35 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  rankingBox: { flex: 1, padding: 10, borderRadius: 12, marginRight: 10 },
+  rankingTitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 5 },
+  rankingItemText: { fontSize: 10, marginBottom: 2 },
+  voterSummary: { width: '40%' },
+  footerLabel: { fontSize: 10, fontWeight: 'bold' },
+  voterNames: { fontSize: 10, opacity: 0.8 },
   emptyText: { textAlign: 'center', marginTop: 100, fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '85%' },
