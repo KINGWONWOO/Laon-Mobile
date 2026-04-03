@@ -114,4 +114,4 @@ export type Alarm = {
   viewedBy: string[]; // User IDs who viewed the alarm
 };
 
-export type ThemeType = 'white' | 'dark' | 'cute';
+export type ThemeType = 'light' | 'dark' | 'pink' | 'shiba';

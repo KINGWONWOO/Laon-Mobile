@@ -2,7 +2,7 @@ import { ThemeType } from "../types";
 
 export const getThemeColors = (theme: ThemeType = 'dark') => {
   switch (theme) {
-    case 'white':
+    case 'light':
       return {
         primary: '#7B2CBF',
         secondary: '#FF007A',
@@ -13,8 +13,9 @@ export const getThemeColors = (theme: ThemeType = 'dark') => {
         textSecondary: '#6E6E73',
         border: '#D2D2D7',
         error: '#FF3B30',
+        success: '#34C759',
       };
-    case 'cute':
+    case 'pink':
       return {
         primary: '#FF85A1',    // Pastel Pink
         secondary: '#FFB7C5',  // Lighter Pink
@@ -25,6 +26,20 @@ export const getThemeColors = (theme: ThemeType = 'dark') => {
         textSecondary: '#A899A7',
         border: '#FFD1DC',
         error: '#FF6B6B',
+        success: '#B2F2BB',
+      };
+    case 'shiba':
+      return {
+        primary: '#E69138',    // Shiba Brown
+        secondary: '#F1C232',  // Yellowish
+        accent: '#8E7CC3',     // Purple accent
+        background: '#FDF7F2', // Very light beige
+        card: '#FFFFFF',       // White cards
+        text: '#44372A',       // Dark brown text
+        textSecondary: '#8C735B',
+        border: '#EAD1DC',
+        error: '#E06666',
+        success: '#93C47D',
       };
     case 'dark':
     default:
@@ -38,12 +53,11 @@ export const getThemeColors = (theme: ThemeType = 'dark') => {
         textSecondary: '#A7A6B4',
         border: '#2D2B3D',
         error: '#FF4D4D',
+        success: '#00FA9A',
       };
   }
 };
 
-// Default colors for backward compatibility if needed, 
-// though we should use getThemeColors(theme) everywhere.
 export const Colors = getThemeColors('dark');
 
 export const Shadows = {
