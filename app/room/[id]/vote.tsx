@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function VoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, currentUser, theme, refreshAllData, rooms, getUserById } = useAppContext();
+  const { votes, addVote, respondToVote, deleteVote, currentUser, theme, refreshAllData, rooms, getUserById } = useAppContext();
   const insets = useSafeAreaInsets();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,14 +40,30 @@ export default function VoteScreen() {
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
+  const handleDeleteVote = (voteId: string) => {
+    Alert.alert('투표 삭제', '이 투표를 정말 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => deleteVote(voteId) }
+    ]);
+  };
+
   const renderVoteItem = ({ item: vote }: { item: any }) => {
     const totalVotes = Object.values(vote.responses).flat().length;
     const participants = Object.keys(vote.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
+    const isOwner = vote.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id;
 
     return (
       <View style={[styles.voteCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.voteQuestion, { color: theme.text }]}>{vote.question}</Text>
+        <View style={styles.voteHeader}>
+          <Text style={[styles.voteQuestion, { color: theme.text, flex: 1 }]}>{vote.question}</Text>
+          {isOwner && (
+            <TouchableOpacity onPress={() => handleDeleteVote(vote.id)} style={styles.deleteBtn}>
+              <Ionicons name="trash-outline" size={20} color={theme.error} />
+            </TouchableOpacity>
+          )}
+        </View>
+        
         <View style={styles.badgeRow}>
           {vote.isAnonymous && <View style={[styles.badge, { backgroundColor: theme.primary + '33' }]}><Text style={[styles.badgeText, { color: theme.primary }]}>익명</Text></View>}
           {vote.allowMultiple && <View style={[styles.badge, { backgroundColor: theme.accent + '33' }]}><Text style={[styles.badgeText, { color: theme.accent }]}>복수선택</Text></View>}
@@ -202,7 +218,9 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: 'bold' },
   addButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   voteCard: { borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, overflow: 'hidden' },
-  voteQuestion: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  voteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  voteQuestion: { fontSize: 18, fontWeight: '700' },
+  deleteBtn: { padding: 4, marginLeft: 10 },
   badgeRow: { flexDirection: 'row', marginBottom: 16 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginRight: 8 },
   badgeText: { fontSize: 11, fontWeight: '600' },
@@ -228,6 +246,8 @@ const styles = StyleSheet.create({
   nonParticipantList: { flexDirection: 'row', alignItems: 'center' },
   nonParticipantText: { fontSize: 12, fontWeight: '600' },
   nonParticipantName: { fontSize: 12 },
+  namesRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  participantName: { fontSize: 12, marginRight: 4 },
   emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '90%' },

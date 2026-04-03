@@ -40,10 +40,12 @@ type AppContextType = {
   schedules: Schedule[];
   addSchedule: (roomId: string, title: string, options: string[]) => Promise<void>;
   respondToSchedule: (scheduleId: string, optionIds: string[]) => Promise<void>;
+  deleteSchedule: (scheduleId: string) => Promise<void>;
 
   votes: Vote[];
   addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
   respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
+  deleteVote: (voteId: string) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
@@ -245,6 +247,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await supabase.from('vote_responses').upsert([{ vote_id: vid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'vote_id,user_id' }); 
     refreshAllData(); 
   };
+  const deleteVote = async (vid: string) => {
+    await supabase.from('votes').delete().eq('id', vid);
+    refreshAllData();
+  };
   
   const addSchedule = async (rid: string, t: string, opts: string[]) => {
     const { data: s, error } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser?.id, title: t }]).select().single();
@@ -258,6 +264,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await supabase.from('schedule_responses').upsert([{ schedule_id: sid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'schedule_id,user_id' }); 
     refreshAllData(); 
   };
+  const deleteSchedule = async (sid: string) => {
+    await supabase.from('schedules').delete().eq('id', sid);
+    refreshAllData();
+  };
 
   return (
     <AppContext.Provider value={{
@@ -267,8 +277,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       notices: [], addNotice: async () => {},
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
-      schedules: schedulesMapped, addSchedule, respondToSchedule,
-      votes: votesMapped, addVote, respondToVote,
+      schedules: schedulesMapped, addSchedule, respondToSchedule, deleteSchedule,
+      votes: votesMapped, addVote, respondToVote, deleteVote,
       refreshAllData, themeType, setThemeType, theme
     }}>
       {children}

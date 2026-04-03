@@ -9,7 +9,7 @@ const { width } = Dimensions.get('window');
 
 export default function ScheduleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { schedules, addSchedule, respondToSchedule, theme, currentUser, refreshAllData, rooms, getUserById } = useAppContext();
+  const { schedules, addSchedule, respondToSchedule, deleteSchedule, theme, currentUser, refreshAllData, rooms, getUserById } = useAppContext();
   const insets = useSafeAreaInsets();
   
   const [showAddModal, setShowAddModal] = useState(false);
@@ -54,6 +54,13 @@ export default function ScheduleScreen() {
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
+  const handleDeleteSchedule = (sid: string) => {
+    Alert.alert('일정 삭제', '이 일정을 정말 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => deleteSchedule(sid) }
+    ]);
+  };
+
   const getRankedSlots = (schedule: any) => {
     const counts = schedule.options.map((opt: any) => {
       const voters = Object.entries(schedule.responses)
@@ -68,10 +75,18 @@ export default function ScheduleScreen() {
     const rankedSlots = getRankedSlots(schedule);
     const participants = Object.keys(schedule.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
+    const isOwner = schedule.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id;
 
     return (
       <View style={[styles.scheduleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[styles.scheduleTitle, { color: theme.text }]}>{schedule.title}</Text>
+        <View style={styles.scheduleHeader}>
+          <Text style={[styles.scheduleTitle, { color: theme.text, flex: 1 }]}>{schedule.title}</Text>
+          {isOwner && (
+            <TouchableOpacity onPress={() => handleDeleteSchedule(schedule.id)} style={styles.deleteBtn}>
+              <Ionicons name="trash-outline" size={20} color={theme.error} />
+            </TouchableOpacity>
+          )}
+        </View>
         
         <View style={styles.contentRow}>
           {/* 왼쪽: 투표 그리드 (1시간 단위) */}
@@ -133,7 +148,7 @@ export default function ScheduleScreen() {
             {rankedSlots.slice(0, 3).map((slot: any, idx: number) => (
               <View key={slot.id} style={styles.rankingItem}>
                 <Text style={[styles.rankText, { color: theme.textSecondary }]}>{idx + 1}위</Text>
-                <Text style={[styles.rankTime, { color: theme.text, fontSize: 12 }]}>{parseInt(slot.dateTime.split(' ')[1])}시</Text>
+                <Text style={[styles.rankTime, { color: theme.text, fontSize: 12 }]}>{parseInt(slot.dateTime.split(' ')[1]) || 0}시</Text>
                 <Text style={[styles.rankVotes, { color: theme.primary }]}>{slot.votes}명</Text>
               </View>
             ))}
@@ -256,7 +271,9 @@ const styles = StyleSheet.create({
   headerSub: { fontSize: 13, marginTop: 4 },
   addButton: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', elevation: 5 },
   scheduleCard: { borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, overflow: 'hidden' },
-  scheduleTitle: { fontSize: 19, fontWeight: 'bold', marginBottom: 18 },
+  scheduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
+  scheduleTitle: { fontSize: 19, fontWeight: 'bold' },
+  deleteBtn: { padding: 4, marginLeft: 10 },
   contentRow: { flexDirection: 'row', justifyContent: 'space-between' },
   gridContainer: { flex: 1, marginRight: 15 },
   gridSlot: { 
@@ -283,10 +300,11 @@ const styles = StyleSheet.create({
   rankText: { fontSize: 10, fontWeight: '600', opacity: 0.7 },
   rankTime: { fontSize: 13, fontWeight: '700' },
   rankVotes: { fontSize: 11, fontWeight: '800' },
-  footer: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center' },
-  footerLabel: { fontSize: 12, fontWeight: '700' },
-  nonParticipantList: { flex: 1 },
-  nonName: { fontSize: 12, marginRight: 8 },
+  footer: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, alignItems: 'flex-start' },
+  participationRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  footerLabel: { fontSize: 12, fontWeight: '700', width: 60 },
+  namesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
+  participantName: { fontSize: 12, marginRight: 8 },
   emptyText: { textAlign: 'center', marginTop: 100, fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '85%' },
