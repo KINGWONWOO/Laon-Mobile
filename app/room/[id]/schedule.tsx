@@ -82,8 +82,11 @@ export default function ScheduleScreen() {
                 .map(([uId]) => uId);
               
               const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
-              const timeStr = opt.dateTime.split(' ')[1];
-              const hour = parseInt(timeStr.split(':')[0]);
+              
+              // Safe time extraction
+              const dateTimeParts = (opt.dateTime || '').split(' ');
+              const timeStr = dateTimeParts.length > 1 ? dateTimeParts[1] : '00:00';
+              const hour = parseInt(timeStr.split(':')[0]) || 0;
 
               return (
                 <TouchableOpacity 
