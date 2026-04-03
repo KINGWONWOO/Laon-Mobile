@@ -51,7 +51,7 @@ export default function VoteScreen() {
     const totalVotes = Object.values(vote.responses).flat().length;
     const participants = Object.keys(vote.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
-    const isOwner = vote.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id;
+    const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
 
     return (
       <View style={[styles.voteCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -59,7 +59,7 @@ export default function VoteScreen() {
           <Text style={[styles.voteQuestion, { color: theme.text, flex: 1 }]}>{vote.question}</Text>
           {isOwner && (
             <TouchableOpacity onPress={() => handleDeleteVote(vote.id)} style={styles.deleteBtn}>
-              <Ionicons name="trash-outline" size={20} color={theme.error} />
+              <Ionicons name="trash-outline" size={22} color={theme.error} />
             </TouchableOpacity>
           )}
         </View>

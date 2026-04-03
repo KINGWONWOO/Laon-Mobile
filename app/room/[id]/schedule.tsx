@@ -75,7 +75,7 @@ export default function ScheduleScreen() {
     const rankedSlots = getRankedSlots(schedule);
     const participants = Object.keys(schedule.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
-    const isOwner = schedule.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id;
+    const isOwner = schedule.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
 
     return (
       <View style={[styles.scheduleCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -83,7 +83,7 @@ export default function ScheduleScreen() {
           <Text style={[styles.scheduleTitle, { color: theme.text, flex: 1 }]}>{schedule.title}</Text>
           {isOwner && (
             <TouchableOpacity onPress={() => handleDeleteSchedule(schedule.id)} style={styles.deleteBtn}>
-              <Ionicons name="trash-outline" size={20} color={theme.error} />
+              <Ionicons name="trash-outline" size={22} color={theme.error} />
             </TouchableOpacity>
           )}
         </View>
@@ -213,7 +213,7 @@ export default function ScheduleScreen() {
 
               <Text style={[styles.label, { color: theme.textSecondary }]}>날짜 선택</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
-                {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14].map(day => {
+                {Array.from({length: 31}).map((_, day) => {
                   const d = new Date();
                   d.setDate(d.getDate() + day);
                   const isSelected = d.toDateString() === selectedDate.toDateString();
