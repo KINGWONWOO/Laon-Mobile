@@ -11,6 +11,7 @@ export default function VoteScreen() {
   const insets = useSafeAreaInsets();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -19,6 +20,7 @@ export default function VoteScreen() {
 
   const roomVotes = useMemo(() => votes.filter(v => v.roomId === id), [votes, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
+  const selectedVote = useMemo(() => roomVotes.find(v => v.id === selectedVoteId), [roomVotes, selectedVoteId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -36,128 +38,158 @@ export default function VoteScreen() {
       setShowAddModal(false);
       setQuestion('');
       setOptions(['', '']);
-      setTimeout(() => refreshAllData(), 500);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
   const handleDeleteVote = (voteId: string) => {
     Alert.alert('투표 삭제', '이 투표를 정말 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => deleteVote(voteId) }
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deleteVote(voteId);
+        setSelectedVoteId(null);
+      }}
     ]);
   };
 
-  const renderVoteItem = ({ item: vote }: { item: any }) => {
+  const renderVoteListItem = ({ item: vote }: { item: any }) => {
+    const participants = Object.keys(vote.responses).length;
+    const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
+
+    return (
+      <TouchableOpacity 
+        style={[styles.voteListCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+        onPress={() => setSelectedVoteId(vote.id)}
+      >
+        <View style={styles.voteListInfo}>
+          <Text style={[styles.voteListTitle, { color: theme.text }]} numberOfLines={1}>{vote.question}</Text>
+          <Text style={[styles.voteListMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {new Date(vote.createdAt).toLocaleDateString()}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderDetail = () => {
+    if (!selectedVote) return null;
+    const vote = selectedVote;
     const totalVotes = Object.values(vote.responses).flat().length;
     const participants = Object.keys(vote.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
     const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
 
     return (
-      <View style={[styles.voteCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.voteHeader}>
-          <Text style={[styles.voteQuestion, { color: theme.text, flex: 1 }]}>{vote.question}</Text>
-          {isOwner && (
-            <TouchableOpacity onPress={() => handleDeleteVote(vote.id)} style={styles.deleteBtn}>
-              <Ionicons name="trash-outline" size={22} color={theme.error} />
+      <Modal visible={!!selectedVoteId} animationType="slide">
+        <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
+          <View style={styles.detailHeader}>
+            <TouchableOpacity onPress={() => setSelectedVoteId(null)} style={styles.closeBtn}>
+              <Ionicons name="close" size={28} color={theme.text} />
             </TouchableOpacity>
-          )}
-        </View>
-        
-        <View style={styles.badgeRow}>
-          {vote.isAnonymous && <View style={[styles.badge, { backgroundColor: theme.primary + '33' }]}><Text style={[styles.badgeText, { color: theme.primary }]}>익명</Text></View>}
-          {vote.allowMultiple && <View style={[styles.badge, { backgroundColor: theme.accent + '33' }]}><Text style={[styles.badgeText, { color: theme.accent }]}>복수선택</Text></View>}
-        </View>
-        
-        {vote.options.map((opt: any) => {
-          const votersForThisOpt = Object.entries(vote.responses)
-            .filter(([_, optIds]: any) => optIds.includes(opt.id))
-            .map(([uId]) => uId);
-          
-          const count = votersForThisOpt.length;
-          const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
-          const userResponses = vote.responses[currentUser?.id || ''] || [];
-          const isSelected = userResponses.includes(opt.id);
+            <Text style={[styles.detailHeaderTitle, { color: theme.text }]} numberOfLines={1}>투표 상세</Text>
+            {isOwner ? (
+              <TouchableOpacity onPress={() => handleDeleteVote(vote.id)} style={styles.detailDeleteBtn}>
+                <Ionicons name="trash-outline" size={24} color={theme.error} />
+              </TouchableOpacity>
+            ) : <View style={{ width: 40 }} />}
+          </View>
 
-          return (
-            <View key={opt.id} style={styles.optionContainer}>
-              <TouchableOpacity 
-                style={[styles.optionRow, { borderColor: isSelected ? theme.primary : theme.border }]}
-                onPress={() => {
-                  let newResponses = isSelected ? userResponses.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...userResponses, opt.id] : [opt.id]);
-                  respondToVote(vote.id, newResponses);
-                }}
-              >
-                <View style={[styles.progressBg, { backgroundColor: theme.border + '33', width: '100%' }]}>
-                  <View style={[styles.progressBar, { backgroundColor: theme.primary + '44', width: `${percentage}%` }]} />
+          <ScrollView contentContainerStyle={styles.detailScroll}>
+            <Text style={[styles.voteQuestion, { color: theme.text }]}>{vote.question}</Text>
+            <View style={styles.badgeRow}>
+              {vote.isAnonymous && <View style={[styles.badge, { backgroundColor: theme.primary + '33' }]}><Text style={[styles.badgeText, { color: theme.primary }]}>익명</Text></View>}
+              {vote.allowMultiple && <View style={[styles.badge, { backgroundColor: theme.accent + '33' }]}><Text style={[styles.badgeText, { color: theme.accent }]}>복수선택</Text></View>}
+            </View>
+
+            {vote.options.map((opt: any) => {
+              const votersForThisOpt = Object.entries(vote.responses)
+                .filter(([_, optIds]: any) => optIds.includes(opt.id))
+                .map(([uId]) => uId);
+              
+              const count = votersForThisOpt.length;
+              const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
+              const userResponses = vote.responses[currentUser?.id || ''] || [];
+              const isSelected = userResponses.includes(opt.id);
+
+              return (
+                <View key={opt.id} style={styles.optionContainer}>
+                  <TouchableOpacity 
+                    style={[styles.optionRow, { borderColor: isSelected ? theme.primary : theme.border }]}
+                    onPress={() => {
+                      let newResponses = isSelected ? userResponses.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...userResponses, opt.id] : [opt.id]);
+                      respondToVote(vote.id, newResponses);
+                    }}
+                  >
+                    <View style={[styles.progressBg, { backgroundColor: theme.border + '33', width: '100%' }]}>
+                      <View style={[styles.progressBar, { backgroundColor: theme.primary + '44', width: `${percentage}%` }]} />
+                    </View>
+                    <View style={styles.optionContent}>
+                      <Text style={[styles.optionText, { color: theme.text }]}>{opt.text}</Text>
+                      <View style={styles.countBadge}>
+                        <Text style={[styles.countText, { color: theme.primary }]}>{count}명</Text>
+                        {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.primary} style={{marginLeft: 4}} />}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  
+                  {!vote.isAnonymous && count > 0 && (
+                    <View style={styles.voterList}>
+                      {votersForThisOpt.map(vId => {
+                        const voter = getUserById(vId);
+                        return (
+                          <View key={vId} style={styles.miniProfile}>
+                            {voter?.profileImage ? (
+                              <Image source={{ uri: voter.profileImage }} style={styles.miniAvatar} />
+                            ) : (
+                              <View style={[styles.miniAvatar, { backgroundColor: theme.border }]}><Ionicons name="person" size={10} color={theme.textSecondary} /></View>
+                            )}
+                            <Text style={[styles.miniName, { color: theme.textSecondary }]}>{voter?.name || '알 수 없음'}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
-                <View style={styles.optionContent}>
-                  <Text style={[styles.optionText, { color: theme.text }]}>{opt.text}</Text>
-                  <View style={styles.countBadge}>
-                    <Text style={[styles.countText, { color: theme.primary }]}>{count}명</Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.primary} style={{marginLeft: 4}} />}
+              );
+            })}
+
+            <View style={[styles.statusSection, { borderTopColor: theme.border }]}>
+              <Text style={[styles.statusTitle, { color: theme.textSecondary }]}>참여 현황</Text>
+              <View style={styles.participantStats}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: theme.primary }]}>{participants.length}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>참여</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statValue, { color: theme.error }]}>{nonParticipants.length}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>미참여</Text>
+                </View>
+              </View>
+
+              {!vote.isAnonymous && participants.length > 0 && (
+                <View style={styles.participantListDetail}>
+                  <Text style={[styles.statusTitle, { color: theme.textSecondary, marginTop: 10 }]}>참여자 명단</Text>
+                  <View style={styles.namesRowDetail}>
+                    {participants.map(vId => (
+                      <Text key={vId} style={[styles.participantName, { color: theme.text }]}>{getUserById(vId)?.name || '...'} </Text>
+                    ))}
                   </View>
                 </View>
-              </TouchableOpacity>
-              
-              {!vote.isAnonymous && count > 0 && (
-                <View style={styles.voterList}>
-                  {votersForThisOpt.map(vId => {
-                    const voter = getUserById(vId);
-                    return (
-                      <View key={vId} style={styles.miniProfile}>
-                        {voter?.profileImage ? (
-                          <Image source={{ uri: voter.profileImage }} style={styles.miniAvatar} />
-                        ) : (
-                          <View style={[styles.miniAvatar, { backgroundColor: theme.border }]}><Ionicons name="person" size={10} color={theme.textSecondary} /></View>
-                        )}
-                        <Text style={[styles.miniName, { color: theme.textSecondary }]}>{voter?.name || '알 수 없음'}</Text>
-                      </View>
-                    );
-                  })}
+              )}
+
+              {nonParticipants.length > 0 && (
+                <View style={styles.nonParticipantListDetail}>
+                  <Text style={[styles.nonParticipantText, { color: theme.error }]}>미참여자: </Text>
+                  <View style={styles.namesRowDetail}>
+                    {nonParticipants.map(vId => (
+                      <Text key={vId} style={[styles.nonParticipantName, { color: theme.error }]}>{getUserById(vId)?.name || '...'} </Text>
+                    ))}
+                  </View>
                 </View>
               )}
             </View>
-          );
-        })}
-
-        <View style={[styles.statusSection, { borderTopColor: theme.border }]}>
-          <Text style={[styles.statusTitle, { color: theme.textSecondary }]}>참여 현황</Text>
-          <View style={styles.participantStats}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.primary }]}>{participants.length}</Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>참여</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.error }]}>{nonParticipants.length}</Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>미참여</Text>
-            </View>
-          </View>
-
-          {!vote.isAnonymous && participants.length > 0 && (
-            <View style={styles.participantList}>
-              <Text style={[styles.statusTitle, { color: theme.textSecondary, marginTop: 10 }]}>참여자 명단</Text>
-              <View style={styles.namesRow}>
-                {participants.map(vId => (
-                  <Text key={vId} style={[styles.participantName, { color: theme.text }]}>{getUserById(vId)?.name || '...'} </Text>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {nonParticipants.length > 0 && (
-            <View style={styles.nonParticipantList}>
-              <Text style={[styles.nonParticipantText, { color: theme.error }]}>미참여자: </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {nonParticipants.map(vId => (
-                  <Text key={vId} style={[styles.nonParticipantName, { color: theme.error }]}>{getUserById(vId)?.name || '...'} </Text>
-                ))}
-              </ScrollView>
-            </View>
-          )}
+          </ScrollView>
         </View>
-      </View>
+      </Modal>
     );
   };
 
@@ -175,9 +207,11 @@ export default function VoteScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        renderItem={renderVoteItem}
+        renderItem={renderVoteListItem}
         ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 투표가 없습니다.</Text>}
       />
+
+      {renderDetail()}
 
       <Modal visible={showAddModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -217,37 +251,49 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   headerTitle: { fontSize: 24, fontWeight: 'bold' },
   addButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  voteCard: { borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, overflow: 'hidden' },
-  voteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-  voteQuestion: { fontSize: 18, fontWeight: '700' },
-  deleteBtn: { padding: 4, marginLeft: 10 },
-  badgeRow: { flexDirection: 'row', marginBottom: 16 },
+  
+  voteListCard: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 16, marginBottom: 12, borderWidth: 1 },
+  voteListInfo: { flex: 1 },
+  voteListTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  voteListMeta: { fontSize: 12 },
+
+  detailContainer: { flex: 1 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee2' },
+  detailHeaderTitle: { fontSize: 18, fontWeight: 'bold', flex: 1, textAlign: 'center' },
+  closeBtn: { padding: 5 },
+  detailDeleteBtn: { padding: 5 },
+  detailScroll: { padding: 20 },
+
+  voteQuestion: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  badgeRow: { flexDirection: 'row', marginBottom: 20 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginRight: 8 },
   badgeText: { fontSize: 11, fontWeight: '600' },
   optionContainer: { marginBottom: 12 },
-  optionRow: { height: 50, borderRadius: 12, borderWidth: 1, overflow: 'hidden', justifyContent: 'center' },
+  optionRow: { height: 55, borderRadius: 14, borderWidth: 1, overflow: 'hidden', justifyContent: 'center' },
   progressBg: { position: 'absolute', height: '100%' },
   progressBar: { position: 'absolute', height: '100%' },
   optionContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15 },
-  optionText: { fontSize: 15, fontWeight: '500' },
+  optionText: { fontSize: 16, fontWeight: '500' },
   countBadge: { flexDirection: 'row', alignItems: 'center' },
   countText: { fontSize: 14, fontWeight: '700' },
   voterList: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6, paddingLeft: 10 },
   miniProfile: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginBottom: 4 },
-  miniAvatar: { width: 16, height: 16, borderRadius: 8, marginRight: 4 },
-  miniName: { fontSize: 11 },
-  statusSection: { marginTop: 15, paddingTop: 15, borderTopWidth: 1 },
-  statusTitle: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
-  participantStats: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  miniAvatar: { width: 18, height: 18, borderRadius: 9, marginRight: 4 },
+  miniName: { fontSize: 12 },
+  statusSection: { marginTop: 25, paddingTop: 20, borderTopWidth: 1 },
+  statusTitle: { fontSize: 14, fontWeight: '600', marginBottom: 12 },
+  participantStats: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '800' },
-  statLabel: { fontSize: 11 },
-  statDivider: { width: 1, height: 20, backgroundColor: '#8883' },
-  nonParticipantList: { flexDirection: 'row', alignItems: 'center' },
-  nonParticipantText: { fontSize: 12, fontWeight: '600' },
-  nonParticipantName: { fontSize: 12 },
-  namesRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  participantName: { fontSize: 12, marginRight: 4 },
+  statValue: { fontSize: 20, fontWeight: '800' },
+  statLabel: { fontSize: 12 },
+  statDivider: { width: 1, height: 25, backgroundColor: '#8883' },
+  participantListDetail: { marginBottom: 15 },
+  nonParticipantListDetail: { marginTop: 10 },
+  nonParticipantText: { fontSize: 13, fontWeight: '600' },
+  nonParticipantName: { fontSize: 13 },
+  namesRowDetail: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5 },
+  participantName: { fontSize: 13, marginRight: 6 },
+  
   emptyText: { textAlign: 'center', marginTop: 50, fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '90%' },

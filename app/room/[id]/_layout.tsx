@@ -2,12 +2,14 @@ import { Tabs, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useEffect, useState } from 'react';
-import { Alert, View, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
+import { Alert, View, ActivityIndicator, TouchableOpacity, Text, Platform } from 'react-native';
 import { Room } from '../../../types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function RoomLayout() {
   const { id, passcode } = useLocalSearchParams<{ id: string, passcode?: string }>();
   const { rooms, currentUser, joinRoom, getRoomByIdRemote, theme } = useAppContext();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   
   const [room, setRoom] = useState<Room | null>(null);
@@ -25,7 +27,6 @@ export default function RoomLayout() {
         return;
       }
 
-      console.log('[RoomLayout] Room not found in local state, checking remote...');
       const remoteRoom = await getRoomByIdRemote(id);
       
       if (remoteRoom) {
@@ -87,18 +88,24 @@ export default function RoomLayout() {
   return (
     <Tabs screenOptions={{
       headerTitle: room?.name || '방',
-      headerStyle: { backgroundColor: '#000', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-      headerTintColor: '#fff',
+      headerStyle: { backgroundColor: theme.card, borderBottomWidth: 1, borderBottomColor: theme.border },
+      headerTintColor: theme.text,
       headerLeft: () => (
         <TouchableOpacity onPress={() => router.replace('/rooms')} style={{ marginLeft: 15 }}>
-          <Ionicons name="chevron-back" size={28} color="#fff" />
+          <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
       ),
-      tabBarStyle: { backgroundColor: '#0F0F1B', borderTopColor: 'rgba(255,255,255,0.1)', height: 60, paddingBottom: 8 },
+      tabBarStyle: { 
+        backgroundColor: theme.card, 
+        borderTopColor: theme.border, 
+        height: Platform.OS === 'ios' ? 88 : 65 + (insets.bottom > 0 ? insets.bottom : 10),
+        paddingBottom: Platform.OS === 'ios' ? 30 : 15 + (insets.bottom > 0 ? insets.bottom : 0),
+        paddingTop: 10,
+      },
       tabBarActiveTintColor: theme.primary,
-      tabBarInactiveTintColor: '#666',
+      tabBarInactiveTintColor: theme.textSecondary,
+      tabBarLabelStyle: { fontSize: 11, fontWeight: '600' }
     }}>
-      {/* 💡 메인 탭을 첫 번째로 추가 (사용자가 들어올 때 기본 화면) */}
       <Tabs.Screen 
         name="index" 
         options={{ 
@@ -110,6 +117,7 @@ export default function RoomLayout() {
       <Tabs.Screen name="vote" options={{ title: '투표', tabBarIcon: ({ color }) => <Ionicons name="checkbox" size={24} color={color} /> }} />
       <Tabs.Screen name="feedback" options={{ title: '피드백', tabBarIcon: ({ color }) => <Ionicons name="videocam" size={24} color={color} /> }} />
       <Tabs.Screen name="archive" options={{ title: '사진', tabBarIcon: ({ color }) => <Ionicons name="images" size={24} color={color} /> }} />
+      <Tabs.Screen name="members" options={{ href: null }} />
     </Tabs>
   );
 }

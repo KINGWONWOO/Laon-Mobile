@@ -9,7 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 
 export default function RoomMainScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { rooms, currentUser, deleteRoom, theme } = useAppContext();
+  const { rooms, currentUser, deleteRoom, theme, themeType, setThemeType } = useAppContext();
   const router = useRouter();
   
   const room = rooms.find(r => r.id === id);
@@ -77,20 +77,38 @@ export default function RoomMainScreen() {
     { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#F7D794' },
   ];
 
+  const themeIcons: Record<string, any> = {
+    dark: 'moon',
+    light: 'sunny',
+    pink: 'heart',
+    shiba: 'paw'
+  };
+
+  const cycleTheme = () => {
+    const types: any[] = ['dark', 'light', 'pink', 'shiba'];
+    const next = types[(types.indexOf(themeType) + 1) % types.length];
+    setThemeType(next);
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]} contentContainerStyle={styles.scrollContent}>
       <LinearGradient colors={[theme.card, theme.background]} style={[styles.headerCard, { borderColor: theme.border }]}>
-        <View style={[styles.roomInitialCircle, { backgroundColor: theme.primary }]}>
-          <Text style={[styles.roomInitialText, { color: theme.background }]}>{room.name[0].toUpperCase()}</Text>
-        </View>
-        <View style={styles.roomNameRow}>
-          <Text style={[styles.roomName, { color: theme.text }]}>{room.name}</Text>
+        <View style={styles.topActions}>
+          <TouchableOpacity style={[styles.actionIcon, { backgroundColor: theme.border + '33' }]} onPress={cycleTheme}>
+            <Ionicons name={themeIcons[themeType] || 'color-palette'} size={20} color={theme.primary} />
+          </TouchableOpacity>
           {isLeader && (
-            <TouchableOpacity onPress={handleDeleteRoom} style={styles.deleteIconBtn}>
+            <TouchableOpacity onPress={handleDeleteRoom} style={[styles.actionIcon, { backgroundColor: theme.error + '22' }]}>
               <Ionicons name="trash-outline" size={20} color={theme.error} />
             </TouchableOpacity>
           )}
         </View>
+
+        <View style={[styles.roomInitialCircle, { backgroundColor: theme.primary }]}>
+          <Text style={[styles.roomInitialText, { color: theme.background }]}>{room.name[0].toUpperCase()}</Text>
+        </View>
+        
+        <Text style={[styles.roomName, { color: theme.text }]}>{room.name}</Text>
         
         <TouchableOpacity style={[styles.idContainer, { backgroundColor: theme.border + '33' }]} onPress={copyRoomId}>
           <Text style={[styles.roomIdText, { color: theme.textSecondary }]} numberOfLines={1}>ID: {room.id}</Text>
@@ -139,13 +157,25 @@ export default function RoomMainScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 20, paddingTop: 40 },
+  scrollContent: { padding: 20, paddingTop: 40, paddingBottom: 100 },
   headerCard: {
     padding: 25,
     borderRadius: 24,
     alignItems: 'center',
     marginBottom: 30,
     borderWidth: 1,
+    position: 'relative',
+  },
+  topActions: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    flexDirection: 'row',
+  },
+  actionIcon: {
+    padding: 8,
+    borderRadius: 12,
+    marginLeft: 8,
   },
   roomInitialCircle: {
     width: 60,
@@ -154,11 +184,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
+    marginTop: 10,
   },
   roomInitialText: { fontSize: 24, fontWeight: 'bold' },
-  roomNameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  roomName: { fontSize: 22, fontWeight: 'bold' },
-  deleteIconBtn: { marginLeft: 10, padding: 5 },
+  roomName: { fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
   idContainer: {
     flexDirection: 'row',
     alignItems: 'center',
