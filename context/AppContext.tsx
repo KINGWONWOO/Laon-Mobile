@@ -236,6 +236,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
   
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
+    if (!rid || !currentUser?.id) throw new Error('방 ID 또는 사용자 정보가 올바르지 않습니다.');
     const { data: v, error } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser?.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
     if (error) throw error;
     if (v) {
@@ -244,6 +245,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     refreshAllData();
   };
   const respondToVote = async (vid: string, ids: string[]) => { 
+    if (!currentUser?.id) return;
     await supabase.from('vote_responses').upsert([{ vote_id: vid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'vote_id,user_id' }); 
     refreshAllData(); 
   };
@@ -253,6 +255,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const addSchedule = async (rid: string, t: string, opts: string[]) => {
+    if (!rid || !currentUser?.id) throw new Error('방 ID 또는 사용자 정보가 올바르지 않습니다.');
     const { data: s, error } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser?.id, title: t }]).select().single();
     if (error) throw error;
     if (s) {
@@ -261,6 +264,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     refreshAllData();
   };
   const respondToSchedule = async (sid: string, ids: string[]) => { 
+    if (!currentUser?.id) return;
     await supabase.from('schedule_responses').upsert([{ schedule_id: sid, user_id: currentUser?.id, option_ids: ids }], { onConflict: 'schedule_id,user_id' }); 
     refreshAllData(); 
   };
