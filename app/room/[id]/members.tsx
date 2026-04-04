@@ -1,30 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
+import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
-type Member = {
-  id: string;
-  name: string;
-  profileImage: string | null;
-};
-
 export default function MembersScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useGlobalSearchParams<{ id: string }>();
   const { theme, users, getRoomByIdRemote } = useAppContext();
+  const router = useRouter();
+  
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [leaderId, setLeaderId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadMembers() {
+      if (!id) return;
       try {
-        const room = await getRoomByIdRemote(id || '');
+        const room = await getRoomByIdRemote(id);
         if (room) setLeaderId(room.leader_id);
 
-        // 💡 관계 캐시 에러를 피하기 위해 ID 리스트를 먼저 가져옵니다.
         const { data, error } = await supabase
           .from('room_members')
           .select('user_id')
@@ -41,7 +37,6 @@ export default function MembersScreen() {
     loadMembers();
   }, [id]);
 
-  // 💡 Context에서 관리하는 전체 유저 캐시에서 멤버 정보를 필터링합니다.
   const roomMembers = users.filter(u => memberIds.includes(u.id));
 
   if (isLoading) {
@@ -54,7 +49,13 @@ export default function MembersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.title, { color: theme.text }]}>참여 중인 멤버 ({roomMembers.length})</Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={28} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: theme.text }]}>참여 멤버 ({roomMembers.length})</Text>
+        <View style={{ width: 40 }} />
+      </View>
       
       <FlatList
         data={roomMembers}
@@ -66,8 +67,8 @@ export default function MembersScreen() {
               {item.profileImage ? (
                 <Image source={{ uri: item.profileImage }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.avatarText}>{item.name[0]?.toUpperCase()}</Text>
+                <View style={[styles.avatar, { backgroundColor: theme.primary + '22' }]}>
+                  <Text style={[styles.avatarText, { color: theme.primary }]}>{item.name[0]?.toUpperCase()}</Text>
                 </View>
               )}
               <View style={styles.info}>
@@ -75,7 +76,6 @@ export default function MembersScreen() {
                   <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
                   {isLeader && (
                     <View style={[styles.leaderBadge, { backgroundColor: theme.primary }]}>
-                      <Ionicons name="star" size={10} color="#000" />
                       <Text style={styles.leaderText}>방장</Text>
                     </View>
                   )}
@@ -84,7 +84,7 @@ export default function MembersScreen() {
             </View>
           );
         }}
-        ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>멤버 정보를 불러오는 중...</Text>}
+        ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>참여 중인 멤버가 없습니다.</Text>}
       />
     </View>
   );
@@ -92,13 +92,15 @@ export default function MembersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  memberCard: { flexDirection: 'row', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25 },
+  backBtn: { padding: 5 },
+  title: { fontSize: 22, fontWeight: 'bold' },
+  memberCard: { flexDirection: 'row', padding: 15, borderRadius: 18, marginBottom: 12, borderWidth: 1, alignItems: 'center' },
   avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  avatarText: { fontSize: 20, fontWeight: 'bold', color: '#000' },
+  avatarText: { fontSize: 20, fontWeight: 'bold' },
   info: { flex: 1, justifyContent: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
-  name: { fontSize: 16, fontWeight: 'bold', marginRight: 8 },
-  leaderBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  leaderText: { fontSize: 10, fontWeight: 'bold', color: '#000', marginLeft: 2 }
+  name: { fontSize: 17, fontWeight: 'bold', marginRight: 8 },
+  leaderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  leaderText: { fontSize: 11, fontWeight: 'bold', color: '#000' }
 });

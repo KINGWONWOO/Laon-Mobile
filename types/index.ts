@@ -13,6 +13,13 @@ export type Room = {
   members: string[]; // User IDs
 };
 
+export type NoticeComment = {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: number;
+};
+
 export type Notice = {
   id: string;
   roomId: string;
@@ -20,8 +27,9 @@ export type Notice = {
   title: string;
   content: string;
   isPinned: boolean;
-  images?: string[]; // Array of image URIs
+  imageUrls?: string[]; // Array of image URIs
   viewedBy: string[]; // User IDs who viewed the notice
+  comments?: NoticeComment[];
   createdAt: number;
 };
 

@@ -26,6 +26,9 @@ type AppContextType = {
   
   notices: Notice[];
   addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => Promise<void>;
+  deleteNotice: (noticeId: string) => Promise<void>;
+  addNoticeComment: (noticeId: string, text: string) => Promise<void>;
+  deleteNoticeComment: (commentId: string) => Promise<void>;
   
   videos: VideoFeedback[];
   addVideo: (roomId: string, videoUrl: string, title: string) => Promise<void>;
@@ -160,6 +163,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, enabled: roomIds.length > 0 });
 
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
+    const { data: n } = await supabase.from('notices').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const { data: c } = await supabase.from('notice_comments').select('*').in('notice_id', (n || []).map(x => x.id));
+    return (n || []).map(notice => ({
+      ...notice,
+      notice_comments: (c || []).filter(comment => comment.notice_id === notice.id)
+    }));
+  }, enabled: roomIds.length > 0 });
+
+  const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
+    id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
+    isPinned: n.is_pinned, imageUrls: n.image_urls || [], viewedBy: n.viewed_by || [],
+    createdAt: new Date(n.created_at).getTime(),
+    comments: (n.notice_comments || []).map((c: any) => ({
+      id: c.id, userId: c.user_id, text: c.text, createdAt: new Date(c.created_at).getTime()
+    }))
+  }));
+
   const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({
     id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url,
     title: v.title, createdAt: new Date(v.created_at).getTime(), 
@@ -228,67 +249,100 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return null;
   };
   const deleteRoom = async (id: string) => { await supabase.from('rooms').delete().eq('id', id); refreshAllData(); };
-  const addVideo = async (rid: string, url: string, t: string) => { await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser?.id, title: t, storage_path: url }]); refreshAllData(); };
-  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser?.id, text: t, timestamp_millis: ts, parent_id: pid }]); refreshAllData(); };
-  const addPhoto = async (rid: string, url: string, d?: string) => { await storageService.uploadToGallery(rid, currentUser!.id, url, d); refreshAllData(); };
+  
+  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = []) => {
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
+    const { error } = await supabase.from('notices').insert([{ room_id: rid, user_id: currentUser.id, title: t, content: c, is_pinned: p, image_urls: imgs }]);
+    if (error) throw error;
+    refreshAllData();
+  };
+  const deleteNotice = async (nid: string) => {
+    await supabase.from('notices').delete().eq('id', nid);
+    refreshAllData();
+  };
+  const addNoticeComment = async (nid: string, t: string) => {
+    if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
+    const { error } = await supabase.from('notice_comments').insert([{ notice_id: nid, user_id: currentUser.id, text: t }]);
+    if (error) throw error;
+    refreshAllData();
+  };
+  const deleteNoticeComment = async (cid: string) => {
+    await supabase.from('notice_comments').delete().eq('id', cid);
+    refreshAllData();
+  };
+
+  const addVideo = async (rid: string, url: string, t: string) => { 
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
+    
+    const { error } = await supabase.from('videos').insert([{ 
+      room_id: rid, 
+      user_id: currentUser.id, 
+      title: t, 
+      storage_path: url,
+      youtube_id: 'R2_UPLOAD'
+    }]); 
+    if (error) throw error;
+    refreshAllData(); 
+  };
+  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { 
+    if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
+    const { error } = await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser.id, text: t, timestamp_millis: ts, parent_id: pid }]); 
+    if (error) throw error;
+    refreshAllData(); 
+  };
+  const addPhoto = async (rid: string, url: string, d?: string) => { 
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
+    await storageService.uploadToGallery(rid, currentUser.id, url, d); 
+    refreshAllData(); 
+  };
   const deletePhoto = async (id: string) => { await supabase.from('gallery_items').delete().eq('id', id); refreshAllData(); };
-  const addPhotoComment = async (phid: string, t: string, pid?: string) => { await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser?.id, text: t, parent_id: pid }]); refreshAllData(); };
+  const addPhotoComment = async (phid: string, t: string, pid?: string) => { 
+    if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
+    await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser.id, text: t, parent_id: pid }]); 
+    refreshAllData();
+  };
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
   
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
-    console.log('[AppContext] addVote called with rid:', rid, 'userId:', currentUser?.id);
-    if (!rid) throw new Error('방 ID 정보가 없습니다. 다시 시도해주세요.');
-    if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
-    
-    const { data: v, error } = await supabase.from('votes').insert([{ 
-      room_id: rid, 
-      user_id: currentUser?.id, 
-      question: q, 
-      is_anonymous: s.isAnonymous, 
-      allow_multiple: s.allowMultiple 
-    }]).select().single();
-    
-    if (error) {
-      console.error('[AppContext] addVote error:', error);
-      throw error;
-    }
-    if (v) {
-      await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
-    }
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('로그인 정보를 확인할 수 없습니다.');
+    const { data: v, error } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
+    if (error) throw error;
+    if (v) await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
     refreshAllData();
   };
 
   const addSchedule = async (rid: string, t: string, opts: string[]) => {
-    console.log('[AppContext] addSchedule called with rid:', rid, 'userId:', currentUser?.id);
-    if (!rid) throw new Error('방 ID 정보가 없습니다. 다시 시도해주세요.');
-    if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('로그인 정보를 확인할 수 없습니다.');
+    const { data: s, error } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser.id, title: t }]).select().single();
+    if (error) throw error;
+    if (s) await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
+    refreshAllData();
+  };
+  const deleteSchedule = async (sid: string) => { await supabase.from('schedules').delete().eq('id', sid); refreshAllData(); };
+  const respondToSchedule = async (sid: string, oids: string[]) => {
+    if (!currentUser) return;
+    await supabase.from('schedule_responses').upsert({ schedule_id: sid, user_id: currentUser.id, option_ids: oids }, { onConflict: 'schedule_id,user_id' });
+    refreshAllData();
+  };
 
-    const { data: s, error } = await supabase.from('schedules').insert([{ 
-      room_id: rid, 
-      user_id: currentUser?.id, 
-      title: t 
-    }]).select().single();
-    
-    if (error) {
-      console.error('[AppContext] addSchedule error:', error);
-      throw error;
-    }
-    if (s) {
-      await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
-    }
+  const respondToVote = async (vid: string, oids: string[]) => {
+    if (!currentUser) return;
+    await supabase.from('vote_responses').upsert({ vote_id: vid, user_id: currentUser.id, option_ids: oids }, { onConflict: 'vote_id,user_id' });
     refreshAllData();
   };
-  const deleteSchedule = async (sid: string) => {
-    await supabase.from('schedules').delete().eq('id', sid);
-    refreshAllData();
-  };
+  const deleteVote = async (vid: string) => { await supabase.from('votes').delete().eq('id', vid); refreshAllData(); };
 
   return (
     <AppContext.Provider value={{
       currentUser, isLoadingUser, login, updateUserProfile, logout,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: async (id) => (await supabase.from('rooms').select('*').eq('id', id).single()).data as Room,
       createRoom, joinRoom, deleteRoom,
-      notices: [], addNotice: async () => {},
+      notices: noticesMapped, addNotice, deleteNotice, addNoticeComment, deleteNoticeComment,
       videos: videosMapped, addVideo, addComment,
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule, deleteSchedule,
