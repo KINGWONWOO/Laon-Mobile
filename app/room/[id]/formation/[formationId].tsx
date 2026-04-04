@@ -319,7 +319,7 @@ export default function FormationEditorScreen() {
 
   const scrubberGesture = Gesture.Pan().onUpdate((e) => {
     const progress = Math.max(0, Math.min(1, e.x / width));
-    runOnJS(player.seek)(progress * (audioStatus.duration || 60));
+    runOnJS(player.seekTo)(progress * (audioStatus.duration || 60));
   });
 
   if (!formation) return null;
@@ -414,8 +414,8 @@ export default function FormationEditorScreen() {
           </View>
 
           <View style={styles.mainPlayerRow}>
-            <TouchableOpacity style={styles.miniCtrl} onPress={() => player.seek(audioStatus.currentTime - 2)}>
-              <MaterialCommunityIcons name="rewind-2" size={28} color="#FFF" />
+            <TouchableOpacity style={styles.miniCtrl} onPress={() => player.seekTo(audioStatus.currentTime - 2)}>
+              <MaterialCommunityIcons name="rewind" size={28} color="#FFF" />
             </TouchableOpacity>
             <TouchableOpacity 
               onPress={() => {
@@ -426,8 +426,8 @@ export default function FormationEditorScreen() {
             >
               <Ionicons name={audioStatus.playing ? "pause" : "play"} size={36} color="#000" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.miniCtrl} onPress={() => player.seek(audioStatus.currentTime + 2)}>
-              <MaterialCommunityIcons name="fast-forward-2" size={28} color="#FFF" />
+            <TouchableOpacity style={styles.miniCtrl} onPress={() => player.seekTo(audioStatus.currentTime + 2)}>
+              <MaterialCommunityIcons name="fast-forward" size={28} color="#FFF" />
             </TouchableOpacity>
           </View>
 
@@ -441,7 +441,7 @@ export default function FormationEditorScreen() {
                 <TouchableOpacity 
                   key={entry.id} 
                   style={[styles.kfMarker, { left: `${(entry.timestampMillis / ((audioStatus.duration || 60) * 1000)) * 100}%` }]}
-                  onPress={() => { player.seek(entry.timestampMillis / 1000); setActiveSceneId(entry.sceneId); setMode('setup'); }}
+                  onPress={() => { player.seekTo(entry.timestampMillis / 1000); setActiveSceneId(entry.sceneId); setMode('setup'); }}
                 >
                   <View style={[styles.kfDot, { backgroundColor: theme.primary }]} />
                 </TouchableOpacity>
