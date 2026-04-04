@@ -145,7 +145,8 @@ export type FormationScene = {
 
 export type TimelineEntry = {
   id: string;
-  timestampMillis: number;
+  timestampMillis: number; // Start time
+  durationMillis: number; // How long this formation stays fixed
   sceneId: string;
 };
 
