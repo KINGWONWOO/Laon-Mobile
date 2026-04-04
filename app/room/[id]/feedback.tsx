@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, RefreshControl, Dimensions } from 'react-native';
-import { useGlobalSearchParams } from 'expo-router';
+import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -14,7 +14,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData } = useAppContext();
+...
+  const handleSelectVideo = (video: VideoFeedback) => {
+    if (video.videoUrl.startsWith('formation://')) {
+      const formationId = video.videoUrl.replace('formation://', '');
+      router.push(`/room/${id}/formation/${formationId}`);
+      return;
+    }
+    setSelectedVideo(video);
+  };
   const insets = useSafeAreaInsets();
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
@@ -209,8 +219,12 @@ export default function FeedbackScreen() {
         keyExtractor={item => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => setSelectedVideo(item)}>
-            <Ionicons name="play-circle" size={24} color={theme.primary} />
+          <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => handleSelectVideo(item)}>
+            <Ionicons 
+              name={item.videoUrl.startsWith('formation://') ? "layers" : "play-circle"} 
+              size={24} 
+              color={theme.primary} 
+            />
             <View style={{marginLeft: 15, flex: 1}}>
               <Text style={{color: theme.text, fontWeight: 'bold'}}>{item.title}</Text>
               <Text style={{color: theme.textSecondary, fontSize: 11}}>{getUserById(item.userId)?.name} • {new Date(item.createdAt).toLocaleDateString()}</Text>

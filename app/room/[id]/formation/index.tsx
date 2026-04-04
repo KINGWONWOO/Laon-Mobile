@@ -49,12 +49,8 @@ export default function FormationListScreen() {
     
     setIsSubmitting(true);
     try {
-      let audioUrl = undefined;
-      if (selectedAudio) {
-        const ext = selectedAudio.name.split('.').pop() || 'mp3';
-        const fileName = `audio_${Date.now()}.${ext}`;
-        audioUrl = await storageService.uploadToR2(`formations/${id}`, selectedAudio.uri, fileName);
-      }
+      // 💡 Keep audio local until export
+      let audioUrl = selectedAudio ? selectedAudio.uri : undefined;
 
       const newId = await addFormation(id as string, title.trim(), audioUrl);
       setShowAddModal(false);
@@ -97,15 +93,23 @@ export default function FormationListScreen() {
             onPress={() => router.push(`/room/${id}/formation/${item.id}`)}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-              <Text style={[styles.cardMeta, { color: theme.textSecondary }]}>
-                {new Date(item.createdAt).toLocaleDateString()}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+                {!item.isLocal && (
+                  <View style={[styles.publishedBadge, { backgroundColor: theme.primary + '22' }]}>
+                    <Text style={{ color: theme.primary, fontSize: 10, fontWeight: 'bold' }}>공유됨</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {item.isLocal ? '로컬 작업 중' : '서버 저장됨'} • {new Date(item.createdAt).toLocaleDateString()}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 10 }}>
-              <Ionicons name="trash-outline" size={20} color={theme.error} />
+            <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 5 }}>
+              <Ionicons name="trash-outline" size={20} color="#FF4444" />
             </TouchableOpacity>
           </TouchableOpacity>
+
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -173,7 +177,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
   addBtn: { padding: 5 },
   card: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 16, marginBottom: 15, borderWidth: 1 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold' },
+  publishedBadge: { marginLeft: 8, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   cardMeta: { fontSize: 12 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
