@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, Alarm, AlarmType, ThemeType } from '../types';
+import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, Alarm, AlarmType, ThemeType, Formation } from '../types';
 import * as Crypto from 'expo-crypto';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -49,6 +49,11 @@ type AppContextType = {
   addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
   respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
   deleteVote: (voteId: string) => Promise<void>;
+
+  formations: Formation[];
+  addFormation: (roomId: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
+  updateFormation: (formationId: string, updates: Partial<Formation>) => Promise<void>;
+  deleteFormation: (formationId: string) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
@@ -172,6 +177,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }));
   }, enabled: roomIds.length > 0 });
 
+  const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
+    const { data: f } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    return (f || []).map(form => ({
+      id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url,
+      settings: form.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
+      data: form.data || { dancers: [], keyframes: [] },
+      createdAt: new Date(form.created_at).getTime()
+    })) as Formation[];
+  }, enabled: roomIds.length > 0 });
+
   const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content,
     isPinned: n.is_pinned, imageUrls: n.image_urls || [], viewedBy: n.viewed_by || [],
@@ -220,6 +235,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], createdAt: new Date(v.created_at).getTime(), comments: []
     };
   });
+
+  const formationsMapped: Formation[] = formationsQuery.data || [];
 
   // 비즈니스 로직
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
@@ -337,6 +354,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const deleteVote = async (vid: string) => { await supabase.from('votes').delete().eq('id', vid); refreshAllData(); };
 
+  const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => {
+    if (!rid) throw new Error('방 ID 정보가 없습니다.');
+    if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
+    const { data: res, error } = await supabase.from('formations').insert([{ room_id: rid, user_id: currentUser.id, title, audio_url: audioUrl, settings, data }]).select().single();
+    if (error) throw error;
+    refreshAllData();
+    return res.id;
+  };
+  const updateFormation = async (fid: string, updates: Partial<Formation>) => {
+    const payload: any = {};
+    if (updates.title !== undefined) payload.title = updates.title;
+    if (updates.audioUrl !== undefined) payload.audio_url = updates.audioUrl;
+    if (updates.settings !== undefined) payload.settings = updates.settings;
+    if (updates.data !== undefined) payload.data = updates.data;
+    const { error } = await supabase.from('formations').update(payload).eq('id', fid);
+    if (error) throw error;
+    refreshAllData();
+  };
+  const deleteFormation = async (fid: string) => {
+    await supabase.from('formations').delete().eq('id', fid);
+    refreshAllData();
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, isLoadingUser, login, updateUserProfile, logout,
@@ -347,6 +387,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule, deleteSchedule,
       votes: votesMapped, addVote, respondToVote, deleteVote,
+      formations: formationsMapped, addFormation, updateFormation, deleteFormation,
       refreshAllData, themeType, setThemeType, theme
     }}>
       {children}

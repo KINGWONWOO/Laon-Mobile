@@ -109,6 +109,7 @@ export default function RoomMainScreen() {
     { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#4ECDC4' },
     { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#45B7D1' },
     { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#F7D794' },
+    { title: '동선 관리', icon: 'map', path: `/room/${id}/formation`, color: '#FF9F43' },
   ];
 
   const themeIcons: Record<string, any> = {

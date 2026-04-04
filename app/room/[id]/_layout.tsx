@@ -120,6 +120,9 @@ export default function RoomLayout() {
       <Tabs.Screen name="members" options={{ href: null }} />
       <Tabs.Screen name="notices" options={{ href: null }} />
       <Tabs.Screen name="notice/[noticeId]" options={{ href: null }} />
+      <Tabs.Screen name="formation/index" options={{ href: null }} />
+      <Tabs.Screen name="formation/[formationId]" options={{ href: null }} />
     </Tabs>
   );
 }
+
