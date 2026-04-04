@@ -548,7 +548,7 @@ export default function FormationEditorScreen() {
             </View>
             <View style={styles.settingItem}>
               <Text style={styles.settingLabel}>무대 앞 방향</Text>
-              <TouchableOpacity style={styles.togglePill} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}>
+              <TouchableOpacity style={[styles.togglePill, { backgroundColor: theme.primary }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}>
                 <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 12 }}>{settings.stageDirection === 'top' ? '상단' : '하단'}</Text>
               </TouchableOpacity>
             </View>
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
   modalCloseBtn: { alignSelf: 'center', marginTop: 10 },
   settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   settingLabel: { color: '#AAA', fontSize: 15 },
-  togglePill: { backgroundColor: theme?.primary || '#FFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  togglePill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   gridConfig: { marginTop: 10, gap: 15 },
   rowCenter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   numInput: { backgroundColor: '#000', color: '#FFF', width: 60, padding: 10, borderRadius: 10, textAlign: 'center' },
