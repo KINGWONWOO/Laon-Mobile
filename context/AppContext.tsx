@@ -182,7 +182,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return (f || []).map(form => ({
       id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url,
       settings: form.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
-      data: form.data || { dancers: [], keyframes: [] },
+      data: form.data || { dancers: [], scenes: [], timeline: [] },
       createdAt: new Date(form.created_at).getTime()
     })) as Formation[];
   }, enabled: roomIds.length > 0 });

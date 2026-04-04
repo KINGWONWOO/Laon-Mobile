@@ -4,10 +4,12 @@ import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import { storageService } from '../../../../services/storageService';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { formations, addFormation, deleteFormation, theme, currentUser } = useAppContext();
+  const { formations, addFormation, deleteFormation, theme } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -18,21 +20,46 @@ export default function FormationListScreen() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState('');
-  const [audioUrl, setAudioUrl] = useState('');
+  const [selectedAudio, setSelectedAudio] = useState<{ uri: string, name: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePickAudio = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'audio/*',
+        copyToCacheDirectory: true
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedAudio({
+          uri: result.assets[0].uri,
+          name: result.assets[0].name
+        });
+      }
+    } catch (err) {
+      Alert.alert('오류', '파일을 선택할 수 없습니다.');
+    }
+  };
 
   const handleCreate = async () => {
     if (!title.trim()) {
       Alert.alert('오류', '동선 제목을 입력해주세요.');
       return;
     }
+    
     setIsSubmitting(true);
     try {
-      const newId = await addFormation(id, title.trim(), audioUrl.trim() || undefined);
+      let audioUrl = undefined;
+      if (selectedAudio) {
+        const ext = selectedAudio.name.split('.').pop() || 'mp3';
+        const fileName = `audio_${Date.now()}.${ext}`;
+        audioUrl = await storageService.uploadToR2(`formations/${id}`, selectedAudio.uri, fileName);
+      }
+
+      const newId = await addFormation(id as string, title.trim(), audioUrl);
       setShowAddModal(false);
       setTitle('');
-      setAudioUrl('');
-      // 생성 후 에디터로 바로 이동
+      setSelectedAudio(null);
       router.push(`/room/${id}/formation/${newId}`);
     } catch (e: any) {
       Alert.alert('오류', e.message);
@@ -109,14 +136,21 @@ export default function FormationListScreen() {
               onChangeText={setTitle} 
             />
 
-            <Text style={[styles.label, { color: theme.text }]}>음원 URL (선택)</Text>
-            <TextInput 
-              style={[styles.input, { color: theme.text, borderColor: theme.border }]} 
-              placeholder="mp3/wav 파일 링크 (입력하지 않아도 됩니다)" 
-              placeholderTextColor="#888" 
-              value={audioUrl} 
-              onChangeText={setAudioUrl} 
-            />
+            <Text style={[styles.label, { color: theme.text }]}>음원 설정</Text>
+            <TouchableOpacity 
+              style={[styles.audioPickBtn, { borderColor: theme.border, backgroundColor: theme.background }]} 
+              onPress={handlePickAudio}
+            >
+              <Ionicons name="musical-notes" size={20} color={theme.primary} />
+              <Text style={{ color: selectedAudio ? theme.text : theme.textSecondary, marginLeft: 10, flex: 1 }} numberOfLines={1}>
+                {selectedAudio ? selectedAudio.name : '기기에서 오디오 파일 선택'}
+              </Text>
+              {selectedAudio && (
+                <TouchableOpacity onPress={() => setSelectedAudio(null)}>
+                  <Ionicons name="close-circle" size={20} color={theme.error} />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.submitBtn, { backgroundColor: theme.primary }]} 
@@ -148,6 +182,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold' },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 4 },
   input: { width: '100%', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20, fontSize: 15 },
+  audioPickBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
   submitBtn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   submitBtnText: { fontWeight: 'bold', fontSize: 16 },
 });

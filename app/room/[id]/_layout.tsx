@@ -117,10 +117,16 @@ export default function RoomLayout() {
       <Tabs.Screen name="vote" options={{ title: '투표', tabBarIcon: ({ color }) => <Ionicons name="checkbox" size={24} color={color} /> }} />
       <Tabs.Screen name="feedback" options={{ title: '피드백', tabBarIcon: ({ color }) => <Ionicons name="videocam" size={24} color={color} /> }} />
       <Tabs.Screen name="archive" options={{ title: '사진', tabBarIcon: ({ color }) => <Ionicons name="images" size={24} color={color} /> }} />
+      <Tabs.Screen 
+        name="formation/index" 
+        options={{ 
+          title: '동선', 
+          tabBarIcon: ({ color }) => <Ionicons name="map" size={24} color={color} /> 
+        }} 
+      />
       <Tabs.Screen name="members" options={{ href: null }} />
       <Tabs.Screen name="notices" options={{ href: null }} />
       <Tabs.Screen name="notice/[noticeId]" options={{ href: null }} />
-      <Tabs.Screen name="formation/index" options={{ href: null }} />
       <Tabs.Screen name="formation/[formationId]" options={{ href: null }} />
     </Tabs>
   );

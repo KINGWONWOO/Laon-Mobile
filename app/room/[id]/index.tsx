@@ -131,7 +131,7 @@ export default function RoomMainScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        <LinearGradient colors={[theme.card, theme.background]} style={[styles.headerCard, { borderColor: theme.border }]}>
+        <LinearGradient colors={[theme.card, theme.card + 'EE']} style={[styles.headerCard, { borderColor: theme.border }]}>
           <View style={styles.topActions}>
             <TouchableOpacity style={[styles.actionIcon, { backgroundColor: theme.border + '33' }]} onPress={cycleTheme}>
               <Ionicons name={themeIcons[themeType] || 'color-palette'} size={20} color={theme.primary} />
@@ -160,12 +160,12 @@ export default function RoomMainScreen() {
           </TouchableOpacity>
 
           <Text style={[styles.roomCode, { color: theme.accent }]}>비밀번호: {room.passcode}</Text>
-          
-          <TouchableOpacity style={[styles.inviteBtn, { backgroundColor: theme.primary }]} onPress={handleInvite}>
-            <Ionicons name="share-social" size={18} color={theme.background} />
-            <Text style={[styles.inviteBtnText, { color: theme.background }]}>초대장 보내기</Text>
-          </TouchableOpacity>
         </LinearGradient>
+
+        <TouchableOpacity style={[styles.inviteBtn, { backgroundColor: theme.primary }]} onPress={handleInvite}>
+          <Ionicons name="share-social" size={18} color={theme.background} />
+          <Text style={[styles.inviteBtnText, { color: theme.background }]}>초대장 보내기</Text>
+        </TouchableOpacity>
 
         <View style={styles.noticeSectionOutside}>
           <View style={styles.sectionHeader}>
@@ -174,7 +174,7 @@ export default function RoomMainScreen() {
               <TouchableOpacity onPress={() => setShowAddAddNotice(true)} style={{ marginLeft: 12 }}>
                 <Ionicons name="add-circle-outline" size={22} color={theme.primary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices`)} style={{ marginLeft: 12 }}>
+              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices`)} style={styles.allNoticesTab}>
                 <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>전체보기</Text>
               </TouchableOpacity>
             </View>
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 28,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
     borderWidth: 1,
     position: 'relative',
   },
@@ -334,12 +334,15 @@ const styles = StyleSheet.create({
   roomCode: { fontSize: 13, fontWeight: '600', marginBottom: 15 },
   inviteBtn: {
     flexDirection: 'row',
-    paddingVertical: 10,
+    paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 25,
+    width: '100%',
   },
-  inviteBtnText: { fontWeight: 'bold', marginLeft: 8 },
+  inviteBtnText: { fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
   
   noticeSectionOutside: {
     width: '100%',
@@ -347,6 +350,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold' },
+  allNoticesTab: { marginLeft: 12, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)' },
   
   noticeVerticalList: { width: '100%' },
   noticeItemVertical: {

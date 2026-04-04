@@ -137,15 +137,22 @@ export type Position = {
   y: number;
 };
 
-export type Keyframe = {
-  id: string; // uuid
-  timestampMillis: number;
+export type FormationScene = {
+  id: string;
+  name: string;
   positions: { [dancerId: string]: Position }; // dancerId -> {x, y}
+};
+
+export type TimelineEntry = {
+  id: string;
+  timestampMillis: number;
+  sceneId: string;
 };
 
 export type FormationData = {
   dancers: Dancer[];
-  keyframes: Keyframe[];
+  scenes: FormationScene[];
+  timeline: TimelineEntry[];
 };
 
 export type FormationSettings = {
