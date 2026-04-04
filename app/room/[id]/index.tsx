@@ -170,15 +170,13 @@ export default function RoomMainScreen() {
           <View style={styles.sectionHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>팀 공지</Text>
-              <TouchableOpacity onPress={() => setShowAddAddNotice(true)} style={{ marginLeft: 8 }}>
+              <TouchableOpacity onPress={() => setShowAddAddNotice(true)} style={{ marginLeft: 12 }}>
                 <Ionicons name="add-circle-outline" size={22} color={theme.primary} />
               </TouchableOpacity>
-            </View>
-            {roomNotices.length > 3 && (
-              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices`)}>
-                <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '600' }}>더 보기</Text>
+              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices`)} style={{ marginLeft: 12 }}>
+                <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>전체보기</Text>
               </TouchableOpacity>
-            )}
+            </View>
           </View>
           {roomNotices.length > 0 ? (
             <View style={styles.noticeVerticalList}>
