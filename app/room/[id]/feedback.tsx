@@ -16,7 +16,7 @@ export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
   const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData } = useAppContext();
-...
+
   const handleSelectVideo = (video: VideoFeedback) => {
     if (video.videoUrl.startsWith('formation://')) {
       const formationId = video.videoUrl.replace('formation://', '');

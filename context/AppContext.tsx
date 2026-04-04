@@ -5,6 +5,7 @@ import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { storageService } from '../services/storageService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const uuidv4 = () => Crypto.randomUUID();
 
@@ -54,6 +55,7 @@ type AppContextType = {
   addFormation: (roomId: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
   updateFormation: (formationId: string, updates: Partial<Formation>) => Promise<void>;
   deleteFormation: (formationId: string) => Promise<void>;
+  publishFormationAsFeedback: (roomId: string, formationId: string, title: string) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
@@ -145,7 +147,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
     const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
-    const { data: r } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
+    const { data: r = [] } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
     return (s || []).map(sch => ({
       ...sch,
       schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({
@@ -158,7 +160,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
     const { data: v } = await supabase.from('votes').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o } = await supabase.from('vote_options').select('*').in('vote_id', (v || []).map(x => x.id));
-    const { data: r } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
+    const { data: r = [] } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
     return (v || []).map(vote => ({
       ...vote,
       vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({
@@ -178,13 +180,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, enabled: roomIds.length > 0 });
 
   const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
-    const { data: f } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    return (f || []).map(form => ({
+    const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
+    const localRaw = await AsyncStorage.getItem('local_formations');
+    const local = localRaw ? JSON.parse(localRaw) : [];
+    
+    const mappedRemote = (remote || []).map(form => ({
       id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url,
       settings: form.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
       data: form.data || { dancers: [], scenes: [], timeline: [] },
-      createdAt: new Date(form.created_at).getTime()
+      createdAt: new Date(form.created_at).getTime(),
+      isLocal: false
     })) as Formation[];
+
+    const filteredLocal = local.filter((f: any) => roomIds.includes(f.roomId)).map((f: any) => ({ ...f, isLocal: true }));
+
+    return [...filteredLocal, ...mappedRemote] as Formation[];
   }, enabled: roomIds.length > 0 });
 
   const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
@@ -238,7 +248,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const formationsMapped: Formation[] = formationsQuery.data || [];
 
-  // 비즈니스 로직
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
   const updateUserProfile = async (n: string, i?: string) => {
@@ -274,32 +283,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (error) throw error;
     refreshAllData();
   };
-  const deleteNotice = async (nid: string) => {
-    await supabase.from('notices').delete().eq('id', nid);
-    refreshAllData();
-  };
+  const deleteNotice = async (nid: string) => { await supabase.from('notices').delete().eq('id', nid); refreshAllData(); };
   const addNoticeComment = async (nid: string, t: string) => {
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
     const { error } = await supabase.from('notice_comments').insert([{ notice_id: nid, user_id: currentUser.id, text: t }]);
     if (error) throw error;
     refreshAllData();
   };
-  const deleteNoticeComment = async (cid: string) => {
-    await supabase.from('notice_comments').delete().eq('id', cid);
-    refreshAllData();
-  };
+  const deleteNoticeComment = async (cid: string) => { await supabase.from('notice_comments').delete().eq('id', cid); refreshAllData(); };
 
   const addVideo = async (rid: string, url: string, t: string) => { 
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
-    
-    const { error } = await supabase.from('videos').insert([{ 
-      room_id: rid, 
-      user_id: currentUser.id, 
-      title: t, 
-      storage_path: url,
-      youtube_id: 'R2_UPLOAD'
-    }]); 
+    const { error } = await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser.id, title: t, storage_path: url, youtube_id: 'R2_UPLOAD' }]); 
     if (error) throw error;
     refreshAllData(); 
   };
@@ -354,26 +350,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const deleteVote = async (vid: string) => { await supabase.from('votes').delete().eq('id', vid); refreshAllData(); };
 
+  // 💡 Local-First Formation Logic
   const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => {
-    if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
-    const { data: res, error } = await supabase.from('formations').insert([{ room_id: rid, user_id: currentUser.id, title, audio_url: audioUrl, settings, data }]).select().single();
-    if (error) throw error;
-    refreshAllData();
-    return res.id;
+    const newId = Math.random().toString(36).substr(2, 9);
+    const newFormation: Formation = {
+      id: newId, roomId: rid, userId: currentUser.id, title, audioUrl,
+      settings: settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
+      data: data || { dancers: [], scenes: [], timeline: [] },
+      createdAt: Date.now()
+    };
+    const localRaw = await AsyncStorage.getItem('local_formations');
+    const local = localRaw ? JSON.parse(localRaw) : [];
+    await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation]));
+    formationsQuery.refetch();
+    return newId;
   };
+
   const updateFormation = async (fid: string, updates: Partial<Formation>) => {
-    const payload: any = {};
-    if (updates.title !== undefined) payload.title = updates.title;
-    if (updates.audioUrl !== undefined) payload.audio_url = updates.audioUrl;
-    if (updates.settings !== undefined) payload.settings = updates.settings;
-    if (updates.data !== undefined) payload.data = updates.data;
-    const { error } = await supabase.from('formations').update(payload).eq('id', fid);
-    if (error) throw error;
-    refreshAllData();
+    const localRaw = await AsyncStorage.getItem('local_formations');
+    if (!localRaw) return;
+    const local = JSON.parse(localRaw);
+    const updated = local.map((f: any) => f.id === fid ? { ...f, ...updates } : f);
+    await AsyncStorage.setItem('local_formations', JSON.stringify(updated));
+    formationsQuery.refetch();
   };
+
   const deleteFormation = async (fid: string) => {
-    await supabase.from('formations').delete().eq('id', fid);
+    const localRaw = await AsyncStorage.getItem('local_formations');
+    if (!localRaw) return;
+    const local = JSON.parse(localRaw);
+    await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid)));
+    formationsQuery.refetch();
+  };
+
+  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string) => {
+    const localRaw = await AsyncStorage.getItem('local_formations');
+    const formation = JSON.parse(localRaw || '[]').find((f: any) => f.id === formationId);
+    if (!formation) throw new Error('동선 정보를 찾을 수 없습니다.');
+
+    const { data: remote, error } = await supabase.from('formations').insert([{
+      room_id: roomId, user_id: currentUser?.id, title: title, audio_url: formation.audioUrl,
+      settings: formation.settings, data: formation.data
+    }]).select().single();
+
+    if (error) throw error;
+    await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
     refreshAllData();
   };
 
@@ -387,7 +409,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       photos: photosMapped, addPhoto, deletePhoto, addPhotoComment, markItemAsAccessed,
       schedules: schedulesMapped, addSchedule, respondToSchedule, deleteSchedule,
       votes: votesMapped, addVote, respondToVote, deleteVote,
-      formations: formationsMapped, addFormation, updateFormation, deleteFormation,
+      formations: formationsMapped, addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
       refreshAllData, themeType, setThemeType, theme
     }}>
       {children}
