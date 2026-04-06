@@ -577,16 +577,16 @@ export default function FormationEditorScreen() {
             
             {/* Dancer Name Size Slider Input */}
             <View style={styles.settingCol}>
-              <Text style={styles.settingLabel}>댄서 이름 크기 ({settings.dancerNameSize})</Text>
+              <Text style={styles.settingLabel}>댄서 이름 크기 ({settings.dancerNameSize || 8})</Text>
               <View style={styles.gridInputRow}>
-                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.max(4, settings.dancerNameSize - 1)})}><Ionicons name="remove-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.max(4, (settings.dancerNameSize || 8) - 1)})}><Ionicons name="remove-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
                 <TextInput 
                   style={[styles.gridInput, { width: 50 }]} 
                   keyboardType="numeric" 
-                  value={settings.dancerNameSize.toString()} 
-                  onChangeText={v => setSettings({...settings, dancerNameSize: parseInt(v) || 1})} 
+                  value={(settings.dancerNameSize || 8).toString()} 
+                  onChangeText={v => setSettings({...settings, dancerNameSize: parseInt(v) || 8})} 
                 />
-                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.min(20, settings.dancerNameSize + 1)})}><Ionicons name="add-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.min(20, (settings.dancerNameSize || 8) + 1)})}><Ionicons name="add-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
               </View>
             </View>
 
