@@ -140,6 +140,7 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, zoomLevel, index, 
         const stepX = (1 / (settings.gridCols + 4)) / 2, stepY = (1 / settings.gridRows) / 2;
         fx = Math.round(fx / stepX) * stepX; fy = Math.round(fy / stepY) * stepY;
       }
+      dancerPos.value = { x: fx, y: fy }; // Immediately update shared value
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
     });
 
@@ -209,51 +210,58 @@ export default function FormationEditorScreen() {
     return dict;
   }, [dancers]);
 
-  // FIXED SMOOTH ANIMATION & INTERPOLATION
+  // Reaction for Create Mode: Animates positions ONLY when scene or mode changes.
   useAnimatedReaction(
-    () => ({ time: currentTimeMs.value, scenes: scenesSV.value, timeline: timelineSV.value, mode, activeId: activeSceneId }),
+    () => ({ scenes: scenesSV.value, mode, activeId: activeSceneId }),
     (data, prev) => {
-      const { time, scenes, timeline, mode, activeId } = data;
+      const { scenes, mode, activeId } = data;
       if (mode === 'create') {
-        const targetScene = scenes.find(s => s.id === activeId);
-        if (targetScene) {
-          dancers.forEach(d => {
-            const p = targetScene.positions[d.id] || { x: 0.5, y: 0.5 };
-            if (prev?.activeId !== activeId || prev?.mode !== mode) {
+        if (prev?.activeId !== activeId || prev?.mode !== mode) {
+          const targetScene = scenes.find(s => s.id === activeId);
+          if (targetScene) {
+            dancers.forEach(d => {
+              const p = targetScene.positions[d.id] || { x: 0.5, y: 0.5 };
               dancerPositions[d.id].value = withTiming(p, { duration: 400, easing: Easing.out(Easing.quad) });
-            } else {
-              dancerPositions[d.id].value = p;
-            }
-          });
-        }
-        return;
-      }
-      // Place Mode
-      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      let prevE = null, nextE = null;
-      for (let e of sorted) { if (e.timestampMillis <= time) prevE = e; else { nextE = e; break; } }
-      dancers.forEach(d => {
-        let p = { x: 0.5, y: 0.5 };
-        if (!prevE) {
-          const s = scenes.find(s => s.id === sorted[0]?.sceneId);
-          p = s?.positions[d.id] || { x: 0.5, y: 0.5 };
-        } else {
-          const prevScene = scenes.find(s => s.id === prevE.sceneId);
-          if (time <= prevE.timestampMillis + prevE.durationMillis) {
-            p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
-          } else if (nextE) {
-            const nextScene = scenes.find(s => s.id === nextE.sceneId);
-            const progress = (time - (prevE.timestampMillis + prevE.durationMillis)) / (nextE.timestampMillis - (prevE.timestampMillis + prevE.durationMillis));
-            const sP = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 }, eP = nextScene?.positions[d.id] || { x: 0.5, y: 0.5 };
-            p = { x: sP.x + (eP.x - sP.x) * progress, y: sP.y + (eP.y - sP.y) * progress };
-          } else {
-            p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
+            });
           }
         }
-        dancerPositions[d.id].value = p;
-      });
+      }
     },
-    [activeSceneId, mode]
+    [activeSceneId, mode, dancers]
+  );
+
+  // Reaction for Place Mode: Handles real-time interpolation during playback.
+  useAnimatedReaction(
+    () => ({ time: currentTimeMs.value, scenes: scenesSV.value, timeline: timelineSV.value, mode }),
+    (data) => {
+      const { time, scenes, timeline, mode } = data;
+      if (mode === 'place') {
+        const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+        let prevE = null, nextE = null;
+        for (let e of sorted) { if (e.timestampMillis <= time) prevE = e; else { nextE = e; break; } }
+        dancers.forEach(d => {
+          let p = { x: 0.5, y: 0.5 };
+          if (!prevE) {
+            const s = scenes.find(s => s.id === sorted[0]?.sceneId);
+            p = s?.positions[d.id] || { x: 0.5, y: 0.5 };
+          } else {
+            const prevScene = scenes.find(s => s.id === prevE.sceneId);
+            if (time <= prevE.timestampMillis + prevE.durationMillis) {
+              p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
+            } else if (nextE) {
+              const nextScene = scenes.find(s => s.id === nextE.sceneId);
+              const progress = (time - (prevE.timestampMillis + prevE.durationMillis)) / (nextE.timestampMillis - (prevE.timestampMillis + prevE.durationMillis));
+              const sP = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 }, eP = nextScene?.positions[d.id] || { x: 0.5, y: 0.5 };
+              p = { x: sP.x + (eP.x - sP.x) * progress, y: sP.y + (eP.y - sP.y) * progress };
+            } else {
+              p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
+            }
+          }
+          dancerPositions[d.id].value = p;
+        });
+      }
+    },
+    [mode, dancers]
   );
 
   useEffect(() => {
@@ -338,7 +346,6 @@ export default function FormationEditorScreen() {
     } catch (e) { Alert.alert('오류', '파일 처리 실패'); } finally { setIsPickingAudio(false); }
   };
 
-  // Improved timeline interaction to prevent crashes
   const openTimelineMenuAt = (x: number) => {
     const time = Math.floor((x / PX_PER_SEC) * 1000 / 100) * 100;
     setTouchTimeMs(time);
