@@ -139,7 +139,7 @@ const DancerNode = ({
   });
 
   const nodeSize = cellSize * 0.7;
-  const containerWidth = cellSize * 2; // Much wider container to prevent name cut-off
+  const containerWidth = cellSize * 2.5; // Expanded to prevent name clipping
 
   const panGesture = Gesture.Pan()
     .enabled(mode === 'create')
@@ -178,7 +178,7 @@ const DancerNode = ({
 
   const style = useAnimatedStyle(() => ({
     width: containerWidth,
-    height: nodeSize + (20 * zoomLevel),
+    height: nodeSize + (25 * zoomLevel),
     transform: [
       { translateX: (interpolatedX.value * stageWidth) - (containerWidth / 2) },
       { translateY: (interpolatedY.value * stageHeight) - (nodeSize / 2) },
@@ -198,12 +198,33 @@ const DancerNode = ({
             width: nodeSize,
             height: nodeSize,
             borderRadius: nodeSize / 2,
-            borderWidth: Math.max(1, 1.5 * zoomLevel)
+            borderWidth: Math.max(1, 1.5 * zoomLevel),
+            justifyContent: 'center',
+            alignItems: 'center'
           }
         ]}>
-          <Text style={[styles.dancerInitial, { fontSize: nodeSize * 0.45, lineHeight: nodeSize }]}>{index + 1}</Text>
+          <Text style={[styles.dancerInitial, { 
+            fontSize: nodeSize * 0.45, 
+            textAlign: 'center',
+            textAlignVertical: 'center',
+            includeFontPadding: false,
+            top: Platform.OS === 'android' ? -1 : 0 // Fine-tune centering
+          }]}>{index + 1}</Text>
         </View>
-        <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: Math.max(8, 10 * zoomLevel), marginTop: 4 * zoomLevel, width: containerWidth }]} numberOfLines={1}>{dancer.name}</Text>
+        <Text 
+          style={[
+            styles.dancerNameText, 
+            { 
+              color: isSelected ? '#FFF' : '#AAA', 
+              fontSize: (settings.dancerNameSize || 8) * zoomLevel, 
+              marginTop: 4 * zoomLevel, 
+              width: containerWidth 
+            }
+          ]} 
+          numberOfLines={1}
+        >
+          {dancer.name}
+        </Text>
       </Animated.View>
     </GestureDetector>
   );
@@ -223,7 +244,9 @@ export default function FormationEditorScreen() {
   const [dancers, setDancers] = useState<Dancer[]>(formation?.data?.dancers || []);
   const [scenes, setScenes] = useState<FormationScene[]>(formation?.data?.scenes || []);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
-  const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true });
+  const [settings, setSettings] = useState<FormationSettings>(
+    formation?.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 }
+  );
   
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
@@ -526,6 +549,7 @@ export default function FormationEditorScreen() {
         )}
       </View>
 
+      {/* --- Dancer Sheet --- */}
       <Modal visible={showDancerSheet} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowDancerSheet(false)}>
           <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 25 }]}>
@@ -543,12 +567,29 @@ export default function FormationEditorScreen() {
         </Pressable>
       </Modal>
 
+      {/* --- Stage Settings Modal --- */}
       <Modal visible={showStageSettings} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
             <Text style={styles.modalTitle}>무대 설정</Text>
             <View style={styles.settingRow}><Text style={styles.settingLabel}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View>
             <View style={styles.settingRow}><Text style={styles.settingLabel}>무대 앞 방향</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{ fontWeight: 'bold' }}>{settings.stageDirection === 'top' ? '상단' : '하단'}</Text></TouchableOpacity></View>
+            
+            {/* Dancer Name Size Slider Input */}
+            <View style={styles.settingCol}>
+              <Text style={styles.settingLabel}>댄서 이름 크기 ({settings.dancerNameSize})</Text>
+              <View style={styles.gridInputRow}>
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.max(4, settings.dancerNameSize - 1)})}><Ionicons name="remove-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+                <TextInput 
+                  style={[styles.gridInput, { width: 50 }]} 
+                  keyboardType="numeric" 
+                  value={settings.dancerNameSize.toString()} 
+                  onChangeText={v => setSettings({...settings, dancerNameSize: parseInt(v) || 1})} 
+                />
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.min(20, settings.dancerNameSize + 1)})}><Ionicons name="add-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+              </View>
+            </View>
+
             <View style={styles.settingCol}>
               <Text style={styles.settingLabel}>그리드 크기 (가로 x 세로)</Text>
               <View style={styles.gridInputRow}>
@@ -557,11 +598,13 @@ export default function FormationEditorScreen() {
                 <TextInput style={styles.gridInput} keyboardType="numeric" value={settings.gridRows.toString()} onChangeText={v => setSettings({...settings, gridRows: parseInt(v) || 1})} />
               </View>
             </View>
+
             <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={() => setShowStageSettings(false)}><Text style={{ fontWeight: 'bold' }}>확인</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
 
+      {/* --- Scene Name Modal --- */}
       <Modal visible={showSceneNameModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
@@ -572,6 +615,7 @@ export default function FormationEditorScreen() {
         </View>
       </Modal>
 
+      {/* --- Usage Guide Modal --- */}
       <Modal visible={showGuide} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.settingsModal, { width: '90%', maxHeight: '85%' }]}>
@@ -579,6 +623,7 @@ export default function FormationEditorScreen() {
               <Text style={styles.modalTitle}>동선 가이드 ({guideIndex + 1}/{GUIDE_STEPS.length})</Text>
               <TouchableOpacity onPress={() => setShowGuide(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
             </View>
+            
             <View style={styles.guideContent}>
               <View style={styles.guideImagePlaceholder}>
                 {GUIDE_STEPS[guideIndex].image ? (
@@ -590,6 +635,7 @@ export default function FormationEditorScreen() {
               <Text style={styles.guideStepTitle}>{GUIDE_STEPS[guideIndex].title}</Text>
               <Text style={styles.guideDescription}>{GUIDE_STEPS[guideIndex].description}</Text>
             </View>
+
             <View style={styles.guideNav}>
               <TouchableOpacity style={[styles.navBtn, guideIndex === 0 && { opacity: 0.3 }]} disabled={guideIndex === 0} onPress={() => setGuideIndex(prev => prev - 1)}>
                 <Ionicons name="chevron-back" size={20} color="#FFF" /><Text style={styles.navBtnText}>이전</Text>

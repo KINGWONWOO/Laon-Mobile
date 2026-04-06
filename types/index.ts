@@ -161,6 +161,7 @@ export type FormationSettings = {
   gridCols: number;
   stageDirection: 'top' | 'bottom'; // "앞"이 위쪽인지 아래쪽인지
   snapToGrid: boolean;
+  dancerNameSize: number;
 };
 
 export type Formation = {
