@@ -105,8 +105,10 @@ const TransitionX = ({ width, left }: { width: number, left: number }) => {
 };
 
 // --- Interaction Components ---
-const ResizeHandle = ({ direction, onDrag }: { direction: 'left' | 'right', onDrag: (delta: number) => void }) => {
-  const pan = Gesture.Pan().onUpdate((e) => { runOnJS(onDrag)(e.translationX); });
+const ResizeHandle = ({ direction, onDragStart, onDrag }: { direction: 'left' | 'right', onDragStart: () => void, onDrag: (delta: number) => void }) => {
+  const pan = Gesture.Pan()
+    .onStart(() => { runOnJS(onDragStart)(); })
+    .onUpdate((e) => { runOnJS(onDrag)(e.translationX); });
   return (
     <GestureDetector gesture={pan}>
       <View style={[direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight]}>
@@ -202,7 +204,7 @@ export default function FormationEditorScreen() {
     return dict;
   }, [dancers]);
 
-  // Handle scene change animation in Create Mode
+  // Create Mode Scene Change Animation
   useAnimatedReaction(() => ({ scenes: scenesSV.value, mode, activeId: activeSceneId }), (data, prev) => {
     if (data.mode === 'create' && (prev?.activeId !== data.activeId || prev?.mode !== data.mode)) {
       const targetScene = data.scenes.find(s => s.id === data.activeId);
@@ -210,7 +212,7 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers]);
 
-  // Handle interpolation in Place Mode
+  // Place Mode Interpolation
   useAnimatedReaction(() => ({ time: currentTimeMs.value, scenes: scenesSV.value, timeline: timelineSV.value, mode }), (data) => {
     if (data.mode === 'place') {
       const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -307,19 +309,25 @@ export default function FormationEditorScreen() {
   const openTimelineMenuAt = (x: number) => {
     let t = Math.floor((x / PX_PER_SEC) * 1000 / 100) * 100;
     const sorted = [...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis), last = sorted[sorted.length-1];
-    // Rule: Default 3s duration, 2s gap from previous
     if (last) { const minStart = last.timestampMillis + last.durationMillis + 2000; if (t < minStart) t = minStart; }
     setTouchTimeMs(t); setShowTimelineMenu(true);
   };
 
-  const handleMoveBlock = (entryId: string, newTime: number) => { setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, newTime) } : e)); };
-  const handleResizeLeft = (entryId: string, delta: number) => {
-    const deltaMs = (delta / PX_PER_SEC) * 1000;
-    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, e.timestampMillis + deltaMs), durationMillis: Math.max(500, e.durationMillis - deltaMs) } : e));
+  // Improved interaction logic with start values to prevent cumulative drift
+  const dragStartMs = useRef(0);
+  const dragStartDuration = useRef(0);
+
+  const handleMoveBlock = (entryId: string, deltaX: number) => {
+    const deltaMs = (deltaX / PX_PER_SEC) * 1000;
+    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, dragStartMs.current + deltaMs) } : e));
   };
-  const handleResizeRight = (entryId: string, delta: number) => {
-    const deltaMs = (delta / PX_PER_SEC) * 1000;
-    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, durationMillis: Math.max(500, e.durationMillis + deltaMs) } : e));
+  const handleResizeLeft = (entryId: string, deltaX: number) => {
+    const deltaMs = (deltaX / PX_PER_SEC) * 1000;
+    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, dragStartMs.current + deltaMs), durationMillis: Math.max(500, dragStartDuration.current - deltaMs) } : e));
+  };
+  const handleResizeRight = (entryId: string, deltaX: number) => {
+    const deltaMs = (deltaX / PX_PER_SEC) * 1000;
+    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, durationMillis: Math.max(500, dragStartDuration.current + deltaMs) } : e));
   };
   const handleDeleteBlock = (entryId: string) => {
     Alert.alert('대형 삭제', '이 시점의 대형을 타임라인에서 제거할까요?', [
@@ -353,10 +361,10 @@ export default function FormationEditorScreen() {
             <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }]}>
               <View style={[styles.offStageLeft, { width: 2 * CELL_SIZE }]} /><View style={[styles.offStageRight, { width: 2 * CELL_SIZE }]} />
               <View style={styles.deadCenterPoint}><View style={[styles.centerCrossLineH, { width: 30 * zoomLevel }]} /><View style={[styles.centerCrossLineV, { height: 30 * zoomLevel }]} /></View>
-              <div style={styles.gridLayer}>
+              <View style={styles.gridLayer}>
                 {Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}
                 {Array.from({length: settings.gridRows + 1}).map((_, i) => <View key={`h-${i}`} style={[styles.gridLineH, { top: `${(i/settings.gridRows)*100}%` }]} />)}
-              </div>
+              </View>
               {dancers.map((d, i) => (
                 <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE} zoomLevel={zoomLevel} onDragEnd={handleDragEnd} />
               ))}
@@ -389,12 +397,17 @@ export default function FormationEditorScreen() {
                     <View style={styles.rectangleTimelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <GestureDetector gesture={Gesture.Pan().onUpdate((g) => runOnJS(handleMoveBlock)(e.id, e.timestampMillis + (g.translationX/PX_PER_SEC)*1000))}>
+                          <GestureDetector gesture={Gesture.Pan()
+                            .onStart(() => { dragStartMs.current = e.timestampMillis; })
+                            .onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX))}>
                             <View style={[styles.timelineBlock, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : 'rgba(255,255,255,0.3)' }]}>
                               <TouchableOpacity style={styles.blockInner} onPress={() => runOnJS(handleDeleteBlock)(e.id)} onLongPress={() => setSelectedEntryId(selectedEntryId === e.id ? null : e.id)}>
                                 <Text style={[styles.blockLabel, selectedEntryId === e.id && { color: '#000' }]} numberOfLines={1}>{scenes.find(s => s.id === e.sceneId)?.name}</Text>
                               </TouchableOpacity>
-                              {selectedEntryId === e.id && <><ResizeHandle direction="left" onDrag={(d) => runOnJS(handleResizeLeft)(e.id, d)} /><ResizeHandle direction="right" onDrag={(d) => runOnJS(handleResizeRight)(e.id, d)} /></>}
+                              {selectedEntryId === e.id && <>
+                                <ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(d) => runOnJS(handleResizeLeft)(e.id, d)} />
+                                <ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(d) => runOnJS(handleResizeRight)(e.id, d)} />
+                              </>}
                             </View>
                           </GestureDetector>
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
