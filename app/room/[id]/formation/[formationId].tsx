@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
 
-type EditorMode = 'create' | 'place'; // 대형 생성 | 대형 배치
+type EditorMode = 'create' | 'place';
 
 const GUIDE_STEPS = [
   {
@@ -86,29 +86,21 @@ const DancerNode = ({
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
 
-  // Position is stored as normalized 0~1 in shared values
   const interpolatedX = useDerivedValue(() => {
     if (isDragging.value) return dragX.value;
     if (mode === 'create') return createModeX.value;
-
     if (timeline.length === 0) return 0.5;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
-
     for (let i = 0; i < timeline.length; i++) {
       if (timeline[i].timestampMillis <= time) prevEntry = timeline[i];
       else { nextEntry = timeline[i]; break; }
     }
-
     if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.x ?? 0.5;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
     if (!prevScene) return 0.5;
-
-    if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.x ?? 0.5;
-    }
-
+    if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) return prevScene.positions[dancer.id]?.x ?? 0.5;
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
       if (!nextScene) return prevScene.positions[dancer.id]?.x ?? 0.5;
@@ -123,25 +115,18 @@ const DancerNode = ({
   const interpolatedY = useDerivedValue(() => {
     if (isDragging.value) return dragY.value;
     if (mode === 'create') return createModeY.value;
-
     if (timeline.length === 0) return 0.5;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
-
     for (let i = 0; i < timeline.length; i++) {
       if (timeline[i].timestampMillis <= time) prevEntry = timeline[i];
       else { nextEntry = timeline[i]; break; }
     }
-
     if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.y ?? 0.5;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
     if (!prevScene) return 0.5;
-
-    if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.y ?? 0.5;
-    }
-
+    if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) return prevScene.positions[dancer.id]?.y ?? 0.5;
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
       if (!nextScene) return prevScene.positions[dancer.id]?.y ?? 0.5;
@@ -153,7 +138,8 @@ const DancerNode = ({
     return prevScene.positions[dancer.id]?.y ?? 0.5;
   });
 
-  const nodeSize = 30 * zoomLevel;
+  const nodeSize = cellSize * 0.7;
+  const containerWidth = cellSize * 2; // Much wider container to prevent name cut-off
 
   const panGesture = Gesture.Pan()
     .enabled(mode === 'create')
@@ -165,14 +151,10 @@ const DancerNode = ({
       startY.value = interpolatedY.value;
     })
     .onUpdate((e) => {
-      // Calculate change in normalized units
       let nx = startX.value + (e.translationX / stageWidth);
       let ny = startY.value + (e.translationY / stageHeight);
-      
-      // Clamp within stage
-      nx = Math.max(0.02, Math.min(0.98, nx));
-      ny = Math.max(0.02, Math.min(0.98, ny));
-      
+      nx = Math.max(0.01, Math.min(0.99, nx));
+      ny = Math.max(0.01, Math.min(0.99, ny));
       dragX.value = nx;
       dragY.value = ny;
     })
@@ -180,15 +162,14 @@ const DancerNode = ({
       isDragging.value = false;
       let fx = dragX.value;
       let fy = dragY.value;
-      
       if (settings.snapToGrid) {
-        // Snap logic in normalized coordinates
-        const stepX = (1 / settings.gridCols) / 2;
-        const stepY = (1 / settings.gridRows) / 2;
+        const totalCols = settings.gridCols + 4;
+        const totalRows = settings.gridRows;
+        const stepX = (1 / totalCols) / 2;
+        const stepY = (1 / totalRows) / 2;
         fx = Math.round(fx / stepX) * stepX;
         fy = Math.round(fy / stepY) * stepY;
       }
-      
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
     });
 
@@ -196,10 +177,10 @@ const DancerNode = ({
   const composed = Gesture.Exclusive(panGesture, tapGesture);
 
   const style = useAnimatedStyle(() => ({
-    width: nodeSize,
-    height: nodeSize + (15 * zoomLevel),
+    width: containerWidth,
+    height: nodeSize + (20 * zoomLevel),
     transform: [
-      { translateX: (interpolatedX.value * stageWidth) - (nodeSize / 2) },
+      { translateX: (interpolatedX.value * stageWidth) - (containerWidth / 2) },
       { translateY: (interpolatedY.value * stageHeight) - (nodeSize / 2) },
       { scale: isDragging.value ? 1.1 : withSpring(1) }
     ],
@@ -217,12 +198,12 @@ const DancerNode = ({
             width: nodeSize,
             height: nodeSize,
             borderRadius: nodeSize / 2,
-            borderWidth: 2 * zoomLevel
+            borderWidth: Math.max(1, 1.5 * zoomLevel)
           }
         ]}>
-          <Text style={[styles.dancerInitial, { fontSize: 12 * zoomLevel }]}>{index + 1}</Text>
+          <Text style={[styles.dancerInitial, { fontSize: nodeSize * 0.45, lineHeight: nodeSize }]}>{index + 1}</Text>
         </View>
-        <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: 10 * zoomLevel, marginTop: 4 * zoomLevel }]} numberOfLines={1}>{dancer.name}</Text>
+        <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: Math.max(8, 10 * zoomLevel), marginTop: 4 * zoomLevel, width: containerWidth }]} numberOfLines={1}>{dancer.name}</Text>
       </Animated.View>
     </GestureDetector>
   );
@@ -249,18 +230,20 @@ export default function FormationEditorScreen() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
   const [zoomLevel, setZoomLevel] = useState(1);
+  const baseZoom = useRef(1);
   
-  // Calculate dynamic stage dimensions based on 100% zoom (fits screen width)
-  const BASE_STAGE_SIZE = width - 40;
-  const STAGE_WIDTH = BASE_STAGE_SIZE * zoomLevel;
-  const STAGE_HEIGHT = (BASE_STAGE_SIZE * (settings.gridRows / settings.gridCols)) * zoomLevel;
-  const CELL_SIZE = STAGE_WIDTH / settings.gridCols;
+  const TOTAL_COLS = settings.gridCols + 4;
+  const TOTAL_ROWS = settings.gridRows;
+  const VIEW_WIDTH = width - 40;
+  const CELL_SIZE = (VIEW_WIDTH / TOTAL_COLS) * zoomLevel;
+  const STAGE_WIDTH = TOTAL_COLS * CELL_SIZE;
+  const STAGE_HEIGHT = TOTAL_ROWS * CELL_SIZE;
 
-  // Smooth transition values for Create mode (stored as normalized 0~1)
+  useEffect(() => { setZoomLevel(1); }, []);
+
   const dancerPositionsX = useRef<Record<string, SharedValue<number>>>({}).current;
   const dancerPositionsY = useRef<Record<string, SharedValue<number>>>({}).current;
 
-  // Initialize shared values stably with normalized coordinates
   dancers.forEach(d => {
     if (!dancerPositionsX[d.id]) {
       const activePositions = scenes.find(s => s.id === activeSceneId)?.positions || {};
@@ -281,7 +264,6 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode]);
 
-  // Modals
   const [showDancerSheet, setShowDancerSheet] = useState(false);
   const [showStageSettings, setShowStageSettings] = useState(false);
   const [showSceneNameModal, setShowSceneNameModal] = useState(false);
@@ -291,10 +273,8 @@ export default function FormationEditorScreen() {
   const [showGuide, setShowGuide] = useState(false);
   const [guideIndex, setGuideIndex] = useState(0);
 
-  // Reset guide index on open
   useEffect(() => { if (showGuide) setGuideIndex(0); }, [showGuide]);
 
-  // Audio & Animation
   const player = useAudioPlayer(formation?.audioUrl || '');
   const status = useAudioPlayerStatus(player);
   const currentTimeMs = useSharedValue(0);
@@ -313,11 +293,9 @@ export default function FormationEditorScreen() {
 
   const handleDragEnd = (dancerId: string, pos: Position) => {
     if (mode !== 'create' || !activeSceneId) return;
-    // Position here is already normalized (0~1)
     setScenes(prev => prev.map(s => s.id === activeSceneId ? {
       ...s, positions: { ...s.positions, [dancerId]: pos }
     } : s));
-    
     if (dancerPositionsX[dancerId]) {
       dancerPositionsX[dancerId].value = pos.x;
       dancerPositionsY[dancerId].value = pos.y;
@@ -418,6 +396,13 @@ export default function FormationEditorScreen() {
     return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}.${Math.floor((ms%1000)/100)}`;
   };
 
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => { baseZoom.current = zoomLevel; })
+    .onUpdate((e) => {
+      const newZoom = baseZoom.current * e.scale;
+      runOnJS(setZoomLevel)(Math.max(0.5, Math.min(3, newZoom)));
+    });
+
   if (!formation) return null;
 
   return (
@@ -447,35 +432,40 @@ export default function FormationEditorScreen() {
           <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.min(3, prev + 0.1))}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
         </View>
 
-        <ScrollView horizontal style={{ flex: 1, width: '100%' }}>
-          <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ padding: 40, alignItems: 'center', justifyContent: 'center', minWidth: width, minHeight: 400 }}>
-            <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'AUDIENCE' : 'BACKSTAGE'}</Text>
-            <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, borderColor: 'rgba(255,255,255,0.1)' }]}>
-              {/* Center Marker */}
-              <View style={[styles.centerMarkerH, { width: STAGE_WIDTH }]} />
-              <View style={[styles.centerMarkerV, { height: STAGE_HEIGHT }]} />
-              
-              <View style={styles.gridLayer}>
-                {Array.from({length: settings.gridCols + 1}).map((_, i) => (
-                  <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/settings.gridCols)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
-                ))}
-                {Array.from({length: settings.gridRows + 1}).map((_, i) => (
-                  <View key={`h-${i}`} style={[styles.gridLineH, { top: `${(i/settings.gridRows)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
+        <GestureDetector gesture={pinchGesture}>
+          <ScrollView horizontal style={{ flex: 1, width: '100%' }}>
+            <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ padding: 40, alignItems: 'center', justifyContent: 'center', minWidth: width, minHeight: 400 }}>
+              <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'AUDIENCE' : 'BACKSTAGE'}</Text>
+              <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, borderColor: 'rgba(255,255,255,0.1)' }]}>
+                <View style={[styles.offStageLeft, { width: 2 * CELL_SIZE }]} />
+                <View style={[styles.offStageRight, { width: 2 * CELL_SIZE }]} />
+                <View style={styles.deadCenterPoint}>
+                  <View style={[styles.centerCrossLineH, { width: 30 * zoomLevel }]} />
+                  <View style={[styles.centerCrossLineV, { height: 30 * zoomLevel }]} />
+                </View>
+                <View style={styles.gridLayer}>
+                  {Array.from({length: TOTAL_COLS + 1}).map((_, i) => (
+                    <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/TOTAL_COLS)*100}%`, opacity: 0.15 }]} />
+                  ))}
+                  {Array.from({length: TOTAL_ROWS + 1}).map((_, i) => (
+                    <View key={`h-${i}`} style={[styles.gridLineH, { top: `${(i/TOTAL_ROWS)*100}%`, opacity: 0.15 }]} />
+                  ))}
+                </View>
+                <View style={[styles.stageBorder, { left: 2 * CELL_SIZE, width: settings.gridCols * CELL_SIZE }]} />
+                {dancers.map((d, i) => (
+                  <DancerNode 
+                    key={d.id} index={i} dancer={d} currentTimeMs={currentTimeMs} scenes={scenes} timeline={timeline}
+                    onDragEnd={handleDragEnd} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }}
+                    mode={mode} index={i} settings={settings}
+                    createModeX={dancerPositionsX[d.id]} createModeY={dancerPositionsY[d.id]}
+                    stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE} zoomLevel={zoomLevel}
+                  />
                 ))}
               </View>
-              {dancers.map((d, i) => (
-                <DancerNode 
-                  key={d.id} index={i} dancer={d} currentTimeMs={currentTimeMs} scenes={scenes} timeline={timeline}
-                  onDragEnd={handleDragEnd} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }}
-                  mode={mode} index={i} settings={settings}
-                  createModeX={dancerPositionsX[d.id]} createModeY={dancerPositionsY[d.id]}
-                  stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE} zoomLevel={zoomLevel}
-                />
-              ))}
-            </View>
-            <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE'}</Text>
+              <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE'}</Text>
+            </ScrollView>
           </ScrollView>
-        </ScrollView>
+        </GestureDetector>
       </View>
 
       {/* --- Mode Specific Toolbar --- */}
@@ -536,7 +526,6 @@ export default function FormationEditorScreen() {
         )}
       </View>
 
-      {/* --- Dancer Sheet --- */}
       <Modal visible={showDancerSheet} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowDancerSheet(false)}>
           <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 25 }]}>
@@ -554,14 +543,12 @@ export default function FormationEditorScreen() {
         </Pressable>
       </Modal>
 
-      {/* --- Stage Settings Modal --- */}
       <Modal visible={showStageSettings} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
             <Text style={styles.modalTitle}>무대 설정</Text>
             <View style={styles.settingRow}><Text style={styles.settingLabel}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View>
             <View style={styles.settingRow}><Text style={styles.settingLabel}>무대 앞 방향</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{ fontWeight: 'bold' }}>{settings.stageDirection === 'top' ? '상단' : '하단'}</Text></TouchableOpacity></View>
-            
             <View style={styles.settingCol}>
               <Text style={styles.settingLabel}>그리드 크기 (가로 x 세로)</Text>
               <View style={styles.gridInputRow}>
@@ -570,13 +557,11 @@ export default function FormationEditorScreen() {
                 <TextInput style={styles.gridInput} keyboardType="numeric" value={settings.gridRows.toString()} onChangeText={v => setSettings({...settings, gridRows: parseInt(v) || 1})} />
               </View>
             </View>
-
             <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={() => setShowStageSettings(false)}><Text style={{ fontWeight: 'bold' }}>확인</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* --- Scene Name Modal --- */}
       <Modal visible={showSceneNameModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
@@ -587,7 +572,6 @@ export default function FormationEditorScreen() {
         </View>
       </Modal>
 
-      {/* --- Usage Guide Modal --- */}
       <Modal visible={showGuide} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.settingsModal, { width: '90%', maxHeight: '85%' }]}>
@@ -595,7 +579,6 @@ export default function FormationEditorScreen() {
               <Text style={styles.modalTitle}>동선 가이드 ({guideIndex + 1}/{GUIDE_STEPS.length})</Text>
               <TouchableOpacity onPress={() => setShowGuide(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
             </View>
-            
             <View style={styles.guideContent}>
               <View style={styles.guideImagePlaceholder}>
                 {GUIDE_STEPS[guideIndex].image ? (
@@ -607,7 +590,6 @@ export default function FormationEditorScreen() {
               <Text style={styles.guideStepTitle}>{GUIDE_STEPS[guideIndex].title}</Text>
               <Text style={styles.guideDescription}>{GUIDE_STEPS[guideIndex].description}</Text>
             </View>
-
             <View style={styles.guideNav}>
               <TouchableOpacity style={[styles.navBtn, guideIndex === 0 && { opacity: 0.3 }]} disabled={guideIndex === 0} onPress={() => setGuideIndex(prev => prev - 1)}>
                 <Ionicons name="chevron-back" size={20} color="#FFF" /><Text style={styles.navBtnText}>이전</Text>
@@ -639,8 +621,12 @@ const styles = StyleSheet.create({
   zoomText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginHorizontal: 8 },
   directionLabel: { color: '#333', fontSize: 10, fontWeight: 'bold', letterSpacing: 4, marginVertical: 15 },
   stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
-  centerMarkerH: { position: 'absolute', top: '50%', height: 1, backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 0 },
-  centerMarkerV: { position: 'absolute', left: '50%', width: 1, backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 0 },
+  offStageLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.03)', borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)' },
+  offStageRight: { position: 'absolute', right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.03)', borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)' },
+  stageBorder: { position: 'absolute', top: 0, bottom: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', pointerEvents: 'none' },
+  deadCenterPoint: { position: 'absolute', top: '50%', left: '50%', justifyContent: 'center', alignItems: 'center', zIndex: 0 },
+  centerCrossLineH: { position: 'absolute', height: 1, backgroundColor: 'rgba(255,255,255,0.4)' },
+  centerCrossLineV: { position: 'absolute', width: 1, backgroundColor: 'rgba(255,255,255,0.4)' },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#FFF' },
   gridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#FFF' },
