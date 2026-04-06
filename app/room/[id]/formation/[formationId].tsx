@@ -22,22 +22,28 @@ type EditorMode = 'create' | 'place';
 const GUIDE_STEPS = [
   {
     title: '댄서 관리',
-    description: '좌측 하단의 "댄서 추가" 버튼으로 멤버를 늘릴 수 있습니다. 생성된 댄서 노드를 탭하면 이름과 고유 색상을 변경하거나 삭제할 수 있습니다.',
+    description: '1. 하단의 "댄서 추가" 버튼으로 멤버를 무대에 올릴 수 있습니다.\n2. 무대 위 댄서 노드를 탭하면 이름 변경, 고유 색상 지정, 삭제가 가능합니다.',
     image: null
   },
   {
     title: '대형 생성 (Create Mode)',
-    description: '하단의 "대형 목록"에서 대형을 선택하거나 추가(+)하세요. 무대 위 댄서들을 드래그하여 위치를 잡을 수 있습니다. 격자 설정을 통해 정밀한 배치가 가능합니다.',
+    description: '1. "대형 생성" 탭을 선택하세요.\n2. 하단의 "대형 목록"에서 대형을 추가(+)하거나 선택하세요.\n3. 무대 위 댄서들을 드래그하여 원하는 위치에 배치하세요.\n4. 설정에서 "격자 스냅"을 켜면 정밀한 배치가 가능합니다.',
     image: null
   },
   {
     title: '대형 배치 (Place Mode)',
-    description: '타임라인을 터치하여 대형을 추가하세요. 생성된 블록의 좌우 화살표를 드래그하여 유지 시간과 전환 시간을 설정할 수 있습니다.',
+    description: '1. "대형 배치" 탭을 선택하세요.\n2. 재생 바(타임라인)를 터치하여 원하는 시점에 대형을 추가하세요.\n3. 생성된 블록의 좌우 핸들을 드래그하여 유지 시간을 조절할 수 있습니다.\n4. 블록 사이의 빈 공간은 자동으로 동선 이동(보간) 구간이 됩니다.',
     image: require('../../../../example/transitionexample.jpg')
+  },
+  {
+    title: '저장 및 내보내기',
+    description: '1. 우측 상단의 저장 아이콘으로 작업 내용을 수시로 저장하세요.\n2. 배치 모드 하단의 "공유" 아이콘을 누르면 동선이 피드백 영상으로 변환되어 팀원들에게 공유됩니다.',
+    image: null
   }
 ];
 
 const formatTime = (ms: number) => {
+  if (ms === undefined || ms === null || isNaN(ms)) return '0:00';
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
@@ -179,6 +185,7 @@ export default function FormationEditorScreen() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [touchTimeMs, setTouchTimeMs] = useState(0);
   
   const STAGE_MARGIN = zoomLevel === 1 ? 0 : 40;
   const CELL_SIZE = ((width - 40) / (settings.gridCols + 4)) * zoomLevel;
@@ -205,34 +212,39 @@ export default function FormationEditorScreen() {
   // FIXED SMOOTH ANIMATION & INTERPOLATION
   useAnimatedReaction(
     () => ({ time: currentTimeMs.value, scenes: scenesSV.value, timeline: timelineSV.value, mode, activeId: activeSceneId }),
-    (data) => {
+    (data, prev) => {
       const { time, scenes, timeline, mode, activeId } = data;
       if (mode === 'create') {
         const targetScene = scenes.find(s => s.id === activeId);
         if (targetScene) {
           dancers.forEach(d => {
             const p = targetScene.positions[d.id] || { x: 0.5, y: 0.5 };
-            dancerPositions[d.id].value = withTiming(p, { duration: 400, easing: Easing.out(Easing.quad) });
+            // ONLY animate if activeId changed or mode changed
+            if (prev?.activeId !== activeId || prev?.mode !== mode) {
+              dancerPositions[d.id].value = withTiming(p, { duration: 400, easing: Easing.out(Easing.quad) });
+            } else {
+              dancerPositions[d.id].value = p;
+            }
           });
         }
         return;
       }
       // Place Mode
       const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      let prev = null, next = null;
-      for (let e of sorted) { if (e.timestampMillis <= time) prev = e; else { next = e; break; } }
+      let prevE = null, nextE = null;
+      for (let e of sorted) { if (e.timestampMillis <= time) prevE = e; else { nextE = e; break; } }
       dancers.forEach(d => {
         let p = { x: 0.5, y: 0.5 };
-        if (!prev) {
+        if (!prevE) {
           const s = scenes.find(s => s.id === sorted[0]?.sceneId);
           p = s?.positions[d.id] || { x: 0.5, y: 0.5 };
         } else {
-          const prevScene = scenes.find(s => s.id === prev.sceneId);
-          if (time <= prev.timestampMillis + prev.durationMillis) {
+          const prevScene = scenes.find(s => s.id === prevE.sceneId);
+          if (time <= prevE.timestampMillis + prevE.durationMillis) {
             p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
-          } else if (next) {
-            const nextScene = scenes.find(s => s.id === next.sceneId);
-            const progress = (time - (prev.timestampMillis + prev.durationMillis)) / (next.timestampMillis - (prev.timestampMillis + prev.durationMillis));
+          } else if (nextE) {
+            const nextScene = scenes.find(s => s.id === nextE.sceneId);
+            const progress = (time - (prevE.timestampMillis + prevE.durationMillis)) / (nextE.timestampMillis - (prevE.timestampMillis + prevE.durationMillis));
             const sP = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 }, eP = nextScene?.positions[d.id] || { x: 0.5, y: 0.5 };
             p = { x: sP.x + (eP.x - sP.x) * progress, y: sP.y + (eP.y - sP.y) * progress };
           } else {
@@ -283,7 +295,6 @@ export default function FormationEditorScreen() {
   const [guideIndex, setGuideIndex] = useState(0);
   const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
   const [inputName, setInputName] = useState('');
-  const [touchTimeMs, setTouchTimeMs] = useState(0);
   const [isPickingAudio, setIsPickingAudio] = useState(false);
 
   const handleDragEnd = (dancerId: string, pos: Position) => {
@@ -498,6 +509,15 @@ export default function FormationEditorScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.settingsModal, { width: '90%', maxHeight: '85%' }]}>
             <View style={styles.sheetHeader}><Text style={styles.modalTitle}>동선 가이드 ({guideIndex + 1}/{GUIDE_STEPS.length})</Text><TouchableOpacity onPress={() => setShowGuide(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <View style={styles.guideContent}>
+                <View style={styles.guideImagePlaceholder}>
+                  {GUIDE_STEPS[guideIndex].image ? <Image source={GUIDE_STEPS[guideIndex].image} style={styles.guideImage} resizeMode="contain" /> : <View style={styles.emptyImage}><Ionicons name="image-outline" size={40} color="#333" /><Text style={{ color: '#333', marginTop: 10 }}>이미지 준비 중</Text></View>}
+                </View>
+                <Text style={styles.guideStepTitle}>{GUIDE_STEPS[guideIndex].title}</Text>
+                <Text style={styles.guideDescription}>{GUIDE_STEPS[guideIndex].description}</Text>
+              </View>
+            </ScrollView>
             <View style={styles.guideNav}>
               <TouchableOpacity style={[styles.navBtn, guideIndex === 0 && { opacity: 0.3 }]} disabled={guideIndex === 0} onPress={() => setGuideIndex(prev => prev - 1)}><Ionicons name="chevron-back" size={20} color="#FFF" /><Text style={styles.navBtnText}>이전</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.navBtn, guideIndex === GUIDE_STEPS.length - 1 && { backgroundColor: theme.primary }]} onPress={() => { if (guideIndex < GUIDE_STEPS.length - 1) setGuideIndex(prev => prev + 1); else setShowGuide(false); }}><Text style={[styles.navBtnText, guideIndex === GUIDE_STEPS.length - 1 && { color: '#000' }]}>{guideIndex === GUIDE_STEPS.length - 1 ? '완료' : '다음'}</Text>{guideIndex < GUIDE_STEPS.length - 1 && <Ionicons name="chevron-forward" size={20} color="#FFF" />}</TouchableOpacity>
@@ -597,5 +617,12 @@ const styles = StyleSheet.create({
   gridInput: { backgroundColor: '#000', color: '#FFF', width: 60, textAlign: 'center', padding: 10, borderRadius: 8 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   navBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#333' },
-  navBtnText: { color: '#FFF', fontWeight: 'bold' }
+  navBtnText: { color: '#FFF', fontWeight: 'bold' },
+  guideContent: { alignItems: 'center', gap: 15 },
+  guideImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#000', borderRadius: 15, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  guideImage: { width: '100%', height: '100%' },
+  guideStepTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  guideDescription: { color: '#CCC', fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  guideNav: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, width: '100%' },
+  emptyImage: { alignItems: 'center', justifyContent: 'center' }
 });
