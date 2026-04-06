@@ -43,7 +43,7 @@ const GUIDE_STEPS = [
 ];
 
 const formatTime = (ms: number) => {
-  if (ms === undefined || ms === null || isNaN(ms)) return '0:00';
+  if (typeof ms !== 'number' || isNaN(ms)) return '0:00';
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
@@ -219,7 +219,6 @@ export default function FormationEditorScreen() {
         if (targetScene) {
           dancers.forEach(d => {
             const p = targetScene.positions[d.id] || { x: 0.5, y: 0.5 };
-            // ONLY animate if activeId changed or mode changed
             if (prev?.activeId !== activeId || prev?.mode !== mode) {
               dancerPositions[d.id].value = withTiming(p, { duration: 400, easing: Easing.out(Easing.quad) });
             } else {
@@ -339,11 +338,15 @@ export default function FormationEditorScreen() {
     } catch (e) { Alert.alert('오류', '파일 처리 실패'); } finally { setIsPickingAudio(false); }
   };
 
+  // Improved timeline interaction to prevent crashes
+  const openTimelineMenuAt = (x: number) => {
+    const time = Math.floor((x / PX_PER_SEC) * 1000 / 100) * 100;
+    setTouchTimeMs(time);
+    setShowTimelineMenu(true);
+  };
+
   const timelineTap = Gesture.Tap().onEnd((e) => {
-    runOnJS((x: number) => {
-      setTouchTimeMs(Math.floor((x / PX_PER_SEC) * 1000 / 100) * 100);
-      setShowTimelineMenu(true);
-    })(e.x);
+    runOnJS(openTimelineMenuAt)(e.x);
   });
 
   if (!formation) return null;
