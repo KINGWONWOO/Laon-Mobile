@@ -4,7 +4,7 @@ import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { Dancer, FormationScene, TimelineEntry, Position, Formation, FormationSettings } from '../../../../types';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, SharedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, SharedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -47,30 +47,31 @@ const GUIDE_STEPS = [
   }
 ];
 
-// --- Deterministic Waveform Component ---
+// --- Deterministic & Musical Waveform Component ---
 const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
-  const barsCount = Math.max(20, Math.floor(duration * 6)); // 1초당 6개 바
+  const barsCount = Math.max(20, Math.floor(duration * 6));
   const bars = useMemo(() => {
-    // Simple deterministic pseudo-random based on index and seed
     const getVal = (i: number) => {
-      const x = Math.sin(i * 0.2 + seed.length) * 10000;
+      const x = Math.sin(i * 0.5 + seed.length) * 10000;
       return x - Math.floor(x);
     };
 
     return Array.from({ length: barsCount }).map((_, i) => {
       const progress = i / barsCount;
-      // Simulate typical song structure energy
-      let energy = 0.3; // Intro
-      if (progress > 0.1 && progress < 0.3) energy = 0.5; // Verse
-      if (progress > 0.3 && progress < 0.5) energy = 0.9; // Chorus
-      if (progress > 0.5 && progress < 0.6) energy = 0.4; // Bridge
-      if (progress > 0.6 && progress < 0.9) energy = 1.0; // Chorus 2
-      if (progress > 0.9) energy = 0.2; // Outro
+      // High energy sections (Drop/Chorus) simulation
+      const isChorus = (progress > 0.25 && progress < 0.45) || (progress > 0.65 && progress < 0.85);
+      const isBuildUp = (progress > 0.2 && progress <= 0.25) || (progress > 0.6 && progress <= 0.65);
+      
+      let multiplier = 0.4;
+      if (isChorus) multiplier = 1.2;
+      else if (isBuildUp) multiplier = 0.8;
+      else if (progress < 0.1) multiplier = 0.2; // Intro
 
-      const baseHeight = 5 + (getVal(i) * 35 * energy);
+      const noise = getVal(i);
+      const height = 4 + (noise * 45 * multiplier);
       return {
-        height: Math.max(4, baseHeight),
-        opacity: 0.15 + (getVal(i + 1) * 0.15)
+        height: Math.min(50, height),
+        opacity: isChorus ? 0.5 : 0.2
       };
     });
   }, [barsCount, seed]);
@@ -78,7 +79,7 @@ const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, 
   return (
     <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC }]}>
       {bars.map((bar, i) => (
-        <View key={i} style={[styles.waveformBar, { height: bar.height, opacity: bar.opacity }]} />
+        <View key={i} style={[styles.waveformBar, { height: bar.height, opacity: bar.opacity, backgroundColor: bar.opacity > 0.3 ? '#FFF' : '#888' }]} />
       ))}
     </View>
   );
@@ -206,11 +207,16 @@ export default function FormationEditorScreen() {
   const [currentTimeUI, setCurrentTimeUI] = useState(0);
   const isUserScrolling = useRef(false);
 
-  // Smooth playback & Jitter Fix
+  const scenesSV = useSharedValue(scenes);
+  useEffect(() => { scenesSV.value = scenes; }, [scenes]);
+
+  const timelineSV = useSharedValue(timeline);
+  useEffect(() => { timelineSV.value = timeline; }, [timeline]);
+
+  // Smooth playback
   useEffect(() => {
     if (status.playing && status.duration > 0) {
       const currentVal = currentTimeMs.value / 1000;
-      // Only re-sync if the deviation is significant (> 200ms) to avoid jitter
       if (Math.abs(currentVal - status.currentTime) > 0.2) {
         currentTimeMs.value = status.currentTime * 1000;
         const remaining = (status.duration - status.currentTime) * 1000;
@@ -233,12 +239,12 @@ export default function FormationEditorScreen() {
           const scrollX = (val / 1000) * PX_PER_SEC;
           timelineScrollViewRef.current?.scrollTo({ x: scrollX, animated: false });
         }
-      }, 50);
+      }, 100);
     } else {
       setCurrentTimeUI(status.currentTime * 1000);
     }
     return () => clearInterval(interval);
-  }, [status.playing]);
+  }, [status.playing, mode]);
 
   const handleScroll = (e: any) => {
     if (isUserScrolling.current) {
@@ -260,29 +266,35 @@ export default function FormationEditorScreen() {
 
   useDerivedValue(() => {
     const time = currentTimeMs.value;
+    const currentScenes = scenesSV.value;
+    const currentTimeline = timelineSV.value;
+
     if (mode === 'create') {
-      const activeScene = scenes.find(s => s.id === activeSceneId);
+      const activeScene = currentScenes.find(s => s.id === activeSceneId);
       if (activeScene) {
         dancers.forEach(d => {
-          dancerPositions[d.id].value = withTiming(activeScene.positions[d.id] || { x: 0.5, y: 0.5 }, { duration: 300 }); 
+          dancerPositions[d.id].value = activeScene.positions[d.id] || { x: 0.5, y: 0.5 }; 
         });
       }
       return;
     }
+
+    // Place Mode Logic with synced data
     let prev = null, next = null;
-    const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+    const sorted = [...currentTimeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
     for (let e of sorted) { if (e.timestampMillis <= time) prev = e; else { next = e; break; } }
+    
     dancers.forEach(d => {
       let p = { x: 0.5, y: 0.5 };
       if (!prev) {
-        const s = scenes.find(s => s.id === timeline[0]?.sceneId);
+        const s = currentScenes.find(s => s.id === sorted[0]?.sceneId);
         p = s?.positions[d.id] || { x: 0.5, y: 0.5 };
       } else {
-        const prevScene = scenes.find(s => s.id === prev.sceneId);
+        const prevScene = currentScenes.find(s => s.id === prev.sceneId);
         if (time <= prev.timestampMillis + prev.durationMillis) {
           p = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 };
         } else if (next) {
-          const nextScene = scenes.find(s => s.id === next.sceneId);
+          const nextScene = currentScenes.find(s => s.id === next.sceneId);
           const progress = (time - (prev.timestampMillis + prev.durationMillis)) / (next.timestampMillis - (prev.timestampMillis + prev.durationMillis));
           const sP = prevScene?.positions[d.id] || { x: 0.5, y: 0.5 }, eP = nextScene?.positions[d.id] || { x: 0.5, y: 0.5 };
           p = { x: sP.x + (eP.x - sP.x) * progress, y: sP.y + (eP.y - sP.y) * progress };
@@ -296,18 +308,20 @@ export default function FormationEditorScreen() {
 
   const transitionStatus = useDerivedValue(() => {
     const time = currentTimeMs.value;
-    if (timeline.length === 0) return null;
+    const currentScenes = scenesSV.value;
+    const currentTimeline = timelineSV.value;
+    if (currentTimeline.length === 0) return null;
     let prev = null, next = null;
-    const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+    const sorted = [...currentTimeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
     for (let e of sorted) { if (e.timestampMillis <= time) prev = e; else { next = e; break; } }
-    if (!prev) return { type: 'fixed', sceneName: scenes.find(s => s.id === timeline[0]?.sceneId)?.name || '?' };
-    if (time < prev.timestampMillis + prev.durationMillis) return { type: 'fixed', sceneName: scenes.find(s => s.id === prev.sceneId)?.name || '?' };
+    if (!prev) return { type: 'fixed', sceneName: currentScenes.find(s => s.id === sorted[0]?.sceneId)?.name || '?' };
+    if (time < prev.timestampMillis + prev.durationMillis) return { type: 'fixed', sceneName: currentScenes.find(s => s.id === prev.sceneId)?.name || '?' };
     if (next) {
-      const from = scenes.find(s => s.id === prev.sceneId)?.name || '?', to = scenes.find(s => s.id === next.sceneId)?.name || '?';
+      const from = currentScenes.find(s => s.id === prev.sceneId)?.name || '?', to = currentScenes.find(s => s.id === next.sceneId)?.name || '?';
       const progress = (time - (prev.timestampMillis + prev.durationMillis)) / (next.timestampMillis - (prev.timestampMillis + prev.durationMillis));
       return { type: 'moving', from, to, progress: Math.min(1, Math.max(0, progress)) };
     }
-    return { type: 'fixed', sceneName: scenes.find(s => s.id === prev.sceneId)?.name || '?' };
+    return { type: 'fixed', sceneName: currentScenes.find(s => s.id === prev.sceneId)?.name || '?' };
   });
 
   const transitionProgressStyle = useAnimatedStyle(() => ({
@@ -328,8 +342,9 @@ export default function FormationEditorScreen() {
 
   const handleDragEnd = (dancerId: string, pos: Position) => {
     if (mode !== 'create' || !activeSceneId) return;
-    setScenes(prev => prev.map(s => s.id === activeSceneId ? { ...s, positions: { ...s.positions, [dancerId]: pos } } : s));
-    if (dancerPositions[dancerId]) { dancerPositions[dancerId].value = pos; }
+    setScenes(prev => prev.map(s => s.id === activeSceneId ? { 
+      ...s, positions: { ...s.positions, [dancerId]: { ...pos } } 
+    } : s));
   };
 
   const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('저장 완료'); } catch (e: any) { Alert.alert('오류', e.message); } };
@@ -345,7 +360,9 @@ export default function FormationEditorScreen() {
     if (sceneModalMode === 'add') {
       const newId = Math.random().toString(36).substr(2, 9);
       const lastScene = scenes[scenes.length - 1];
-      const newScene: FormationScene = { id: newId, name: inputName.trim() || `대형 ${scenes.length + 1}`, positions: lastScene ? { ...lastScene.positions } : {} };
+      // Deep copy positions
+      const initialPositions = lastScene ? JSON.parse(JSON.stringify(lastScene.positions)) : {};
+      const newScene: FormationScene = { id: newId, name: inputName.trim() || `대형 ${scenes.length + 1}`, positions: initialPositions };
       setScenes([...scenes, newScene]);
       setActiveSceneId(newId);
     } else if (sceneModalMode === 'rename' && targetSceneId) {
@@ -375,6 +392,7 @@ export default function FormationEditorScreen() {
 
   if (!formation) return null;
 
+  const playheadStyle = useAnimatedStyle(() => ({ left: (currentTimeMs.value / 1000) * PX_PER_SEC }));
   const sortedTimeline = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
 
   return (
@@ -437,7 +455,6 @@ export default function FormationEditorScreen() {
         </View>
       )}
 
-      {/* Create Mode Toolbar */}
       {mode === 'create' && (
         <View style={styles.toolbar}>
           <TouchableOpacity style={styles.toolItem} onPress={addDancer}><View style={styles.toolIconCircle}><Ionicons name="person-add" size={20} color="#FFF" /></View><Text style={styles.toolText}>댄서 추가</Text></TouchableOpacity>
@@ -469,7 +486,6 @@ export default function FormationEditorScreen() {
                 contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}
               >
                 <View style={{ width: (status.duration || 60) * PX_PER_SEC }}>
-                  {/* Waveform Background with Seed */}
                   <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
                   <TimeMarkers duration={status.duration || 60} />
                   <Pressable style={styles.rectangleTimelineTrack} onPress={(e) => { setTouchTimeMs((e.nativeEvent.locationX / PX_PER_SEC) * 1000); setShowTimelineMenu(true); }}>
@@ -497,7 +513,7 @@ export default function FormationEditorScreen() {
                 <TouchableOpacity onPress={() => player.seekTo(status.currentTime + 2)}><Ionicons name="play-forward" size={24} color="#FFF" /></TouchableOpacity>
                 <TouchableOpacity onPress={handleExport}><Ionicons name="share-outline" size={24} color={theme.primary} /></TouchableOpacity>
               </View>
-              <Text style={styles.timeText}>{Math.floor(currentTimeUI/1000/60)}:{(Math.floor(currentTimeUI/1000)%60).toString().padStart(2,'0')}</Text>
+              <View style={styles.timeInfoCenter}><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
             </View>
           </View>
         )}
@@ -521,6 +537,7 @@ export default function FormationEditorScreen() {
             <Text style={styles.modalTitle}>대형 추가/삭제 ({formatTime(touchTimeMs)})</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} style={styles.scenePillSmall} onPress={() => { setTimeline([...timeline, { id: Math.random().toString(36).substr(2,9), timestampMillis: touchTimeMs, durationMillis: 3000, sceneId: s.id }]); setShowTimelineMenu(false); }}><Text style={styles.scenePillTextSmall}>{s.name}</Text></TouchableOpacity>)}</ScrollView>
             {selectedEntryId && <TouchableOpacity style={styles.deleteBtn} onPress={() => { setTimeline(timeline.filter(e => e.id !== selectedEntryId)); setSelectedEntryId(null); setShowTimelineMenu(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>블록 삭제</Text></TouchableOpacity>}
+            <TouchableOpacity style={styles.doneBtn} onPress={() => setShowTimelineMenu(false)}><Text style={{ color: '#FFF' }}>닫기</Text></TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -623,7 +640,7 @@ const styles = StyleSheet.create({
   placeModeContent: { padding: 15 },
   rectangleTimelineContainer: { height: 80, backgroundColor: '#111', borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#333', position: 'relative', overflow: 'hidden' },
   waveformContainer: { height: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
-  waveformBar: { width: 3, backgroundColor: '#FFF', borderRadius: 1 },
+  waveformBar: { width: 3, borderRadius: 1 },
   timeMarkersLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 20 },
   timeMarker: { position: 'absolute', bottom: 0, alignItems: 'center' },
   timeMarkerLine: { width: 1, height: 5, backgroundColor: '#444' },
@@ -671,6 +688,8 @@ const styles = StyleSheet.create({
   guideNav: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, width: '100%' },
   navBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#333' },
   navBtnText: { color: '#FFF', fontWeight: 'bold' },
+  sideControlBtn: { padding: 10 },
+  timeInfoCenter: { backgroundColor: '#1A1A1A', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 15 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingCol: { gap: 10 },
   settingLabel: { color: '#AAA', fontSize: 15 },
