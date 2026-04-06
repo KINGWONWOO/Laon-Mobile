@@ -17,6 +17,36 @@ const PX_PER_SEC = 60;
 const TIMELINE_CONTAINER_WIDTH = width - 30;
 const CENTER_OFFSET = TIMELINE_CONTAINER_WIDTH / 2;
 
+type EditorMode = 'create' | 'place';
+
+const GUIDE_STEPS = [
+  {
+    title: '댄서 관리',
+    description: '좌측 하단의 "댄서 추가" 버튼으로 멤버를 늘릴 수 있습니다. 생성된 댄서 노드를 탭하면 이름과 고유 색상을 변경하거나 삭제할 수 있습니다.',
+    image: null
+  },
+  {
+    title: '대형 생성 (Create Mode)',
+    description: '하단의 "대형 목록"에서 대형을 선택하거나 추가(+)하세요. 무대 위 댄서들을 드래그하여 위치를 잡을 수 있습니다. 격자 설정을 통해 정밀한 배치가 가능합니다.',
+    image: null
+  },
+  {
+    title: '대형 배치 (Place Mode)',
+    description: '타임라인을 터치하여 대형을 추가하세요. 생성된 블록의 좌우 화살표를 드래그하여 유지 시간과 전환 시간을 설정할 수 있습니다.',
+    image: require('../../../../example/transitionexample.jpg')
+  },
+  {
+    title: '격자 및 무대 설정',
+    description: '그리드 설정에서 격자 크기를 조절할 수 있습니다. 현재 격자 교차점뿐만 아니라 그 사이 중간 지점(네모 중앙)에도 자석처럼 착 달라붙어 더 세밀한 정렬이 가능합니다.',
+    image: null
+  },
+  {
+    title: '내보내기 및 공유',
+    description: '작업이 완료되면 상단의 공유 버튼을 눌러보세요. 동선이 피드백 영상 형태로 변환되어 팀원들과 함께 보고 의견을 나눌 수 있습니다.',
+    image: null
+  }
+];
+
 // --- Deterministic Waveform Component ---
 const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6)); // 1초당 6개 바
