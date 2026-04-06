@@ -87,14 +87,7 @@ export default function RoomLayout() {
 
   return (
     <Tabs screenOptions={{
-      headerTitle: room?.name || '방',
-      headerStyle: { backgroundColor: theme.card, borderBottomWidth: 1, borderBottomColor: theme.border },
-      headerTintColor: theme.text,
-      headerLeft: () => (
-        <TouchableOpacity onPress={() => router.replace('/rooms')} style={{ marginLeft: 15 }}>
-          <Ionicons name="chevron-back" size={28} color={theme.text} />
-        </TouchableOpacity>
-      ),
+      headerShown: false,
       tabBarStyle: { 
         backgroundColor: theme.card, 
         borderTopColor: theme.border, 

@@ -209,36 +209,47 @@ export default function FeedbackScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: insets.bottom + 80 }]}>
-      <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
-        <Ionicons name="videocam" size={20} color={theme.background} />
-        <Text style={[styles.uploadButtonText, { color: theme.background }]}>연습 영상 올리기</Text>
-      </TouchableOpacity>
-      <FlatList
-        data={roomVideos}
-        keyExtractor={item => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => handleSelectVideo(item)}>
-            <Ionicons 
-              name={item.videoUrl.startsWith('formation://') ? "layers" : "play-circle"} 
-              size={24} 
-              color={theme.primary} 
-            />
-            <View style={{marginLeft: 15, flex: 1}}>
-              <Text style={{color: theme.text, fontWeight: 'bold'}}>{item.title}</Text>
-              <Text style={{color: theme.textSecondary, fontSize: 11}}>{getUserById(item.userId)?.name} • {new Date(item.createdAt).toLocaleDateString()}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={28} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
+        <View style={{ width: 28 }} />
+      </View>
+      
+      <View style={{ paddingBottom: insets.bottom + 80, flex: 1 }}>
+        <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
+          <Ionicons name="videocam" size={20} color={theme.background} />
+          <Text style={[styles.uploadButtonText, { color: theme.background }]}>연습 영상 올리기</Text>
+        </TouchableOpacity>
+        <FlatList
+          data={roomVideos}
+          keyExtractor={item => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => handleSelectVideo(item)}>
+              <Ionicons 
+                name={item.videoUrl.startsWith('formation://') ? "layers" : "play-circle"} 
+                size={24} 
+                color={theme.primary} 
+              />
+              <View style={{marginLeft: 15, flex: 1}}>
+                <Text style={{color: theme.text, fontWeight: 'bold'}}>{item.title}</Text>
+                <Text style={{color: theme.textSecondary, fontSize: 11}}>{getUserById(item.userId)?.name} • {new Date(item.createdAt).toLocaleDateString()}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>영상 업로드</Text>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>영상 업로드</Text>
             <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor="#666" value={videoTitle} onChangeText={setVideoTitle} />
             {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold', color: '#000'}}>갤러리에서 선택</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: '#666', textAlign: 'center'}}>취소</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center'}}>취소</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -248,6 +259,9 @@ export default function FeedbackScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  backBtn: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold' },
   fullView: { flex: 1, backgroundColor: '#000' },
   mainLayout: { flex: 1 },
   landscapeLayout: { flexDirection: 'row' },
@@ -271,6 +285,6 @@ const styles = StyleSheet.create({
   videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 10, borderRadius: 15 },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20, color: '#fff' },
+  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
   pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' }
 });

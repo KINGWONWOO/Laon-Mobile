@@ -1,23 +1,48 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ScrollView, ActivityIndicator, Pressable, FlatList, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ScrollView, ActivityIndicator, Pressable, FlatList, Platform, Image } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons, Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { Dancer, FormationScene, TimelineEntry, Position, Formation, FormationSettings } from '../../../../types';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, SharedValue, withSpring, withTiming, interpolate } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, SharedValue, withSpring, withTiming, interpolate, makeMutable } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
-const STAGE_WIDTH = width - 40;
-const STAGE_HEIGHT = STAGE_WIDTH * 0.75;
 
-const ACCENT_COLOR = '#FF3366';
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
 
 type EditorMode = 'create' | 'place'; // 대형 생성 | 대형 배치
+
+const GUIDE_STEPS = [
+  {
+    title: '댄서 관리',
+    description: '좌측 하단의 "댄서 추가" 버튼으로 멤버를 늘릴 수 있습니다. 생성된 댄서 노드를 탭하면 이름과 고유 색상을 변경하거나 삭제할 수 있습니다.',
+    image: null
+  },
+  {
+    title: '대형 생성 (Create Mode)',
+    description: '하단의 "대형 목록"에서 대형을 선택하거나 추가(+)하세요. 무대 위 댄서들을 드래그하여 위치를 잡을 수 있습니다. 격자 설정을 통해 정밀한 배치가 가능합니다.',
+    image: null
+  },
+  {
+    title: '대형 배치 (Place Mode)',
+    description: '음악을 재생하며 원하는 타이밍에 "배치" 버튼을 누르세요. 현재 선택된 대형이 해당 시점에 추가됩니다. 타임라인의 블록을 통해 순서와 길이를 조절하세요.',
+    image: null
+  },
+  {
+    title: '격자 및 무대 설정',
+    description: '그리드 설정에서 격자 크기를 조절할 수 있습니다. 현재 격자 교차점뿐만 아니라 그 사이 중간 지점(네모 중앙)에도 자석처럼 착 달라붙어 더 세밀한 정렬이 가능합니다.',
+    image: null
+  },
+  {
+    title: '내보내기 및 공유',
+    description: '작업이 완료되면 상단의 공유 버튼을 눌러보세요. 동선이 피드백 영상 형태로 변환되어 팀원들과 함께 보고 의견을 나눌 수 있습니다.',
+    image: null
+  }
+];
 
 // --- Dancer Node ---
 const DancerNode = ({ 
@@ -29,11 +54,13 @@ const DancerNode = ({
   isSelected,
   onPress,
   mode,
-  activeScenePositions,
   index,
   settings,
   createModeX,
-  createModeY
+  createModeY,
+  stageWidth,
+  stageHeight,
+  cellSize
 }: { 
   dancer: Dancer; 
   currentTimeMs: SharedValue<number>; 
@@ -43,11 +70,13 @@ const DancerNode = ({
   isSelected: boolean;
   onPress: () => void;
   mode: EditorMode;
-  activeScenePositions: Record<string, Position>;
   index: number;
   settings: FormationSettings;
   createModeX: SharedValue<number>;
   createModeY: SharedValue<number>;
+  stageWidth: number;
+  stageHeight: number;
+  cellSize: number;
 }) => {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
@@ -59,7 +88,7 @@ const DancerNode = ({
     if (isDragging.value) return dragX.value;
     if (mode === 'create') return createModeX.value;
 
-    if (timeline.length === 0) return STAGE_WIDTH / 2;
+    if (timeline.length === 0) return stageWidth / 2;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
@@ -69,30 +98,30 @@ const DancerNode = ({
       else { nextEntry = timeline[i]; break; }
     }
 
-    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
+    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.x ?? stageWidth / 2;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
-    if (!prevScene) return STAGE_WIDTH / 2;
+    if (!prevScene) return stageWidth / 2;
 
     if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
+      return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
     }
 
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
-      if (!nextScene) return prevScene.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
+      if (!nextScene) return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
       const progress = (time - (prevEntry.timestampMillis + prevEntry.durationMillis)) / (nextEntry.timestampMillis - (prevEntry.timestampMillis + prevEntry.durationMillis));
-      const sX = prevScene.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
-      const eX = nextScene.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
+      const sX = prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
+      const eX = nextScene.positions[dancer.id]?.x ?? stageWidth / 2;
       return sX + (eX - sX) * progress;
     }
-    return prevScene.positions[dancer.id]?.x ?? STAGE_WIDTH / 2;
+    return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
   });
 
   const interpolatedY = useDerivedValue(() => {
     if (isDragging.value) return dragY.value;
     if (mode === 'create') return createModeY.value;
 
-    if (timeline.length === 0) return STAGE_HEIGHT / 2;
+    if (timeline.length === 0) return stageHeight / 2;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
@@ -102,23 +131,23 @@ const DancerNode = ({
       else { nextEntry = timeline[i]; break; }
     }
 
-    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
+    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.y ?? stageHeight / 2;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
-    if (!prevScene) return STAGE_HEIGHT / 2;
+    if (!prevScene) return stageHeight / 2;
 
     if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
+      return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
     }
 
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
-      if (!nextScene) return prevScene.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
+      if (!nextScene) return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
       const progress = (time - (prevEntry.timestampMillis + prevEntry.durationMillis)) / (nextEntry.timestampMillis - (prevEntry.timestampMillis + prevEntry.durationMillis));
-      const sY = prevScene.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
-      const eY = nextScene.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
+      const sY = prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
+      const eY = nextScene.positions[dancer.id]?.y ?? stageHeight / 2;
       return sY + (eY - sY) * progress;
     }
-    return prevScene.positions[dancer.id]?.y ?? STAGE_HEIGHT / 2;
+    return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
   });
 
   const panGesture = Gesture.Pan()
@@ -133,8 +162,8 @@ const DancerNode = ({
     .onUpdate((e) => {
       let nx = startX.value + e.translationX;
       let ny = startY.value + e.translationY;
-      nx = Math.max(15, Math.min(STAGE_WIDTH - 15, nx));
-      ny = Math.max(15, Math.min(STAGE_HEIGHT - 15, ny));
+      nx = Math.max(15, Math.min(stageWidth - 15, nx));
+      ny = Math.max(15, Math.min(stageHeight - 15, ny));
       dragX.value = nx;
       dragY.value = ny;
     })
@@ -143,8 +172,8 @@ const DancerNode = ({
       let fx = dragX.value;
       let fy = dragY.value;
       if (settings.snapToGrid) {
-        const sx = STAGE_WIDTH / settings.gridCols;
-        const sy = STAGE_HEIGHT / settings.gridRows;
+        const sx = cellSize / 2;
+        const sy = cellSize / 2;
         fx = Math.round(fx / sx) * sx;
         fy = Math.round(fy / sy) * sy;
       }
@@ -191,18 +220,24 @@ export default function FormationEditorScreen() {
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const BASE_CELL_SIZE = Math.floor(width / 10);
+  const CELL_SIZE = BASE_CELL_SIZE * zoomLevel;
+  const STAGE_WIDTH = settings.gridCols * CELL_SIZE;
+  const STAGE_HEIGHT = settings.gridRows * CELL_SIZE;
+
   // Smooth transition values for Create mode
   const dancerPositionsX = useRef<Record<string, SharedValue<number>>>({}).current;
   const dancerPositionsY = useRef<Record<string, SharedValue<number>>>({}).current;
 
-  useEffect(() => {
-    dancers.forEach(d => {
-      if (!dancerPositionsX[d.id]) {
-        dancerPositionsX[d.id] = new SharedValue(STAGE_WIDTH / 2);
-        dancerPositionsY[d.id] = new SharedValue(STAGE_HEIGHT / 2);
-      }
-    });
-  }, [dancers]);
+  // Initialize shared values stably
+  dancers.forEach(d => {
+    if (!dancerPositionsX[d.id]) {
+      const activePositions = scenes.find(s => s.id === activeSceneId)?.positions || {};
+      dancerPositionsX[d.id] = makeMutable(activePositions[d.id]?.x ?? STAGE_WIDTH / 2);
+      dancerPositionsY[d.id] = makeMutable(activePositions[d.id]?.y ?? STAGE_HEIGHT / 2);
+    }
+  });
 
   useEffect(() => {
     if (activeSceneId && mode === 'create') {
@@ -220,7 +255,14 @@ export default function FormationEditorScreen() {
   const [showDancerSheet, setShowDancerSheet] = useState(false);
   const [showStageSettings, setShowStageSettings] = useState(false);
   const [showSceneNameModal, setShowSceneNameModal] = useState(false);
+  const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
+  const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
   const [inputName, setInputName] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
+  const [guideIndex, setGuideIndex] = useState(0);
+
+  // Reset guide index on open
+  useEffect(() => { if (showGuide) setGuideIndex(0); }, [showGuide]);
 
   // Audio & Animation
   const player = useAudioPlayer(formation?.audioUrl || '');
@@ -244,7 +286,7 @@ export default function FormationEditorScreen() {
     setScenes(prev => prev.map(s => s.id === activeSceneId ? {
       ...s, positions: { ...s.positions, [dancerId]: pos }
     } : s));
-    // Immediately update shared value for create mode
+    // Immediately update shared values to reflect current pos during drag end
     if (dancerPositionsX[dancerId]) {
       dancerPositionsX[dancerId].value = pos.x;
       dancerPositionsY[dancerId].value = pos.y;
@@ -258,24 +300,56 @@ export default function FormationEditorScreen() {
     setScenes(prev => prev.map(s => ({ ...s, positions: { ...s.positions, [newId]: { x: STAGE_WIDTH / 2, y: STAGE_HEIGHT / 2 } } })));
   };
 
-  const addScene = () => {
-    const newId = Math.random().toString(36).substr(2, 9);
-    const lastScene = scenes[scenes.length - 1];
-    const newScene: FormationScene = { id: newId, name: inputName.trim() || `대형 ${scenes.length + 1}`, positions: lastScene ? { ...lastScene.positions } : {} };
-    setScenes([...scenes, newScene]);
-    setActiveSceneId(newId);
+  const handleSceneAction = () => {
+    if (sceneModalMode === 'add') {
+      const newId = Math.random().toString(36).substr(2, 9);
+      const lastScene = scenes[scenes.length - 1];
+      const newScene: FormationScene = { id: newId, name: inputName.trim() || `대형 ${scenes.length + 1}`, positions: lastScene ? { ...lastScene.positions } : {} };
+      setScenes([...scenes, newScene]);
+      setActiveSceneId(newId);
+    } else if (sceneModalMode === 'rename' && targetSceneId) {
+      setScenes(prev => prev.map(s => s.id === targetSceneId ? { ...s, name: inputName.trim() || s.name } : s));
+    }
     setShowSceneNameModal(false);
     setInputName('');
+    setTargetSceneId(null);
   };
 
   const deleteScene = (sid: string) => {
+    if (scenes.length <= 1) return Alert.alert('삭제 불가', '최소 하나의 대형은 있어야 합니다.');
     Alert.alert('대형 삭제', '이 대형을 삭제하시겠습니까?', [
-      { text: '취소' },
+      { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: () => {
-        setScenes(prev => prev.filter(s => s.id !== sid));
+        setScenes(prev => {
+          const updated = prev.filter(s => s.id !== sid);
+          if (activeSceneId === sid) setActiveSceneId(updated[0]?.id || null);
+          return updated;
+        });
         setTimeline(prev => prev.filter(e => e.sceneId !== sid));
-        if (activeSceneId === sid) setActiveSceneId(scenes[0]?.id || null);
       }}
+    ]);
+  };
+
+  const duplicateScene = (sid: string) => {
+    const sceneToDup = scenes.find(s => s.id === sid);
+    if (!sceneToDup) return;
+    const newId = Math.random().toString(36).substr(2, 9);
+    const newScene: FormationScene = { ...sceneToDup, id: newId, name: `${sceneToDup.name} (복사)` };
+    setScenes(prev => {
+      const idx = prev.findIndex(s => s.id === sid);
+      const updated = [...prev];
+      updated.splice(idx + 1, 0, newScene);
+      return updated;
+    });
+    setActiveSceneId(newId);
+  };
+
+  const openSceneMenu = (s: FormationScene) => {
+    Alert.alert(s.name, '수행할 작업을 선택하세요.', [
+      { text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneNameModal(true); }},
+      { text: '대형 복사', onPress: () => duplicateScene(s.id) },
+      { text: '삭제', style: 'destructive', onPress: () => deleteScene(s.id) },
+      { text: '취소', style: 'cancel' }
     ]);
   };
 
@@ -318,7 +392,7 @@ export default function FormationEditorScreen() {
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: '#050505' }]}>
       {/* --- Top Bar --- */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 15 }]}>
         <TouchableOpacity onPress={() => { player.pause(); router.back(); }} style={styles.topBtn}>
           <Ionicons name="chevron-back" size={28} color="#FFF" />
         </TouchableOpacity>
@@ -335,94 +409,102 @@ export default function FormationEditorScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} scrollEnabled={false}>
-        {/* --- Main Stage --- */}
-        <View style={styles.stageSection}>
-          <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE'}</Text>
-          <View style={[styles.stage, { borderColor: 'rgba(255,255,255,0.1)' }]}>
-            <View style={styles.gridLayer}>
-              {Array.from({length: settings.gridCols + 1}).map((_, i) => (
-                <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/settings.gridCols)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
-              ))}
-              {Array.from({length: settings.gridRows + 1}).map((_, i) => (
-                <View key={`h-${i}`} style={[styles.gridLineH, { top: `${(i/settings.gridRows)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
-              ))}
-            </View>
-            <View style={styles.centerCross}><Ionicons name="add" size={20} color="rgba(255,255,255,0.2)" /></View>
-            {dancers.map((d, i) => (
-              <DancerNode 
-                key={d.id} index={i} dancer={d} currentTimeMs={currentTimeMs} scenes={scenes} timeline={timeline}
-                onDragEnd={handleDragEnd} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }}
-                mode={mode} activeScenePositions={activeScenePositions} settings={settings}
-                createModeX={dancerPositionsX[d.id] || new SharedValue(STAGE_WIDTH/2)} createModeY={dancerPositionsY[d.id] || new SharedValue(STAGE_HEIGHT/2)}
-              />
-            ))}
-          </View>
-          <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'AUDIENCE' : 'BACKSTAGE'}</Text>
+      <View style={styles.stageSection}>
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.max(0.5, prev - 0.2))}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
+          <Text style={styles.zoomText}>{Math.round(zoomLevel * 100)}%</Text>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.min(3, prev + 0.2))}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
         </View>
 
-        {/* --- Mode Specific Toolbar --- */}
+        <ScrollView horizontal style={{ flex: 1, width: '100%' }}>
+          <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ padding: 40, alignItems: 'center', justifyContent: 'center', minWidth: width, minHeight: 400 }}>
+            <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'AUDIENCE' : 'BACKSTAGE'}</Text>
+            <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, borderColor: 'rgba(255,255,255,0.1)' }]}>
+              <View style={styles.gridLayer}>
+                {Array.from({length: settings.gridCols + 1}).map((_, i) => (
+                  <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/settings.gridCols)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
+                ))}
+                {Array.from({length: settings.gridRows + 1}).map((_, i) => (
+                  <View key={`h-${i}`} style={[styles.gridLineH, { top: `${(i/settings.gridRows)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
+                ))}
+              </View>
+              {dancers.map((d, i) => (
+                <DancerNode 
+                  key={d.id} index={i} dancer={d} currentTimeMs={currentTimeMs} scenes={scenes} timeline={timeline}
+                  onDragEnd={handleDragEnd} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }}
+                  mode={mode} index={i} settings={settings}
+                  createModeX={dancerPositionsX[d.id]} createModeY={dancerPositionsY[d.id]}
+                  stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE}
+                />
+              ))}
+            </View>
+            <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE'}</Text>
+          </ScrollView>
+        </ScrollView>
+      </View>
+
+      {/* --- Mode Specific Toolbar --- */}
+      {mode === 'create' ? (
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.toolItem} onPress={addDancer}><View style={styles.toolIconCircle}><Ionicons name="person-add" size={20} color="#FFF" /></View><Text style={styles.toolText}>댄서 추가</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.toolItem} onPress={() => setShowGuide(true)}><View style={styles.toolIconCircle}><Ionicons name="help-circle-outline" size={20} color="#FFF" /></View><Text style={styles.toolText}>사용방법</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.toolItem} onPress={() => setShowStageSettings(true)}><View style={styles.toolIconCircle}><Ionicons name="grid" size={20} color="#FFF" /></View><Text style={styles.toolText}>그리드 설정</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.toolItem} onPress={handleSave}><View style={styles.toolIconCircle}><Ionicons name="save-outline" size={20} color={theme.primary} /></View><Text style={styles.toolText}>저장</Text></TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.toolbarSpacer} />
+      )}
+
+      {/* --- Bottom Dynamic Area --- */}
+      <View style={[styles.bottomDock, { paddingBottom: insets.bottom + 20 }]}>
         {mode === 'create' ? (
-          <View style={styles.toolbar}>
-            <TouchableOpacity style={styles.toolItem} onPress={addDancer}><View style={styles.toolIconCircle}><Ionicons name="person-add" size={20} color="#FFF" /></View><Text style={styles.toolText}>댄서 추가</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.toolItem} onPress={() => setShowStageSettings(true)}><View style={styles.toolIconCircle}><Ionicons name="grid" size={20} color="#FFF" /></View><Text style={styles.toolText}>그리드 설정</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.toolItem} onPress={handleSave}><View style={styles.toolIconCircle}><Ionicons name="save-outline" size={20} color={theme.primary} /></View><Text style={styles.toolText}>저장</Text></TouchableOpacity>
+          <View style={styles.createModeContent}>
+            <View style={styles.scenesHeader}><Text style={styles.dockTitle}>대형 목록</Text><TouchableOpacity onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneNameModal(true); }}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity></View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scenesScroll}>
+              {scenes.map((s, idx) => (
+                <TouchableOpacity key={s.id} onLongPress={() => openSceneMenu(s)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary, borderColor: theme.primary }]} onPress={() => setActiveSceneId(s.id)}>
+                  <Text style={[styles.scenePillText, activeSceneId === s.id && { color: '#000' }]}>{s.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         ) : (
-          <View style={styles.toolbarSpacer} />
-        )}
-
-        {/* --- Bottom Dynamic Area --- */}
-        <View style={[styles.bottomDock, { paddingBottom: insets.bottom + 10 }]}>
-          {mode === 'create' ? (
-            <View style={styles.createModeContent}>
-              <View style={styles.scenesHeader}><Text style={styles.dockTitle}>대형 목록</Text><TouchableOpacity onPress={() => setShowSceneNameModal(true)}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity></View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scenesScroll}>
-                {scenes.map((s, idx) => (
-                  <TouchableOpacity key={s.id} onLongPress={() => deleteScene(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary, borderColor: theme.primary }]} onPress={() => setActiveSceneId(s.id)}>
-                    <Text style={[styles.scenePillText, activeSceneId === s.id && { color: '#000' }]}>{s.name}</Text>
+          <View style={styles.placeModeContent}>
+            <View style={styles.playbackControls}>
+              <TouchableOpacity onPress={() => player.seekTo(status.currentTime - 2)}><Ionicons name="play-back" size={24} color="#FFF" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => status.playing ? player.pause() : player.play()} style={[styles.mainPlayBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => player.seekTo(status.currentTime + 2)}><Ionicons name="play-forward" size={24} color="#FFF" /></TouchableOpacity>
+              <View style={styles.timeInfo}><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
+              <TouchableOpacity style={styles.addPointBtn} onPress={addTimelineEntry}><Ionicons name="pin" size={20} color={theme.primary} /><Text style={{ color: theme.primary, marginLeft: 5, fontWeight: 'bold' }}>배치</Text></TouchableOpacity>
+            </View>
+            <View style={styles.timelineContainer}>
+              <View style={styles.timelineTrack} />
+              <View style={[styles.timelineProgress, { width: `${(status.currentTime / (status.duration || 1)) * 100}%`, backgroundColor: theme.primary }]} />
+              {timeline.map(entry => {
+                const startPos = (entry.timestampMillis / ((status.duration || 60) * 1000)) * 100;
+                const widthPos = (entry.durationMillis / ((status.duration || 60) * 1000)) * 100;
+                const isSelected = selectedEntryId === entry.id;
+                return (
+                  <TouchableOpacity key={entry.id} activeOpacity={0.9} onPress={() => setSelectedEntryId(entry.id)} style={[styles.timelineBlock, { left: `${startPos}%`, width: `${widthPos}%`, backgroundColor: isSelected ? theme.primary : 'rgba(255,255,255,0.2)' }]}>
+                    <Text style={[styles.blockLabel, isSelected && { color: '#000' }]} numberOfLines={1}>{scenes.find(s => s.id === entry.sceneId)?.name}</Text>
+                    {isSelected && (
+                      <>
+                        <TouchableOpacity style={styles.resizeHandleLeft} onPress={() => updateEntryStart(entry.id, -500)}><Ionicons name="chevron-back" size={14} color="#000" /></TouchableOpacity>
+                        <TouchableOpacity style={styles.resizeHandleRight} onPress={() => updateEntryDuration(entry.id, 500)}><Ionicons name="chevron-forward" size={14} color="#000" /></TouchableOpacity>
+                      </>
+                    )}
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
+                );
+              })}
             </View>
-          ) : (
-            <View style={styles.placeModeContent}>
-              <View style={styles.playbackControls}>
-                <TouchableOpacity onPress={() => player.seekTo(status.currentTime - 2)}><Ionicons name="play-back" size={24} color="#FFF" /></TouchableOpacity>
-                <TouchableOpacity onPress={() => status.playing ? player.pause() : player.play()} style={[styles.mainPlayBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
-                <TouchableOpacity onPress={() => player.seekTo(status.currentTime + 2)}><Ionicons name="play-forward" size={24} color="#FFF" /></TouchableOpacity>
-                <View style={styles.timeInfo}><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
-                <TouchableOpacity style={styles.addPointBtn} onPress={addTimelineEntry}><Ionicons name="pin" size={20} color={theme.primary} /><Text style={{ color: theme.primary, marginLeft: 5, fontWeight: 'bold' }}>배치</Text></TouchableOpacity>
-              </View>
-              <View style={styles.timelineContainer}>
-                <View style={styles.timelineTrack} />
-                <View style={[styles.timelineProgress, { width: `${(status.currentTime / (status.duration || 1)) * 100}%`, backgroundColor: theme.primary }]} />
-                {timeline.map(entry => {
-                  const startPos = (entry.timestampMillis / ((status.duration || 60) * 1000)) * 100;
-                  const widthPos = (entry.durationMillis / ((status.duration || 60) * 1000)) * 100;
-                  const isSelected = selectedEntryId === entry.id;
-                  return (
-                    <TouchableOpacity key={entry.id} activeOpacity={0.9} onPress={() => setSelectedEntryId(entry.id)} style={[styles.timelineBlock, { left: `${startPos}%`, width: `${widthPos}%`, backgroundColor: isSelected ? theme.primary : 'rgba(255,255,255,0.2)' }]}>
-                      <Text style={[styles.blockLabel, isSelected && { color: '#000' }]} numberOfLines={1}>{scenes.find(s => s.id === entry.sceneId)?.name}</Text>
-                      {isSelected && (
-                        <>
-                          <TouchableOpacity style={styles.resizeHandleLeft} onPress={() => updateEntryStart(entry.id, -500)}><Ionicons name="chevron-back" size={14} color="#000" /></TouchableOpacity>
-                          <TouchableOpacity style={styles.resizeHandleRight} onPress={() => updateEntryDuration(entry.id, 500)}><Ionicons name="chevron-forward" size={14} color="#000" /></TouchableOpacity>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
+          </View>
+        )}
+      </View>
 
       {/* --- Dancer Sheet --- */}
       <Modal visible={showDancerSheet} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowDancerSheet(false)}>
-          <View style={styles.bottomSheet}>
+          <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 25 }]}>
             <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>댄서 편집</Text><TouchableOpacity onPress={() => setShowDancerSheet(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity></View>
             {selectedDancerId && (
               <View style={styles.sheetContent}>
@@ -463,9 +545,43 @@ export default function FormationEditorScreen() {
       <Modal visible={showSceneNameModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
-            <Text style={styles.modalTitle}>대형 이름</Text>
+            <Text style={styles.modalTitle}>{sceneModalMode === 'add' ? '대형 추가' : '대형 이름 변경'}</Text>
             <TextInput style={styles.modalInput} value={inputName} onChangeText={setInputName} placeholder="예: 후렴 1" placeholderTextColor="#555" autoFocus />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20 }}><TouchableOpacity onPress={() => setShowSceneNameModal(false)}><Text style={{ color: '#888' }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={addScene}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>추가</Text></TouchableOpacity></View>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20 }}><TouchableOpacity onPress={() => setShowSceneNameModal(false)}><Text style={{ color: '#888' }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- Usage Guide Modal --- */}
+      <Modal visible={showGuide} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.settingsModal, { width: '90%', maxHeight: '85%' }]}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.modalTitle}>동선 가이드 ({guideIndex + 1}/{GUIDE_STEPS.length})</Text>
+              <TouchableOpacity onPress={() => setShowGuide(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
+            </View>
+            
+            <View style={styles.guideContent}>
+              <View style={styles.guideImagePlaceholder}>
+                {GUIDE_STEPS[guideIndex].image ? (
+                  <Image source={GUIDE_STEPS[guideIndex].image} style={styles.guideImage} resizeMode="contain" />
+                ) : (
+                  <View style={styles.emptyImage}><Ionicons name="image-outline" size={40} color="#333" /><Text style={{ color: '#333', marginTop: 10 }}>이미지 준비 중</Text></View>
+                )}
+              </View>
+              <Text style={styles.guideStepTitle}>{GUIDE_STEPS[guideIndex].title}</Text>
+              <Text style={styles.guideDescription}>{GUIDE_STEPS[guideIndex].description}</Text>
+            </View>
+
+            <View style={styles.guideNav}>
+              <TouchableOpacity style={[styles.navBtn, guideIndex === 0 && { opacity: 0.3 }]} disabled={guideIndex === 0} onPress={() => setGuideIndex(prev => prev - 1)}>
+                <Ionicons name="chevron-back" size={20} color="#FFF" /><Text style={styles.navBtnText}>이전</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.navBtn, guideIndex === GUIDE_STEPS.length - 1 && { backgroundColor: theme.primary }]} onPress={() => { if (guideIndex < GUIDE_STEPS.length - 1) setGuideIndex(prev => prev + 1); else setShowGuide(false); }}>
+                <Text style={[styles.navBtnText, guideIndex === GUIDE_STEPS.length - 1 && { color: '#000' }]}>{guideIndex === GUIDE_STEPS.length - 1 ? '완료' : '다음'}</Text>
+                {guideIndex < GUIDE_STEPS.length - 1 && <Ionicons name="chevron-forward" size={20} color="#FFF" />}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -475,37 +591,40 @@ export default function FormationEditorScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10 },
   topBtn: { padding: 10 },
   modeToggle: { flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 25, padding: 4, borderWidth: 1, borderColor: '#333' },
   modeTab: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20 },
   activeModeTab: { backgroundColor: '#333' },
   modeTabText: { color: '#666', fontSize: 13, fontWeight: 'bold' },
   activeModeTabText: { color: '#FFF' },
-  stageSection: { alignItems: 'center', paddingVertical: 10 },
-  directionLabel: { color: '#333', fontSize: 10, fontWeight: 'bold', letterSpacing: 4, marginVertical: 8 },
-  stage: { width: STAGE_WIDTH, height: STAGE_HEIGHT, backgroundColor: '#0A0A0A', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+  stageSection: { flex: 1, position: 'relative' },
+  zoomControls: { position: 'absolute', top: 10, right: 15, zIndex: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 5, borderWidth: 1, borderColor: '#333' },
+  zoomBtn: { padding: 5 },
+  zoomText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginHorizontal: 8 },
+  directionLabel: { color: '#333', fontSize: 10, fontWeight: 'bold', letterSpacing: 4, marginVertical: 15 },
+  stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#FFF' },
   gridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#FFF' },
-  centerCross: { position: 'absolute', top: STAGE_HEIGHT/2 - 10, left: STAGE_WIDTH/2 - 10 },
+  centerCross: { position: 'absolute', top: '50%', left: '50%', marginTop: -10, marginLeft: -10 },
   dancerNode: { position: 'absolute', alignItems: 'center', width: 60, marginLeft: -30 },
   dancerCircle: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
   dancerInitial: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   dancerNameText: { color: '#AAA', fontSize: 10, marginTop: 4, fontWeight: '500' },
-  toolbar: { flexDirection: 'row', justifyContent: 'center', gap: 30, marginVertical: 15 },
-  toolbarSpacer: { height: 44, marginVertical: 15 },
+  toolbar: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginVertical: 10 },
+  toolbarSpacer: { height: 44, marginVertical: 10 },
   toolItem: { alignItems: 'center', gap: 6 },
   toolIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   toolText: { color: '#888', fontSize: 11 },
   bottomDock: { borderTopWidth: 1, borderTopColor: '#222', backgroundColor: '#000' },
-  createModeContent: { padding: 20 },
+  createModeContent: { padding: 15 },
   dockTitle: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   scenesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   scenesScroll: { gap: 10 },
   scenePill: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 15, borderWidth: 1, borderColor: '#333', backgroundColor: '#111' },
   scenePillText: { color: '#AAA', fontWeight: 'bold', fontSize: 13 },
-  placeModeContent: { padding: 20 },
+  placeModeContent: { padding: 15 },
   playbackControls: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 20 },
   mainPlayBtn: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   timeInfo: { backgroundColor: '#1A1A1A', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
@@ -538,5 +657,14 @@ const styles = StyleSheet.create({
   gridInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'center' },
   gridInput: { backgroundColor: '#000', color: '#FFF', width: 60, textAlign: 'center', padding: 10, borderRadius: 8 },
   doneBtn: { padding: 16, borderRadius: 15, alignItems: 'center', marginTop: 10 },
-  modalInput: { backgroundColor: '#000', color: '#FFF', padding: 15, borderRadius: 12, fontSize: 16, marginBottom: 10 }
+  modalInput: { backgroundColor: '#000', color: '#FFF', padding: 15, borderRadius: 12, fontSize: 16, marginBottom: 10 },
+  guideContent: { alignItems: 'center', gap: 15 },
+  guideImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#000', borderRadius: 15, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  guideImage: { width: '100%', height: '100%' },
+  emptyImage: { alignItems: 'center' },
+  guideStepTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  guideDescription: { color: '#CCC', fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  guideNav: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, width: '100%' },
+  navBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#333' },
+  navBtnText: { color: '#FFF', fontWeight: 'bold' }
 });
