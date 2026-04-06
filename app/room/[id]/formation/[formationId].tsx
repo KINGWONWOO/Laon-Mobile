@@ -37,7 +37,14 @@ const GUIDE_STEPS = [
   }
 ];
 
-// --- Recorder-style Symmetrical Waveform ---
+const formatTime = (ms: number) => {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// --- Single Bar Waveform Component ---
 const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6));
   const bars = useMemo(() => {
@@ -61,10 +68,7 @@ const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, 
   return (
     <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC }]}>
       {bars.map((bar, i) => (
-        <View key={i} style={styles.waveformBarWrapper}>
-          <View style={[styles.waveformBarNode, { height: bar.height, opacity: bar.opacity }]} />
-          <View style={[styles.waveformBarNode, { height: bar.height, opacity: bar.opacity, marginTop: 2 }]} />
-        </View>
+        <View key={i} style={[styles.waveformBar, { height: bar.height, opacity: bar.opacity, backgroundColor: bar.opacity > 0.3 ? '#FFF' : '#888' }]} />
       ))}
     </View>
   );
@@ -173,6 +177,7 @@ export default function FormationEditorScreen() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   
   const STAGE_MARGIN = zoomLevel === 1 ? 0 : 40;
@@ -289,6 +294,15 @@ export default function FormationEditorScreen() {
   const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('저장 완료'); } catch (e: any) { Alert.alert('오류', e.message); } };
   const handleExport = async () => { try { await publishFormationAsFeedback(id!, formationId!, formation!.title); Alert.alert('내보내기 성공'); } catch (e: any) { Alert.alert('오류', e.message); } };
 
+  const addDancer = () => {
+    const newDancer: Dancer = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: `댄서 ${dancers.length + 1}`,
+      color: COLORS[dancers.length % COLORS.length]
+    };
+    setDancers([...dancers, newDancer]);
+  };
+
   const handleSceneAction = () => {
     if (sceneModalMode === 'add') {
       const newId = Math.random().toString(36).substr(2, 9);
@@ -361,6 +375,21 @@ export default function FormationEditorScreen() {
       <View style={[styles.bottomDock, { paddingBottom: insets.bottom + 20 }]}>
         {mode === 'create' ? (
           <View style={styles.createModeContent}>
+            <View style={styles.toolbar}>
+              <TouchableOpacity style={styles.toolItem} onPress={addDancer}>
+                <View style={styles.toolIconCircle}><Ionicons name="person-add" size={20} color={theme.primary} /></View>
+                <Text style={styles.toolText}>댄서 추가</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolItem} onPress={() => setShowStageSettings(true)}>
+                <View style={styles.toolIconCircle}><Ionicons name="settings-outline" size={20} color="#AAA" /></View>
+                <Text style={styles.toolText}>무대 설정</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolItem} onPress={() => { setGuideIndex(0); setShowGuide(true); }}>
+                <View style={styles.toolIconCircle}><Ionicons name="help-circle-outline" size={20} color="#AAA" /></View>
+                <Text style={styles.toolText}>가이드</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.scenesHeader}><Text style={styles.dockTitle}>대형 목록</Text><TouchableOpacity onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneNameModal(true); }}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity></View>
             <ScrollView horizontal contentContainerStyle={styles.scenesScroll}>
               {scenes.map(s => <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneNameModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]} onPress={() => setActiveSceneId(s.id)}><Text style={[styles.scenePillText, activeSceneId === s.id && { color: '#000' }]}>{s.name}</Text></TouchableOpacity>)}
@@ -401,7 +430,7 @@ export default function FormationEditorScreen() {
                 <TouchableOpacity onPress={() => player.seekTo(status.currentTime + 2)}><Ionicons name="play-forward" size={24} color="#FFF" /></TouchableOpacity>
                 <TouchableOpacity onPress={handleExport}><Ionicons name="share-outline" size={24} color={theme.primary} /></TouchableOpacity>
               </View>
-              <Text style={styles.timeText}>{Math.floor(currentTimeUI/1000/60)}:{(Math.floor(currentTimeUI/1000)%60).toString().padStart(2,'0')}</Text>
+              <Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text>
             </View>
           </View>
         )}
@@ -420,7 +449,7 @@ export default function FormationEditorScreen() {
       <Modal visible={showTimelineMenu} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowTimelineMenu(false)}>
           <View style={styles.settingsModal}>
-            <Text style={styles.modalTitle}>대형 추가/삭제</Text>
+            <Text style={styles.modalTitle}>대형 추가/삭제 ({formatTime(touchTimeMs)})</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} style={styles.scenePillSmall} onPress={() => { setTimeline([...timeline, { id: Math.random().toString(36).substr(2,9), timestampMillis: touchTimeMs, durationMillis: 3000, sceneId: s.id }]); setShowTimelineMenu(false); }}><Text style={styles.scenePillTextSmall}>{s.name}</Text></TouchableOpacity>)}</ScrollView>
             {selectedEntryId && <TouchableOpacity style={styles.deleteBtn} onPress={() => { setTimeline(timeline.filter(e => e.id !== selectedEntryId)); setSelectedEntryId(null); setShowTimelineMenu(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>블록 삭제</Text></TouchableOpacity>}
             <TouchableOpacity style={styles.doneBtn} onPress={() => setShowTimelineMenu(false)}><Text style={{ color: '#FFF' }}>닫기</Text></TouchableOpacity>
@@ -434,6 +463,33 @@ export default function FormationEditorScreen() {
             <Text style={styles.modalTitle}>{sceneModalMode === 'add' ? '대형 추가' : '대형 이름 변경'}</Text>
             <TextInput style={styles.modalInput} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus />
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20 }}><TouchableOpacity onPress={() => setShowSceneNameModal(false)}><Text style={{ color: '#888' }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showStageSettings} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.settingsModal}>
+            <Text style={styles.modalTitle}>무대 설정</Text>
+            <View style={styles.settingRow}><Text style={styles.settingLabel}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View>
+            <View style={styles.settingRow}><Text style={styles.settingLabel}>무대 앞 방향</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.primary }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{ fontWeight: 'bold' }}>{settings.stageDirection === 'top' ? '상단' : '하단'}</Text></TouchableOpacity></View>
+            <View style={styles.settingCol}>
+              <Text style={styles.settingLabel}>댄서 이름 크기 ({settings.dancerNameSize || 8})</Text>
+              <View style={styles.gridInputRow}>
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.max(4, (settings.dancerNameSize || 8) - 1)})}><Ionicons name="remove-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+                <TextInput style={[styles.gridInput, { width: 50 }]} keyboardType="numeric" value={(settings.dancerNameSize || 8).toString()} onChangeText={v => setSettings({...settings, dancerNameSize: parseInt(v) || 8})} />
+                <TouchableOpacity onPress={() => setSettings({...settings, dancerNameSize: Math.min(20, (settings.dancerNameSize || 8) + 1)})}><Ionicons name="add-circle-outline" size={24} color={theme.primary} /></TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.settingCol}>
+              <Text style={styles.settingLabel}>그리드 크기 (가로 x 세로)</Text>
+              <View style={styles.gridInputRow}>
+                <TextInput style={styles.gridInput} keyboardType="numeric" value={settings.gridCols.toString()} onChangeText={v => setSettings({...settings, gridCols: parseInt(v) || 1})} />
+                <Text style={{ color: '#FFF' }}>x</Text>
+                <TextInput style={styles.gridInput} keyboardType="numeric" value={settings.gridRows.toString()} onChangeText={v => setSettings({...settings, gridRows: parseInt(v) || 1})} />
+              </View>
+            </View>
+            <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={() => setShowStageSettings(false)}><Text style={{ fontWeight: 'bold' }}>확인</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -492,8 +548,7 @@ const styles = StyleSheet.create({
   placeModeContent: { padding: 15 },
   rectangleTimelineContainer: { height: 80, backgroundColor: '#111', borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#333', position: 'relative', overflow: 'hidden' },
   waveformContainer: { height: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
-  waveformBarWrapper: { width: 3, justifyContent: 'center', alignItems: 'center' },
-  waveformBarNode: { width: 3, backgroundColor: '#FFF', borderRadius: 1.5 },
+  waveformBar: { width: 3, backgroundColor: '#FFF', borderRadius: 1.5 },
   timeMarkersLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 20 },
   timeMarker: { position: 'absolute', bottom: 0, alignItems: 'center' },
   timeMarkerLine: { width: 1, height: 5, backgroundColor: '#444' },
@@ -539,5 +594,8 @@ const styles = StyleSheet.create({
   settingLabel: { color: '#AAA', fontSize: 15 },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   gridInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'center' },
-  gridInput: { backgroundColor: '#000', color: '#FFF', width: 60, textAlign: 'center', padding: 10, borderRadius: 8 }
+  gridInput: { backgroundColor: '#000', color: '#FFF', width: 60, textAlign: 'center', padding: 10, borderRadius: 8 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  navBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#333' },
+  navBtnText: { color: '#FFF', fontWeight: 'bold' }
 });
