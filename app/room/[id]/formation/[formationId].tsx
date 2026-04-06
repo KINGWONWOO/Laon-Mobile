@@ -60,7 +60,8 @@ const DancerNode = ({
   createModeY,
   stageWidth,
   stageHeight,
-  cellSize
+  cellSize,
+  zoomLevel
 }: { 
   dancer: Dancer; 
   currentTimeMs: SharedValue<number>; 
@@ -77,6 +78,7 @@ const DancerNode = ({
   stageWidth: number;
   stageHeight: number;
   cellSize: number;
+  zoomLevel: number;
 }) => {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
@@ -84,11 +86,12 @@ const DancerNode = ({
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
 
+  // Position is stored as normalized 0~1 in shared values
   const interpolatedX = useDerivedValue(() => {
     if (isDragging.value) return dragX.value;
     if (mode === 'create') return createModeX.value;
 
-    if (timeline.length === 0) return stageWidth / 2;
+    if (timeline.length === 0) return 0.5;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
@@ -98,30 +101,30 @@ const DancerNode = ({
       else { nextEntry = timeline[i]; break; }
     }
 
-    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.x ?? stageWidth / 2;
+    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.x ?? 0.5;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
-    if (!prevScene) return stageWidth / 2;
+    if (!prevScene) return 0.5;
 
     if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
+      return prevScene.positions[dancer.id]?.x ?? 0.5;
     }
 
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
-      if (!nextScene) return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
+      if (!nextScene) return prevScene.positions[dancer.id]?.x ?? 0.5;
       const progress = (time - (prevEntry.timestampMillis + prevEntry.durationMillis)) / (nextEntry.timestampMillis - (prevEntry.timestampMillis + prevEntry.durationMillis));
-      const sX = prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
-      const eX = nextScene.positions[dancer.id]?.x ?? stageWidth / 2;
+      const sX = prevScene.positions[dancer.id]?.x ?? 0.5;
+      const eX = nextScene.positions[dancer.id]?.x ?? 0.5;
       return sX + (eX - sX) * progress;
     }
-    return prevScene.positions[dancer.id]?.x ?? stageWidth / 2;
+    return prevScene.positions[dancer.id]?.x ?? 0.5;
   });
 
   const interpolatedY = useDerivedValue(() => {
     if (isDragging.value) return dragY.value;
     if (mode === 'create') return createModeY.value;
 
-    if (timeline.length === 0) return stageHeight / 2;
+    if (timeline.length === 0) return 0.5;
     const time = currentTimeMs.value;
     let prevEntry: TimelineEntry | null = null;
     let nextEntry: TimelineEntry | null = null;
@@ -131,24 +134,26 @@ const DancerNode = ({
       else { nextEntry = timeline[i]; break; }
     }
 
-    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.y ?? stageHeight / 2;
+    if (!prevEntry) return scenes.find(s => s.id === timeline[0].sceneId)?.positions[dancer.id]?.y ?? 0.5;
     const prevScene = scenes.find(s => s.id === prevEntry!.sceneId);
-    if (!prevScene) return stageHeight / 2;
+    if (!prevScene) return 0.5;
 
     if (time <= prevEntry.timestampMillis + prevEntry.durationMillis) {
-      return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
+      return prevScene.positions[dancer.id]?.y ?? 0.5;
     }
 
     if (nextEntry) {
       const nextScene = scenes.find(s => s.id === nextEntry!.sceneId);
-      if (!nextScene) return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
+      if (!nextScene) return prevScene.positions[dancer.id]?.y ?? 0.5;
       const progress = (time - (prevEntry.timestampMillis + prevEntry.durationMillis)) / (nextEntry.timestampMillis - (prevEntry.timestampMillis + prevEntry.durationMillis));
-      const sY = prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
-      const eY = nextScene.positions[dancer.id]?.y ?? stageHeight / 2;
+      const sY = prevScene.positions[dancer.id]?.y ?? 0.5;
+      const eY = nextScene.positions[dancer.id]?.y ?? 0.5;
       return sY + (eY - sY) * progress;
     }
-    return prevScene.positions[dancer.id]?.y ?? stageHeight / 2;
+    return prevScene.positions[dancer.id]?.y ?? 0.5;
   });
+
+  const nodeSize = 30 * zoomLevel;
 
   const panGesture = Gesture.Pan()
     .enabled(mode === 'create')
@@ -160,10 +165,14 @@ const DancerNode = ({
       startY.value = interpolatedY.value;
     })
     .onUpdate((e) => {
-      let nx = startX.value + e.translationX;
-      let ny = startY.value + e.translationY;
-      nx = Math.max(15, Math.min(stageWidth - 15, nx));
-      ny = Math.max(15, Math.min(stageHeight - 15, ny));
+      // Calculate change in normalized units
+      let nx = startX.value + (e.translationX / stageWidth);
+      let ny = startY.value + (e.translationY / stageHeight);
+      
+      // Clamp within stage
+      nx = Math.max(0.02, Math.min(0.98, nx));
+      ny = Math.max(0.02, Math.min(0.98, ny));
+      
       dragX.value = nx;
       dragY.value = ny;
     })
@@ -171,12 +180,15 @@ const DancerNode = ({
       isDragging.value = false;
       let fx = dragX.value;
       let fy = dragY.value;
+      
       if (settings.snapToGrid) {
-        const sx = cellSize / 2;
-        const sy = cellSize / 2;
-        fx = Math.round(fx / sx) * sx;
-        fy = Math.round(fy / sy) * sy;
+        // Snap logic in normalized coordinates
+        const stepX = (1 / settings.gridCols) / 2;
+        const stepY = (1 / settings.gridRows) / 2;
+        fx = Math.round(fx / stepX) * stepX;
+        fy = Math.round(fy / stepY) * stepY;
       }
+      
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
     });
 
@@ -184,17 +196,33 @@ const DancerNode = ({
   const composed = Gesture.Exclusive(panGesture, tapGesture);
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolatedX.value - 15 }, { translateY: interpolatedY.value - 15 }, { scale: isDragging.value ? 1.2 : withSpring(1) }],
+    width: nodeSize,
+    height: nodeSize + (15 * zoomLevel),
+    transform: [
+      { translateX: (interpolatedX.value * stageWidth) - (nodeSize / 2) },
+      { translateY: (interpolatedY.value * stageHeight) - (nodeSize / 2) },
+      { scale: isDragging.value ? 1.1 : withSpring(1) }
+    ],
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
   return (
     <GestureDetector gesture={composed}>
       <Animated.View style={[styles.dancerNode, style]}>
-        <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? '#FFF' : 'rgba(0,0,0,0.2)' }]}>
-          <Text style={styles.dancerInitial}>{index + 1}</Text>
+        <View style={[
+          styles.dancerCircle, 
+          { 
+            backgroundColor: dancer.color, 
+            borderColor: isSelected ? '#FFF' : 'rgba(0,0,0,0.2)',
+            width: nodeSize,
+            height: nodeSize,
+            borderRadius: nodeSize / 2,
+            borderWidth: 2 * zoomLevel
+          }
+        ]}>
+          <Text style={[styles.dancerInitial, { fontSize: 12 * zoomLevel }]}>{index + 1}</Text>
         </View>
-        <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA' }]} numberOfLines={1}>{dancer.name}</Text>
+        <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: 10 * zoomLevel, marginTop: 4 * zoomLevel }]} numberOfLines={1}>{dancer.name}</Text>
       </Animated.View>
     </GestureDetector>
   );
@@ -221,21 +249,23 @@ export default function FormationEditorScreen() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
   const [zoomLevel, setZoomLevel] = useState(1);
-  const BASE_CELL_SIZE = Math.floor(width / 10);
-  const CELL_SIZE = BASE_CELL_SIZE * zoomLevel;
-  const STAGE_WIDTH = settings.gridCols * CELL_SIZE;
-  const STAGE_HEIGHT = settings.gridRows * CELL_SIZE;
+  
+  // Calculate dynamic stage dimensions based on 100% zoom (fits screen width)
+  const BASE_STAGE_SIZE = width - 40;
+  const STAGE_WIDTH = BASE_STAGE_SIZE * zoomLevel;
+  const STAGE_HEIGHT = (BASE_STAGE_SIZE * (settings.gridRows / settings.gridCols)) * zoomLevel;
+  const CELL_SIZE = STAGE_WIDTH / settings.gridCols;
 
-  // Smooth transition values for Create mode
+  // Smooth transition values for Create mode (stored as normalized 0~1)
   const dancerPositionsX = useRef<Record<string, SharedValue<number>>>({}).current;
   const dancerPositionsY = useRef<Record<string, SharedValue<number>>>({}).current;
 
-  // Initialize shared values stably
+  // Initialize shared values stably with normalized coordinates
   dancers.forEach(d => {
     if (!dancerPositionsX[d.id]) {
       const activePositions = scenes.find(s => s.id === activeSceneId)?.positions || {};
-      dancerPositionsX[d.id] = makeMutable(activePositions[d.id]?.x ?? STAGE_WIDTH / 2);
-      dancerPositionsY[d.id] = makeMutable(activePositions[d.id]?.y ?? STAGE_HEIGHT / 2);
+      dancerPositionsX[d.id] = makeMutable(activePositions[d.id]?.x ?? 0.5);
+      dancerPositionsY[d.id] = makeMutable(activePositions[d.id]?.y ?? 0.5);
     }
   });
 
@@ -244,8 +274,8 @@ export default function FormationEditorScreen() {
       const activePositions = scenes.find(s => s.id === activeSceneId)?.positions || {};
       dancers.forEach(d => {
         if (dancerPositionsX[d.id]) {
-          dancerPositionsX[d.id].value = withTiming(activePositions[d.id]?.x ?? STAGE_WIDTH / 2, { duration: 500 });
-          dancerPositionsY[d.id].value = withTiming(activePositions[d.id]?.y ?? STAGE_HEIGHT / 2, { duration: 500 });
+          dancerPositionsX[d.id].value = withTiming(activePositions[d.id]?.x ?? 0.5, { duration: 500 });
+          dancerPositionsY[d.id].value = withTiming(activePositions[d.id]?.y ?? 0.5, { duration: 500 });
         }
       });
     }
@@ -283,10 +313,11 @@ export default function FormationEditorScreen() {
 
   const handleDragEnd = (dancerId: string, pos: Position) => {
     if (mode !== 'create' || !activeSceneId) return;
+    // Position here is already normalized (0~1)
     setScenes(prev => prev.map(s => s.id === activeSceneId ? {
       ...s, positions: { ...s.positions, [dancerId]: pos }
     } : s));
-    // Immediately update shared values to reflect current pos during drag end
+    
     if (dancerPositionsX[dancerId]) {
       dancerPositionsX[dancerId].value = pos.x;
       dancerPositionsY[dancerId].value = pos.y;
@@ -297,7 +328,7 @@ export default function FormationEditorScreen() {
     const newId = Math.random().toString(36).substr(2, 9);
     const newDancer: Dancer = { id: newId, name: `댄서 ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] };
     setDancers([...dancers, newDancer]);
-    setScenes(prev => prev.map(s => ({ ...s, positions: { ...s.positions, [newId]: { x: STAGE_WIDTH / 2, y: STAGE_HEIGHT / 2 } } })));
+    setScenes(prev => prev.map(s => ({ ...s, positions: { ...s.positions, [newId]: { x: 0.5, y: 0.5 } } })));
   };
 
   const handleSceneAction = () => {
@@ -411,15 +442,19 @@ export default function FormationEditorScreen() {
 
       <View style={styles.stageSection}>
         <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.max(0.5, prev - 0.2))}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
           <Text style={styles.zoomText}>{Math.round(zoomLevel * 100)}%</Text>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.min(3, prev + 0.2))}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomLevel(prev => Math.min(3, prev + 0.1))}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
         </View>
 
         <ScrollView horizontal style={{ flex: 1, width: '100%' }}>
           <ScrollView style={{ flex: 1, width: '100%' }} contentContainerStyle={{ padding: 40, alignItems: 'center', justifyContent: 'center', minWidth: width, minHeight: 400 }}>
             <Text style={styles.directionLabel}>{settings.stageDirection === 'top' ? 'AUDIENCE' : 'BACKSTAGE'}</Text>
             <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, borderColor: 'rgba(255,255,255,0.1)' }]}>
+              {/* Center Marker */}
+              <View style={[styles.centerMarkerH, { width: STAGE_WIDTH }]} />
+              <View style={[styles.centerMarkerV, { height: STAGE_HEIGHT }]} />
+              
               <View style={styles.gridLayer}>
                 {Array.from({length: settings.gridCols + 1}).map((_, i) => (
                   <View key={`v-${i}`} style={[styles.gridLineV, { left: `${(i/settings.gridCols)*100}%`, opacity: i % 5 === 0 ? 0.3 : 0.1 }]} />
@@ -434,7 +469,7 @@ export default function FormationEditorScreen() {
                   onDragEnd={handleDragEnd} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }}
                   mode={mode} index={i} settings={settings}
                   createModeX={dancerPositionsX[d.id]} createModeY={dancerPositionsY[d.id]}
-                  stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE}
+                  stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE} zoomLevel={zoomLevel}
                 />
               ))}
             </View>
@@ -604,14 +639,15 @@ const styles = StyleSheet.create({
   zoomText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginHorizontal: 8 },
   directionLabel: { color: '#333', fontSize: 10, fontWeight: 'bold', letterSpacing: 4, marginVertical: 15 },
   stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderRadius: 8, overflow: 'hidden' },
+  centerMarkerH: { position: 'absolute', top: '50%', height: 1, backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 0 },
+  centerMarkerV: { position: 'absolute', left: '50%', width: 1, backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 0 },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#FFF' },
   gridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#FFF' },
-  centerCross: { position: 'absolute', top: '50%', left: '50%', marginTop: -10, marginLeft: -10 },
-  dancerNode: { position: 'absolute', alignItems: 'center', width: 60, marginLeft: -30 },
-  dancerCircle: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
-  dancerInitial: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
-  dancerNameText: { color: '#AAA', fontSize: 10, marginTop: 4, fontWeight: '500' },
+  dancerNode: { position: 'absolute', alignItems: 'center' },
+  dancerCircle: { justifyContent: 'center', alignItems: 'center' },
+  dancerInitial: { color: '#FFF', fontWeight: 'bold' },
+  dancerNameText: { color: '#AAA', fontWeight: '500', textAlign: 'center' },
   toolbar: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginVertical: 10 },
   toolbarSpacer: { height: 44, marginVertical: 10 },
   toolItem: { alignItems: 'center', gap: 6 },
