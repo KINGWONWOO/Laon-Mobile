@@ -17,24 +17,6 @@ const TIMELINE_CONTAINER_WIDTH = width - 30;
 const CENTER_OFFSET = TIMELINE_CONTAINER_WIDTH / 2;
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
 
-const GUIDE_STEPS = [
-  {
-    title: '댄서 관리',
-    description: '1. 하단의 "댄서 추가" 버튼으로 멤버를 무대에 올릴 수 있습니다.\n2. 무대 위 댄서 노드를 탭하면 이름 변경, 고유 색상 지정, 삭제가 가능합니다.',
-    image: null
-  },
-  {
-    title: '대형 생성 (Create Mode)',
-    description: '1. "대형 생성" 탭을 선택하세요.\n2. 하단의 "대형 목록"에서 대형을 추가(+)하거나 선택하세요.\n3. 무대 위 댄서들을 드래그하여 원하는 위치에 배치하세요.',
-    image: null
-  },
-  {
-    title: '대형 배치 (Place Mode)',
-    description: '1. "대형 배치" 탭을 선택하세요.\n2. 재생 바(타임라인)를 터치하여 원하는 시점에 대형을 추가하세요.\n3. 생성된 블록의 좌우 핸들을 드래그하여 유지 시간을 조절할 수 있습니다.',
-    image: require('../../../../example/transitionexample.jpg')
-  }
-];
-
 // --- Waveform & Markers ---
 const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6));
@@ -215,6 +197,18 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useRef<ScrollView>(null);
   const isUserScrolling = useRef(false);
 
+  // Sync currentTimeMs with audio status for smooth animations
+  useEffect(() => {
+    if (status.playing && status.duration > 0) {
+      const remaining = (status.duration - status.currentTime) * 1000;
+      currentTimeMs.value = status.currentTime * 1000;
+      currentTimeMs.value = withTiming(status.duration * 1000, { duration: remaining, easing: Easing.linear });
+    } else {
+      cancelAnimation(currentTimeMs);
+      if (status.currentTime !== undefined) currentTimeMs.value = status.currentTime * 1000;
+    }
+  }, [status.playing, status.currentTime]);
+
   useEffect(() => {
     let interval = setInterval(() => {
       runOnJS(setCurrentTimeUI)(currentTimeMs.value);
@@ -239,6 +233,7 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
+  // Place Mode Interpolation (Transitions)
   useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
       const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -455,7 +450,7 @@ export default function FormationEditorScreen() {
               <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity>
             </View>
             <View style={styles.sceneSection}>
-              <TouchableOpacity style={styles.addSceneIcon} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={32} color={theme.primary} /></TouchableOpacity>
+              <TouchableOpacity style={styles.addSceneBtnWide} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={20} color="#000" /><Text style={styles.addSceneText}>대형 추가</Text></TouchableOpacity>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {scenes.map(s => (
                   <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}>
@@ -526,6 +521,8 @@ const styles = StyleSheet.create({
   toolBtn: { alignItems: 'center', gap: 4 },
   toolBtnText: { color: '#888', fontSize: 11 },
   sceneSection: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  addSceneBtnWide: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, gap: 6 },
+  addSceneText: { color: '#000', fontWeight: 'bold', fontSize: 12 },
   scenePill: { paddingHorizontal: 15, paddingVertical: 8, backgroundColor: '#222', borderRadius: 15, marginRight: 10 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   menu: { backgroundColor: '#1A1A1A', padding: 25, borderRadius: 20, width: '80%' },
