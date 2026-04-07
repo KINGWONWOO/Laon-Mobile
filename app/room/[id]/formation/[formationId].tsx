@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 
 const { width } = Dimensions.get('window');
 const PX_PER_SEC = 60; 
@@ -131,7 +132,8 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
       let fx = dragX.value, fy = dragY.value;
       if (settings.snapToGrid) {
         const stepX = (1 / (settings.gridCols + 4)) / 2, stepY = (1 / settings.gridRows) / 2;
-        fx = Math.round(fx / stepX) * stepX; fy = Math.round(fy / stepY) * stepY;
+        fx = Math.round(fx) === fx ? fx : Math.round(fx / stepX) * stepX; 
+        fy = Math.round(fy) === fy ? fy : Math.round(fy / stepY) * stepY;
       }
       dancerPos.value = { x: fx, y: fy };
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
@@ -159,7 +161,7 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
 
 export default function FormationEditorScreen() {
   const { id, formationId } = useGlobalSearchParams<{ id: string, formationId: string }>();
-  const { formations, updateFormation, theme } = useAppContext();
+  const { formations, updateFormation, publishFormationAsFeedback, theme } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const formation = formations.find(f => f.id === formationId);
@@ -182,6 +184,7 @@ export default function FormationEditorScreen() {
   const [inputName, setInputName] = useState('');
   const [guideIndex, setGuideIndex] = useState(0);
   const [touchTimeMs, setTouchTimeMs] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -215,7 +218,6 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useRef<ScrollView>(null);
   const isUserScrolling = useRef(false);
 
-  // Sync currentTimeMs with audio status for smooth animations
   useEffect(() => {
     if (status.playing && status.duration > 0) {
       const remaining = (status.duration - status.currentTime) * 1000;
@@ -243,7 +245,6 @@ export default function FormationEditorScreen() {
     return dict;
   }, [dancers]);
 
-  // Create Mode Scene Change Animation
   useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data, prev) => {
     if (data.mode === 'create' && (prev?.activeId !== data.activeId || prev?.mode !== data.mode)) {
       const targetScene = data.scenes.find(s => s.id === data.activeId);
@@ -251,7 +252,6 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
-  // Place Mode Interpolation (Transitions)
   useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
       const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -400,6 +400,34 @@ export default function FormationEditorScreen() {
     savedTranslateY.value = 0;
   };
 
+  const exportAsFile = async () => {
+    const data = { title: formation?.title, settings, data: { dancers, scenes, timeline } };
+    const fileName = `formation_${formationId}.json`;
+    const filePath = `${FileSystem.documentDirectory}${fileName}`;
+    try {
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data));
+      await Sharing.shareAsync(filePath);
+    } catch (e) { Alert.alert('오류', '파일 추출 실패'); }
+  };
+
+  const exportAsVideo = async () => {
+    setIsExporting(true);
+    try {
+      await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } });
+      await publishFormationAsFeedback(id!, formationId!, formation!.title);
+      Alert.alert('내보내기 성공', '동선이 피드백 영상으로 업로드되었습니다.');
+    } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsExporting(false); }
+  };
+
+  const showExportOptions = () => {
+    Alert.alert('내보내기', '동선 데이터를 내보낼 방식을 선택하세요.', [
+      { text: 'JSON 파일로 추출', onPress: exportAsFile },
+      { text: '피드백 영상으로 업로드', onPress: exportAsVideo },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
   const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
@@ -413,7 +441,10 @@ export default function FormationEditorScreen() {
           <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && styles.activeTab]}><Text style={styles.tabText}>대형 생성</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && styles.activeTab]}><Text style={styles.tabText}>대형 배치</Text></TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 15 }}>
+          <TouchableOpacity onPress={showExportOptions} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" /> : <Ionicons name="share-outline" size={24} color={theme.primary} />}</TouchableOpacity>
+          <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.stageSection}>

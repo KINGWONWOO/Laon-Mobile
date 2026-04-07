@@ -5,11 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import { storageService } from '../../../../services/storageService';
+import * as FileSystem from 'expo-file-system';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { formations, addFormation, deleteFormation, theme } = useAppContext();
+  const { formations, addFormation, updateFormation, deleteFormation, theme } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -41,6 +41,37 @@ export default function FormationListScreen() {
     }
   };
 
+  const handleImportFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+        const importedData = JSON.parse(fileContent);
+        
+        if (!importedData.data || !importedData.settings) {
+          throw new Error('올바른 동선 파일 형식이 아닙니다.');
+        }
+
+        setIsSubmitting(true);
+        const newId = await addFormation(id as string, importedData.title || '가져온 동선', undefined);
+        await updateFormation(newId, {
+          settings: importedData.settings,
+          data: importedData.data
+        });
+        
+        Alert.alert('성공', '동선 파일을 성공적으로 가져왔습니다.');
+      }
+    } catch (err: any) {
+      Alert.alert('오류', err.message || '파일을 가져오는 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) {
       Alert.alert('오류', '동선 제목을 입력해주세요.');
@@ -49,9 +80,7 @@ export default function FormationListScreen() {
     
     setIsSubmitting(true);
     try {
-      // 💡 Keep audio local until export
       let audioUrl = selectedAudio ? selectedAudio.uri : undefined;
-
       const newId = await addFormation(id as string, title.trim(), audioUrl);
       setShowAddModal(false);
       setTitle('');
@@ -78,9 +107,14 @@ export default function FormationListScreen() {
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>동선 관리</Text>
-        <TouchableOpacity onPress={() => setShowAddModal(true)} style={styles.addBtn}>
-          <Ionicons name="add" size={28} color={theme.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity onPress={handleImportFile} style={styles.headerIconBtn}>
+            <Ionicons name="download-outline" size={24} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowAddModal(true)} style={styles.headerIconBtn}>
+            <Ionicons name="add" size={28} color={theme.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -109,7 +143,6 @@ export default function FormationListScreen() {
               <Ionicons name="trash-outline" size={20} color="#FF4444" />
             </TouchableOpacity>
           </TouchableOpacity>
-
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -175,11 +208,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1 },
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
-  addBtn: { padding: 5 },
+  headerIconBtn: { padding: 5, justifyContent: 'center', alignItems: 'center' },
   card: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 16, marginBottom: 15, borderWidth: 1 },
   cardTitle: { fontSize: 18, fontWeight: 'bold' },
   publishedBadge: { marginLeft: 8, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  cardMeta: { fontSize: 12 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { padding: 25, borderRadius: 20 },
