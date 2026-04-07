@@ -132,8 +132,7 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
       let fx = dragX.value, fy = dragY.value;
       if (settings.snapToGrid) {
         const stepX = (1 / (settings.gridCols + 4)) / 2, stepY = (1 / settings.gridRows) / 2;
-        fx = Math.round(fx) === fx ? fx : Math.round(fx / stepX) * stepX; 
-        fy = Math.round(fy) === fy ? fy : Math.round(fy / stepY) * stepY;
+        fx = Math.round(fx / stepX) * stepX; fy = Math.round(fy / stepY) * stepY;
       }
       dancerPos.value = { x: fx, y: fy };
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
@@ -185,6 +184,7 @@ export default function FormationEditorScreen() {
   const [guideIndex, setGuideIndex] = useState(0);
   const [touchTimeMs, setTouchTimeMs] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [zoomUI, setZoomUI] = useState(100);
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -194,7 +194,12 @@ export default function FormationEditorScreen() {
   const savedTranslateY = useSharedValue(0);
 
   const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => { scale.value = Math.max(0.5, Math.min(5, savedScale.value * e.scale)); })
+    .onUpdate((e) => {
+      let newScale = Math.max(0.5, Math.min(5, savedScale.value * e.scale));
+      if (Math.abs(newScale - 1) < 0.05) newScale = 1; // 100% snap
+      scale.value = newScale;
+      runOnJS(setZoomUI)(Math.round(newScale * 100));
+    })
     .onEnd(() => { savedScale.value = scale.value; });
 
   const panGesture = Gesture.Pan().minPointers(1).maxPointers(2)
@@ -218,6 +223,7 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useRef<ScrollView>(null);
   const isUserScrolling = useRef(false);
 
+  // Sync currentTimeMs with audio status for smooth animations
   useEffect(() => {
     if (status.playing && status.duration > 0) {
       const remaining = (status.duration - status.currentTime) * 1000;
@@ -245,6 +251,7 @@ export default function FormationEditorScreen() {
     return dict;
   }, [dancers]);
 
+  // Create Mode Scene Change Animation
   useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data, prev) => {
     if (data.mode === 'create' && (prev?.activeId !== data.activeId || prev?.mode !== data.mode)) {
       const targetScene = data.scenes.find(s => s.id === data.activeId);
@@ -252,6 +259,7 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
+  // Place Mode Interpolation (Transitions)
   useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
       const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -388,6 +396,7 @@ export default function FormationEditorScreen() {
       const newTimeMs = (offset / PX_PER_SEC) * 1000;
       currentTimeMs.value = newTimeMs;
       setCurrentTimeUI(newTimeMs);
+      player.seekTo(newTimeMs / 1000);
     }
   };
 
@@ -398,6 +407,7 @@ export default function FormationEditorScreen() {
     savedScale.value = 1;
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
+    setZoomUI(100);
   };
 
   const exportAsFile = async () => {
@@ -449,9 +459,9 @@ export default function FormationEditorScreen() {
 
       <View style={styles.stageSection}>
         <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>100%</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.5)); savedScale.value = Math.min(5, scale.value + 0.5); }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.5)); savedScale.value = Math.max(0.5, scale.value - 0.5); }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>{zoomUI}%</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.5)); savedScale.value = Math.min(5, scale.value + 0.5); runOnJS(setZoomUI)(Math.round(Math.min(5, scale.value + 0.5) * 100)); }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.5)); savedScale.value = Math.max(0.5, scale.value - 0.5); runOnJS(setZoomUI)(Math.round(Math.max(0.5, scale.value - 0.5) * 100)); }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
         </View>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
