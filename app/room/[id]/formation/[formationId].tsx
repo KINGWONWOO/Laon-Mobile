@@ -35,6 +35,49 @@ const GUIDE_STEPS = [
   }
 ];
 
+// --- Waveform & Markers ---
+const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
+  const barsCount = Math.max(20, Math.floor(duration * 6));
+  const bars = useMemo(() => {
+    const getVal = (i: number) => {
+      const x = Math.sin(i * 0.5 + seed.length) * 10000;
+      return x - Math.floor(x);
+    };
+    return Array.from({ length: barsCount }).map((_, i) => {
+      const progress = i / barsCount;
+      const isChorus = (progress > 0.25 && progress < 0.45) || (progress > 0.65 && progress < 0.85);
+      let multiplier = isChorus ? 1.2 : 0.5;
+      if (progress < 0.1) multiplier = 0.2;
+      const noise = getVal(i);
+      const h = 2 + (noise * 30 * multiplier);
+      return { height: Math.min(35, h), opacity: isChorus ? 0.6 : 0.3 };
+    });
+  }, [barsCount, seed]);
+
+  return (
+    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC }]}>
+      {bars.map((bar, i) => (
+        <View key={i} style={[styles.waveformBar, { height: bar.height, opacity: bar.opacity, backgroundColor: bar.opacity > 0.3 ? '#FFF' : '#888' }]} />
+      ))}
+    </View>
+  );
+};
+
+const TimeMarkers = ({ duration }: { duration: number }) => {
+  const markers = useMemo(() => {
+    const list = [];
+    for (let i = 0; i <= duration; i += 5) {
+      list.push(
+        <View key={i} style={[styles.timeMarker, { left: i * PX_PER_SEC }]}>
+          <View style={styles.timeMarkerLine} /><Text style={styles.timeMarkerText}>{Math.floor(i / 60)}:{(i % 60).toString().padStart(2, '0')}</Text>
+        </View>
+      );
+    }
+    return list;
+  }, [duration]);
+  return <View style={styles.timeMarkersLayer}>{markers}</View>;
+};
+
 const formatTime = (ms: number) => {
   if (typeof ms !== 'number' || isNaN(ms)) return '0:00';
   const totalSec = Math.floor(ms / 1000);
@@ -126,13 +169,17 @@ export default function FormationEditorScreen() {
   const [scenes, setScenes] = useState<FormationScene[]>(formation?.data?.scenes || []);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
   const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
-  const [activeSceneId, setActiveSceneId] = useState<string | null>(scenes[0]?.id || null);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
   const [showTimelineMenu, setShowTimelineMenu] = useState(false);
   const [showDancerSheet, setShowDancerSheet] = useState(false);
   const [showStageSettings, setShowStageSettings] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showSceneModal, setShowSceneModal] = useState(false);
+  const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
+  const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
+  const [inputName, setInputName] = useState('');
   const [guideIndex, setGuideIndex] = useState(0);
   const [touchTimeMs, setTouchTimeMs] = useState(0);
 
@@ -183,6 +230,14 @@ export default function FormationEditorScreen() {
     dancers.forEach(d => { dict[d.id] = makeMutable({ x: 0.5, y: 0.5 }); });
     return dict;
   }, [dancers]);
+
+  // Create Mode Scene Change Animation
+  useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data, prev) => {
+    if (data.mode === 'create' && (prev?.activeId !== data.activeId || prev?.mode !== data.mode)) {
+      const targetScene = data.scenes.find(s => s.id === data.activeId);
+      if (targetScene) dancers.forEach(d => { dancerPositions[d.id].value = withTiming(targetScene.positions[d.id] || { x: 0.5, y: 0.5 }, { duration: 400, easing: Easing.out(Easing.quad) }); });
+    }
+  }, [activeSceneId, mode, dancers, scenes]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
@@ -240,7 +295,64 @@ export default function FormationEditorScreen() {
 
   const handleMoveBlock = (entryId: string, dx: number) => {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
-    setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, dragStartMs.current + deltaMs) } : e));
+    const current = timeline.find(e => e.id === entryId);
+    if (!current) return;
+
+    const newStart = Math.max(0, dragStartMs.current + deltaMs);
+    const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
+    
+    const GAP = 2000;
+    let constrainedStart = newStart;
+    
+    const prevBlock = [...sorted].reverse().find(e => e.timestampMillis + e.durationMillis <= dragStartMs.current + 500);
+    const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + current.durationMillis - 500);
+
+    if (prevBlock && constrainedStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) {
+      constrainedStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
+    }
+    if (nextBlock && constrainedStart + current.durationMillis > nextBlock.timestampMillis - GAP) {
+      constrainedStart = nextBlock.timestampMillis - current.durationMillis - GAP;
+    }
+
+    setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: constrainedStart } : e));
+  };
+
+  const handleResize = (entryId: string, dx: number, dir: 'left' | 'right') => {
+    const deltaMs = (dx / PX_PER_SEC) * 1000;
+    const current = timeline.find(e => e.id === entryId);
+    if (!current) return;
+
+    const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
+    const GAP = 2000;
+
+    if (dir === 'left') {
+      let newStart = Math.max(0, dragStartMs.current + deltaMs);
+      let newDuration = Math.max(500, dragStartDuration.current - deltaMs);
+      const prevBlock = [...sorted].reverse().find(e => e.timestampMillis + e.durationMillis <= dragStartMs.current);
+      if (prevBlock && newStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) {
+        newStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
+        newDuration = dragStartDuration.current + (dragStartMs.current - newStart);
+      }
+      setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: newDuration } : e));
+    } else {
+      let newDuration = Math.max(500, dragStartDuration.current + deltaMs);
+      const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + dragStartDuration.current);
+      if (nextBlock && dragStartMs.current + newDuration > nextBlock.timestampMillis - GAP) {
+        newDuration = nextBlock.timestampMillis - dragStartMs.current - GAP;
+      }
+      setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, durationMillis: newDuration } : e));
+    }
+  };
+
+  const handleSceneAction = () => {
+    if (sceneModalMode === 'add') {
+      const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1];
+      const nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }];
+      setScenes(nScenes); setActiveSceneId(nid);
+    } else if (sceneModalMode === 'rename' && targetSceneId) {
+      setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s));
+    }
+    setShowSceneModal(false); setInputName('');
   };
 
   const addDancer = () => {
@@ -258,9 +370,9 @@ export default function FormationEditorScreen() {
   };
 
   if (!formation) return null;
-  const CELL_SIZE = (width - 40) / (settings.gridCols + 4);
-  const STAGE_WIDTH = (settings.gridCols + 4) * CELL_SIZE;
-  const STAGE_HEIGHT = settings.gridRows * CELL_SIZE;
+  const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
+  const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
+  const STAGE_HEIGHT = settings.gridRows * STAGE_CELL_SIZE;
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -270,7 +382,7 @@ export default function FormationEditorScreen() {
           <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && styles.activeTab]}><Text style={styles.tabText}>대형 생성</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && styles.activeTab]}><Text style={styles.tabText}>대형 배치</Text></TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={async () => { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('저장 완료'); }}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+        <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
       </View>
 
       <View style={styles.stageSection}>
@@ -282,7 +394,7 @@ export default function FormationEditorScreen() {
                 {Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}
               </View>
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />
               ))}
             </Animated.View>
           </View>
@@ -295,12 +407,16 @@ export default function FormationEditorScreen() {
             <View style={styles.timelineWrapper}>
               <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => isUserScrolling.current = true} onScrollEndDrag={() => isUserScrolling.current = false}>
                 <GestureDetector gesture={Gesture.Tap().onEnd((e) => runOnJS(openTimelineMenuAt)(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80, backgroundColor: '#111' }}>
+                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}>
+                    <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
+                    <TimeMarkers duration={status.duration || 60} />
                     <View style={styles.timelineTrack}>
                       {[...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis).map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
                           <GestureDetector gesture={Gesture.Exclusive(
-                            Gesture.Pan().onStart(() => { dragStartMs.current = e.timestampMillis; runOnJS(setSelectedEntryId)(e.id); }).onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)),
+                            Gesture.Pan()
+                              .onStart(() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; runOnJS(setSelectedEntryId)(e.id); })
+                              .onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)),
                             Gesture.Tap().onEnd(() => { 
                               if (selectedEntryId === e.id) {
                                 runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]);
@@ -311,8 +427,8 @@ export default function FormationEditorScreen() {
                               <Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
                               {selectedEntryId === e.id && (
                                 <>
-                                  <ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => setTimeline(prev=>prev.map(x=>x.id===e.id ? {...x, timestampMillis: Math.max(0, dragStartMs.current+(dx/PX_PER_SEC)*1000), durationMillis: Math.max(500, dragStartDuration.current-(dx/PX_PER_SEC)*1000)} : x))} />
-                                  <ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => setTimeline(prev=>prev.map(x=>x.id===e.id ? {...x, durationMillis: Math.max(500, dragStartDuration.current+(dx/PX_PER_SEC)*1000)} : x))} />
+                                  <ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'left')} />
+                                  <ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'right')} />
                                 </>
                               )}
                             </View>
@@ -339,8 +455,14 @@ export default function FormationEditorScreen() {
               <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity>
             </View>
             <View style={styles.sceneSection}>
-              <TouchableOpacity style={styles.addSceneIcon} onPress={() => { const nid = Math.random().toString(36).substr(2,9); setScenes([...scenes, { id: nid, name: `대형 ${scenes.length+1}`, positions: {} }]); setActiveSceneId(nid); }}><Ionicons name="add-circle" size={32} color={theme.primary} /></TouchableOpacity>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}><Text style={{color: activeSceneId === s.id ? '#000' : '#FFF'}}>{s.name}</Text></TouchableOpacity>)}</ScrollView>
+              <TouchableOpacity style={styles.addSceneIcon} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={32} color={theme.primary} /></TouchableOpacity>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {scenes.map(s => (
+                  <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}>
+                    <Text style={{color: activeSceneId === s.id ? '#000' : '#FFF'}}>{s.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           </View>
         )}
@@ -354,6 +476,8 @@ export default function FormationEditorScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={styles.sheetInput} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:'#888'}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
 
       <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={styles.sheet}><TextInput style={styles.sheetInput} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d))} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: '#FFF' }]} onPress={() => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d))} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
 
@@ -383,7 +507,13 @@ const styles = StyleSheet.create({
   dancerNameText: { color: '#AAA', marginTop: 4 },
   bottomDock: { backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#222' },
   placeDock: { padding: 15 },
-  timelineWrapper: { height: 80, position: 'relative', marginBottom: 15 },
+  timelineWrapper: { height: 80, position: 'relative', marginBottom: 15, backgroundColor: '#111', borderRadius: 10, overflow: 'hidden' },
+  waveformContainer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
+  waveformBar: { width: 3, backgroundColor: '#FFF', borderRadius: 1.5 },
+  timeMarkersLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 20 },
+  timeMarker: { position: 'absolute', bottom: 0, alignItems: 'center' },
+  timeMarkerLine: { width: 1, height: 5, backgroundColor: '#444' },
+  timeMarkerText: { color: '#444', fontSize: 9, marginTop: 2, fontWeight: 'bold' },
   timelineTrack: { flex: 1, position: 'relative' },
   block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   blockText: { fontSize: 10, fontWeight: 'bold' },
