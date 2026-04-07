@@ -36,7 +36,6 @@ const GUIDE_STEPS = [
   }
 ];
 
-// --- Waveform & Markers ---
 const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6));
   const bars = useMemo(() => {
@@ -49,8 +48,7 @@ const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, 
       const isChorus = (progress > 0.25 && progress < 0.45) || (progress > 0.65 && progress < 0.85);
       let multiplier = isChorus ? 1.2 : 0.5;
       if (progress < 0.1) multiplier = 0.2;
-      const noise = getVal(i);
-      const h = 2 + (noise * 30 * multiplier);
+      const h = 2 + (getVal(i) * 30 * multiplier);
       return { height: Math.min(35, h), opacity: isChorus ? 0.6 : 0.3 };
     });
   }, [barsCount, seed]);
@@ -196,7 +194,7 @@ export default function FormationEditorScreen() {
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
       let newScale = Math.max(0.5, Math.min(5, savedScale.value * e.scale));
-      if (Math.abs(newScale - 1) < 0.05) newScale = 1; // 100% snap
+      if (Math.abs(newScale - 1) < 0.07) newScale = 1; // 100% snap
       scale.value = newScale;
       runOnJS(setZoomUI)(Math.round(newScale * 100));
     })
@@ -223,7 +221,6 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useRef<ScrollView>(null);
   const isUserScrolling = useRef(false);
 
-  // Sync currentTimeMs with audio status for smooth animations
   useEffect(() => {
     if (status.playing && status.duration > 0) {
       const remaining = (status.duration - status.currentTime) * 1000;
@@ -251,7 +248,6 @@ export default function FormationEditorScreen() {
     return dict;
   }, [dancers]);
 
-  // Create Mode Scene Change Animation
   useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data, prev) => {
     if (data.mode === 'create' && (prev?.activeId !== data.activeId || prev?.mode !== data.mode)) {
       const targetScene = data.scenes.find(s => s.id === data.activeId);
@@ -259,7 +255,6 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
-  // Place Mode Interpolation (Transitions)
   useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
       const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -286,21 +281,16 @@ export default function FormationEditorScreen() {
   }, [mode, timeline, scenes, dancers]);
 
   const openTimelineMenuAt = (x: number) => {
-    if (scenes.length === 0) {
-      Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.');
-      return;
-    }
+    if (scenes.length === 0) { runOnJS(Alert.alert)('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; }
     let t = Math.floor((x / PX_PER_SEC) * 1000);
     const DURATION = 3000, GAP = 2000;
     const sorted = [...timeline].sort((a,b) => a.timestampMillis - b.timestampMillis);
-    
     let validT = t, found = false;
     while (!found && validT < (status.duration || 300) * 1000) {
       const overlap = sorted.find(e => validT < e.timestampMillis + e.durationMillis + GAP && validT + DURATION > e.timestampMillis - GAP);
       if (!overlap) found = true;
       else validT = overlap.timestampMillis + overlap.durationMillis + GAP;
     }
-    
     setTouchTimeMs(validT);
     setShowTimelineMenu(true);
   };
@@ -318,23 +308,14 @@ export default function FormationEditorScreen() {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
     const current = timeline.find(e => e.id === entryId);
     if (!current) return;
-
     const newStart = Math.max(0, dragStartMs.current + deltaMs);
     const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
-    
     const GAP = 2000;
     let constrainedStart = newStart;
-    
     const prevBlock = [...sorted].reverse().find(e => e.timestampMillis + e.durationMillis <= dragStartMs.current + 500);
     const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + current.durationMillis - 500);
-
-    if (prevBlock && constrainedStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) {
-      constrainedStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
-    }
-    if (nextBlock && constrainedStart + current.durationMillis > nextBlock.timestampMillis - GAP) {
-      constrainedStart = nextBlock.timestampMillis - current.durationMillis - GAP;
-    }
-
+    if (prevBlock && constrainedStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) constrainedStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
+    if (nextBlock && constrainedStart + current.durationMillis > nextBlock.timestampMillis - GAP) constrainedStart = nextBlock.timestampMillis - current.durationMillis - GAP;
     setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: constrainedStart } : e));
   };
 
@@ -342,10 +323,8 @@ export default function FormationEditorScreen() {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
     const current = timeline.find(e => e.id === entryId);
     if (!current) return;
-
     const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
     const GAP = 2000;
-
     if (dir === 'left') {
       let newStart = Math.max(0, dragStartMs.current + deltaMs);
       let newDuration = Math.max(500, dragStartDuration.current - deltaMs);
@@ -358,9 +337,7 @@ export default function FormationEditorScreen() {
     } else {
       let newDuration = Math.max(500, dragStartDuration.current + deltaMs);
       const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + dragStartDuration.current);
-      if (nextBlock && dragStartMs.current + newDuration > nextBlock.timestampMillis - GAP) {
-        newDuration = nextBlock.timestampMillis - dragStartMs.current - GAP;
-      }
+      if (nextBlock && dragStartMs.current + newDuration > nextBlock.timestampMillis - GAP) newDuration = nextBlock.timestampMillis - dragStartMs.current - GAP;
       setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, durationMillis: newDuration } : e));
     }
   };
@@ -370,9 +347,7 @@ export default function FormationEditorScreen() {
       const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1];
       const nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }];
       setScenes(nScenes); setActiveSceneId(nid);
-    } else if (sceneModalMode === 'rename' && targetSceneId) {
-      setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s));
-    }
+    } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s));
     setShowSceneModal(false); setInputName('');
   };
 
@@ -381,14 +356,7 @@ export default function FormationEditorScreen() {
     setDancers([...dancers, newDancer]);
   };
 
-  const handleSave = async () => { 
-    try { 
-      await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); 
-      Alert.alert('저장 완료'); 
-    } catch (e: any) { 
-      Alert.alert('오류', e.message); 
-    } 
-  };
+  const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('저장 완료'); } catch (e: any) { Alert.alert('오류', e.message); } };
 
   const handleTimelineScroll = (e: any) => {
     if (isUserScrolling.current && !status.playing) {
@@ -396,47 +364,25 @@ export default function FormationEditorScreen() {
       const newTimeMs = (offset / PX_PER_SEC) * 1000;
       currentTimeMs.value = newTimeMs;
       setCurrentTimeUI(newTimeMs);
-      player.seekTo(newTimeMs / 1000);
+      runOnJS(player.seekTo)(newTimeMs / 1000);
     }
   };
 
-  const resetStage = () => {
-    scale.value = withSpring(1);
-    translateX.value = withSpring(0);
-    translateY.value = withSpring(0);
-    savedScale.value = 1;
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
-    setZoomUI(100);
-  };
+  const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
   const exportAsFile = async () => {
     const data = { title: formation?.title, settings, data: { dancers, scenes, timeline } };
-    const fileName = `formation_${formationId}.json`;
-    const filePath = `${FileSystem.documentDirectory}${fileName}`;
-    try {
-      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data));
-      await Sharing.shareAsync(filePath);
-    } catch (e) { Alert.alert('오류', '파일 추출 실패'); }
+    const filePath = `${FileSystem.documentDirectory}formation_${formationId}.json`;
+    try { await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data)); await Sharing.shareAsync(filePath); } catch (e) { Alert.alert('오류', '파일 추출 실패'); }
   };
 
   const exportAsVideo = async () => {
     setIsExporting(true);
-    try {
-      await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } });
-      await publishFormationAsFeedback(id!, formationId!, formation!.title);
-      Alert.alert('내보내기 성공', '동선이 피드백 영상으로 업로드되었습니다.');
-    } catch (e: any) { Alert.alert('오류', e.message); }
+    try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); await publishFormationAsFeedback(id!, formationId!, formation!.title); Alert.alert('성공', '피드백 영상 업로드 완료'); } catch (e: any) { Alert.alert('오류', e.message); }
     finally { setIsExporting(false); }
   };
 
-  const showExportOptions = () => {
-    Alert.alert('내보내기', '동선 데이터를 내보낼 방식을 선택하세요.', [
-      { text: 'JSON 파일로 추출', onPress: exportAsFile },
-      { text: '피드백 영상으로 업로드', onPress: exportAsVideo },
-      { text: '취소', style: 'cancel' }
-    ]);
-  };
+  const showExportOptions = () => { Alert.alert('내보내기', '방식을 선택하세요.', [{ text: 'JSON 파일 추출', onPress: exportAsFile }, { text: '피드백 영상 업로드', onPress: exportAsVideo }, { text: '취소', style: 'cancel' }]); };
 
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
@@ -447,36 +393,14 @@ export default function FormationEditorScreen() {
     <GestureHandlerRootView style={styles.container}>
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color="#FFF" /></TouchableOpacity>
-        <View style={styles.modeToggle}>
-          <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && styles.activeTab]}><Text style={styles.tabText}>대형 생성</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && styles.activeTab]}><Text style={styles.tabText}>대형 배치</Text></TouchableOpacity>
-        </View>
-        <View style={{ flexDirection: 'row', gap: 15 }}>
-          <TouchableOpacity onPress={showExportOptions} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" /> : <Ionicons name="share-outline" size={24} color={theme.primary} />}</TouchableOpacity>
-          <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
-        </View>
+        <View style={styles.modeToggle}><TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && styles.activeTab]}><Text style={styles.tabText}>대형 생성</Text></TouchableOpacity><TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && styles.activeTab]}><Text style={styles.tabText}>대형 배치</Text></TouchableOpacity></View>
+        <View style={{ flexDirection: 'row', gap: 15 }}><TouchableOpacity onPress={showExportOptions} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" /> : <Ionicons name="share-outline" size={24} color={theme.primary} />}</TouchableOpacity><TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity></View>
       </View>
 
       <View style={styles.stageSection}>
-        <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>{zoomUI}%</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.5)); savedScale.value = Math.min(5, scale.value + 0.5); runOnJS(setZoomUI)(Math.round(Math.min(5, scale.value + 0.5) * 100)); }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.5)); savedScale.value = Math.max(0.5, scale.value - 0.5); runOnJS(setZoomUI)(Math.round(Math.max(0.5, scale.value - 0.5) * 100)); }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
-        </View>
+        <View style={styles.zoomControls}><TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>{zoomUI}%</Text></TouchableOpacity><TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.5)); savedScale.value = Math.min(5, scale.value + 0.5); runOnJS(setZoomUI)(Math.round(Math.min(5, scale.value + 0.5) * 100)); }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity><TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.5)); savedScale.value = Math.max(0.5, scale.value - 0.5); runOnJS(setZoomUI)(Math.round(Math.max(0.5, scale.value - 0.5) * 100)); }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity></View>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
-          <View style={styles.stageWrapper}>
-            <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
-              <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
-              <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
-              <View style={styles.gridLayer}>
-                {Array.from({length: settings.gridRows + 1}).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i/settings.gridRows)*100}%` }]} />)}
-                {Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}
-              </View>
-              {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />
-              ))}
-            </Animated.View>
-          </View>
+          <View style={styles.stageWrapper}><Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}><View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} /><View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} /><View style={styles.gridLayer}>{Array.from({length: settings.gridRows + 1}).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i/settings.gridRows)*100}%` }]} />)}{Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}</View>{dancers.map((d, i) => (<DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />))}</Animated.View></View>
         </GestureDetector>
       </View>
 
@@ -484,84 +408,37 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={styles.timelineWrapper}>
-              <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => { isUserScrolling.current = true; cancelAnimation(currentTimeMs); }} onScrollEndDrag={() => isUserScrolling.current = false}>
+              <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => { isUserScrolling.current = true; cancelAnimation(currentTimeMs); runOnJS(setSelectedEntryId)(null); }} onScrollEndDrag={() => isUserScrolling.current = false}>
                 <GestureDetector gesture={Gesture.Tap().onEnd((e) => runOnJS(openTimelineMenuAt)(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}>
-                    <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
-                    <TimeMarkers duration={status.duration || 60} />
-                    <View style={styles.timelineTrack}>
+                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}><WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} /><TimeMarkers duration={status.duration || 60} /><View style={styles.timelineTrack}>
                       {[...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis).map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <GestureDetector gesture={Gesture.Exclusive(
-                            Gesture.Pan()
-                              .onStart(() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; runOnJS(setSelectedEntryId)(e.id); })
-                              .onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)),
-                            Gesture.Tap().onEnd(() => { 
-                              if (selectedEntryId === e.id) {
-                                runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]);
-                              } else runOnJS(setSelectedEntryId)(e.id);
-                            })
-                          )}>
-                            <View style={[styles.block, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : '#AAA' }]}>
-                              <Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
-                              {selectedEntryId === e.id && (
-                                <>
-                                  <ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'left')} />
-                                  <ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'right')} />
-                                </>
-                              )}
+                          <GestureDetector gesture={Gesture.Exclusive(Gesture.Pan().onStart(() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; runOnJS(setSelectedEntryId)(e.id); }).onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)), Gesture.Tap().onEnd(() => { if (selectedEntryId === e.id) { runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else runOnJS(setSelectedEntryId)(e.id); }))}>
+                            <View style={[styles.block, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : '#AAA' }]}><Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
+                              {selectedEntryId === e.id && (<><ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'left')} /><ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'right')} /></>)}
                             </View>
                           </GestureDetector>
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
-                      ))}
-                    </View>
-                  </View>
+                      ))}</View></View>
                 </GestureDetector>
               </ScrollView>
               <View style={styles.needle} />
             </View>
-            <View style={styles.controls}>
-              <TouchableOpacity onPress={() => status.playing ? player.pause() : player.play()} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
-              <Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text>
-            </View>
+            <View style={styles.controls}><TouchableOpacity onPress={() => status.playing ? player.pause() : player.play()} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
           </View>
         ) : (
           <View style={styles.createDock}>
-            <View style={styles.createToolbar}>
-              <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={styles.toolBtnText}>댄서 추가</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => setShowStageSettings(true)}><Ionicons name="settings-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>무대 설정</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity>
-            </View>
-            <View style={styles.sceneSection}>
-              <TouchableOpacity style={styles.addSceneBtnWide} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={20} color="#000" /><Text style={styles.addSceneText}>대형 추가</Text></TouchableOpacity>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {scenes.map(s => (
-                  <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}>
-                    <Text style={{color: activeSceneId === s.id ? '#000' : '#FFF'}}>{s.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={styles.toolBtnText}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => setShowStageSettings(true)}><Ionicons name="settings-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>무대 설정</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity></View>
+            <View style={styles.sceneSection}><TouchableOpacity style={styles.addSceneBtnWide} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={20} color="#000" /><Text style={styles.addSceneText}>대형 추가</Text></TouchableOpacity><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => (<TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}><Text style={{color: activeSceneId === s.id ? '#000' : '#FFF'}}>{s.name}</Text></TouchableOpacity>))}</ScrollView></View>
           </View>
         )}
       </View>
 
-      <Modal visible={showTimelineMenu} transparent animationType="fade">
-        <Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}>
-          <View style={styles.menu}>
-            <Text style={styles.menuTitle}>대형 선택 ({formatTime(touchTimeMs)})</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={styles.menuItem}><Text style={{color:'#FFF'}}>{s.name}</Text></TouchableOpacity>)}</ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-
+      <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={styles.menu}><Text style={styles.menuTitle}>대형 선택 ({formatTime(touchTimeMs)})</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={styles.menuItem}><Text style={{color:'#FFF'}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
       <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={styles.sheetInput} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:'#888'}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
-
       <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={styles.sheet}><TextInput style={styles.sheetInput} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d))} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: '#FFF' }]} onPress={() => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d))} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
-
       <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={styles.doneBtn} onPress={() => setShowStageSettings(false)}><Text style={{fontWeight:'bold'}}>확인</Text></TouchableOpacity></View></View></Modal>
-
       <Modal visible={showGuide} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, {width:'90%'}]}><Text style={styles.menuTitle}>{GUIDE_STEPS[guideIndex].title}</Text><Text style={{color:'#CCC', marginVertical:15}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:'#FFF'}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></View></Modal>
     </GestureHandlerRootView>
   );
