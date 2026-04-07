@@ -382,6 +382,24 @@ export default function FormationEditorScreen() {
     } 
   };
 
+  const handleTimelineScroll = (e: any) => {
+    if (isUserScrolling.current && !status.playing) {
+      const offset = e.nativeEvent.contentOffset.x;
+      const newTimeMs = (offset / PX_PER_SEC) * 1000;
+      currentTimeMs.value = newTimeMs;
+      setCurrentTimeUI(newTimeMs);
+    }
+  };
+
+  const resetStage = () => {
+    scale.value = withSpring(1);
+    translateX.value = withSpring(0);
+    translateY.value = withSpring(0);
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  };
+
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
   const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
@@ -399,9 +417,16 @@ export default function FormationEditorScreen() {
       </View>
 
       <View style={styles.stageSection}>
+        <View style={styles.zoomControls}>
+          <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>100%</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.5)); savedScale.value = Math.min(5, scale.value + 0.5); }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.5)); savedScale.value = Math.max(0.5, scale.value - 0.5); }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
+        </View>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
+              <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
+              <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
               <View style={styles.gridLayer}>
                 {Array.from({length: settings.gridRows + 1}).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i/settings.gridRows)*100}%` }]} />)}
                 {Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}
@@ -418,7 +443,7 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={styles.timelineWrapper}>
-              <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => isUserScrolling.current = true} onScrollEndDrag={() => isUserScrolling.current = false}>
+              <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => { isUserScrolling.current = true; cancelAnimation(currentTimeMs); }} onScrollEndDrag={() => isUserScrolling.current = false}>
                 <GestureDetector gesture={Gesture.Tap().onEnd((e) => runOnJS(openTimelineMenuAt)(e.x))}>
                   <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}>
                     <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
@@ -508,9 +533,10 @@ const styles = StyleSheet.create({
   modeTab: { paddingHorizontal: 15, paddingVertical: 6, borderRadius: 18 },
   activeTab: { backgroundColor: '#444' },
   tabText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
-  stageSection: { flex: 1, overflow: 'hidden' },
+  stageSection: { flex: 1, overflow: 'hidden', position: 'relative' },
   stageWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#333' },
+  offStageArea: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.05)', zIndex: 1 },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
   gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
@@ -557,5 +583,8 @@ const styles = StyleSheet.create({
   colorChip: { width: 30, height: 30, borderRadius: 15 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 20 },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  doneBtn: { backgroundColor: '#333', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 20 }
+  doneBtn: { backgroundColor: '#333', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 20 },
+  zoomControls: { position: 'absolute', top: 15, right: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },
+  zoomBtn: { paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', justifyContent: 'center' },
+  zoomText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' }
 });
