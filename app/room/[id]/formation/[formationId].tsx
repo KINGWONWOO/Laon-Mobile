@@ -243,6 +243,20 @@ export default function FormationEditorScreen() {
     setTimeline(prev => prev.map(e => e.id === entryId ? { ...e, timestampMillis: Math.max(0, dragStartMs.current + deltaMs) } : e));
   };
 
+  const addDancer = () => {
+    const newDancer: Dancer = { id: Math.random().toString(36).substr(2, 9), name: `댄서 ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] };
+    setDancers([...dancers, newDancer]);
+  };
+
+  const handleSave = async () => { 
+    try { 
+      await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); 
+      Alert.alert('저장 완료'); 
+    } catch (e: any) { 
+      Alert.alert('오류', e.message); 
+    } 
+  };
+
   if (!formation) return null;
   const CELL_SIZE = (width - 40) / (settings.gridCols + 4);
   const STAGE_WIDTH = (settings.gridCols + 4) * CELL_SIZE;
