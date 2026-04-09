@@ -100,8 +100,8 @@ const TransitionX = ({ width, left }: { width: number, left: number }) => {
 
 const ResizeHandle = ({ direction, onDragStart, onDrag }: any) => {
   const pan = Gesture.Pan()
-    .onStart(() => runOnJS(onDragStart)())
-    .onUpdate((e) => runOnJS(onDrag)(e.translationX));
+    .onStart(() => { if(onDragStart) runOnJS(onDragStart)(); })
+    .onUpdate((e) => { if(onDrag) runOnJS(onDrag)(e.translationX); });
   return (
     <GestureDetector gesture={pan}>
       <View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
@@ -283,15 +283,7 @@ export default function FormationEditorScreen() {
   const openTimelineMenuAt = (x: number) => {
     if (scenes.length === 0) { runOnJS(Alert.alert)('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; }
     let t = Math.floor((x / PX_PER_SEC) * 1000);
-    const DURATION = 3000, GAP = 2000;
-    const sorted = [...timeline].sort((a,b) => a.timestampMillis - b.timestampMillis);
-    let validT = t, found = false;
-    while (!found && validT < (status.duration || 300) * 1000) {
-      const overlap = sorted.find(e => validT < e.timestampMillis + e.durationMillis + GAP && validT + DURATION > e.timestampMillis - GAP);
-      if (!overlap) found = true;
-      else validT = overlap.timestampMillis + overlap.durationMillis + GAP;
-    }
-    setTouchTimeMs(validT);
+    setTouchTimeMs(t);
     setShowTimelineMenu(true);
   };
 
@@ -301,43 +293,33 @@ export default function FormationEditorScreen() {
     setShowTimelineMenu(false);
   };
 
-  const dragStartMs = useRef(0);
-  const dragStartDuration = useRef(0);
+  const dragStartMs = useSharedValue(0);
+  const dragStartDuration = useSharedValue(0);
+
+  const handleDragStart = (ts: number, dur: number, id: string | null) => {
+    dragStartMs.value = ts;
+    dragStartDuration.value = dur;
+    if(id) setSelectedEntryId(id);
+  };
 
   const handleMoveBlock = (entryId: string, dx: number) => {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
     const current = timeline.find(e => e.id === entryId);
     if (!current) return;
-    const newStart = Math.max(0, dragStartMs.current + deltaMs);
-    const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
-    const GAP = 2000;
-    let constrainedStart = newStart;
-    const prevBlock = [...sorted].reverse().find(e => e.timestampMillis + e.durationMillis <= dragStartMs.current + 500);
-    const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + current.durationMillis - 500);
-    if (prevBlock && constrainedStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) constrainedStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
-    if (nextBlock && constrainedStart + current.durationMillis > nextBlock.timestampMillis - GAP) constrainedStart = nextBlock.timestampMillis - current.durationMillis - GAP;
-    setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: constrainedStart } : e));
+    const newStart = Math.max(0, dragStartMs.value + deltaMs);
+    setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart } : e));
   };
 
   const handleResize = (entryId: string, dx: number, dir: 'left' | 'right') => {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
     const current = timeline.find(e => e.id === entryId);
     if (!current) return;
-    const sorted = [...timeline].filter(e => e.id !== entryId).sort((a,b)=>a.timestampMillis-b.timestampMillis);
-    const GAP = 2000;
     if (dir === 'left') {
-      let newStart = Math.max(0, dragStartMs.current + deltaMs);
-      let newDuration = Math.max(500, dragStartDuration.current - deltaMs);
-      const prevBlock = [...sorted].reverse().find(e => e.timestampMillis + e.durationMillis <= dragStartMs.current);
-      if (prevBlock && newStart < prevBlock.timestampMillis + prevBlock.durationMillis + GAP) {
-        newStart = prevBlock.timestampMillis + prevBlock.durationMillis + GAP;
-        newDuration = dragStartDuration.current + (dragStartMs.current - newStart);
-      }
+      let newStart = Math.max(0, dragStartMs.value + deltaMs);
+      let newDuration = Math.max(500, dragStartDuration.value - deltaMs);
       setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: newDuration } : e));
     } else {
-      let newDuration = Math.max(500, dragStartDuration.current + deltaMs);
-      const nextBlock = sorted.find(e => e.timestampMillis >= dragStartMs.current + dragStartDuration.current);
-      if (nextBlock && dragStartMs.current + newDuration > nextBlock.timestampMillis - GAP) newDuration = nextBlock.timestampMillis - dragStartMs.current - GAP;
+      let newDuration = Math.max(500, dragStartDuration.value + deltaMs);
       setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, durationMillis: newDuration } : e));
     }
   };
@@ -413,9 +395,9 @@ export default function FormationEditorScreen() {
                   <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}><WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} /><TimeMarkers duration={status.duration || 60} /><View style={styles.timelineTrack}>
                       {[...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis).map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <GestureDetector gesture={Gesture.Exclusive(Gesture.Pan().onStart(() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; runOnJS(setSelectedEntryId)(e.id); }).onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)), Gesture.Tap().onEnd(() => { if (selectedEntryId === e.id) { runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else runOnJS(setSelectedEntryId)(e.id); }))}>
+                          <GestureDetector gesture={Gesture.Exclusive(Gesture.Pan().onStart(() => { runOnJS(handleDragStart)(e.timestampMillis, e.durationMillis, e.id); }).onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)), Gesture.Tap().onEnd(() => { if (selectedEntryId === e.id) { runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else runOnJS(setSelectedEntryId)(e.id); }))}>
                             <View style={[styles.block, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : '#AAA' }]}><Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
-                              {selectedEntryId === e.id && (<><ResizeHandle direction="left" onDragStart={() => { dragStartMs.current = e.timestampMillis; dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'left')} /><ResizeHandle direction="right" onDragStart={() => { dragStartDuration.current = e.durationMillis; }} onDrag={(dx:number) => runOnJS(handleResize)(e.id, dx, 'right')} /></>)}
+                              {selectedEntryId === e.id && (<><ResizeHandle direction="left" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'left')} /><ResizeHandle direction="right" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'right')} /></>)}
                             </View>
                           </GestureDetector>
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
@@ -425,7 +407,7 @@ export default function FormationEditorScreen() {
               </ScrollView>
               <View style={styles.needle} />
             </View>
-            <View style={styles.controls}><TouchableOpacity onPress={() => status.playing ? player.pause() : player.play()} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
+            <View style={styles.controls}><TouchableOpacity onPress={() => { if(status.playing) player.pause(); else { player.seekTo(currentTimeUI / 1000); player.play(); } }} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity><Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text></View>
           </View>
         ) : (
           <View style={styles.createDock}>
