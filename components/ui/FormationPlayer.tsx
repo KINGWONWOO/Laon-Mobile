@@ -1,0 +1,123 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, useAnimatedReaction, cancelAnimation, runOnJS } from 'react-native-reanimated';
+import { Dancer, FormationScene, TimelineEntry, Position, Formation } from '../../types';
+
+const { width: WINDOW_WIDTH } = Dimensions.get('window');
+
+interface FormationPlayerProps {
+  formation: Formation;
+  currentTimeMs: number;
+  onDurationDetected?: (duration: number) => void;
+}
+
+const DancerNode = ({ dancer, dancerPos, stageWidth, stageHeight, cellSize, index }: any) => {
+  const style = useAnimatedStyle(() => ({
+    width: cellSize * 2.5,
+    transform: [
+      { translateX: (dancerPos.value.x * stageWidth) - (cellSize * 1.25) },
+      { translateY: (dancerPos.value.y * stageHeight) - (cellSize * 0.35) },
+    ],
+  }));
+
+  return (
+    <Animated.View style={[styles.dancerNode, style]} pointerEvents="none">
+      <View style={[styles.dancerCircle, { backgroundColor: dancer.color, width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.2)' }]}>
+        <Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text>
+      </View>
+      <Text style={styles.dancerNameText} numberOfLines={1}>{dancer.name}</Text>
+    </Animated.View>
+  );
+};
+
+export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected }: FormationPlayerProps) {
+  const { dancers, scenes, timeline } = formation.data;
+  const { gridRows, gridCols } = formation.settings;
+
+  const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / (gridCols + 4);
+  const STAGE_WIDTH = (gridCols + 4) * STAGE_CELL_SIZE;
+  const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
+
+  const dancerPositions = useMemo(() => {
+    const dict: any = {};
+    dancers.forEach(d => { dict[d.id] = useSharedValue({ x: 0.5, y: 0.5 }); });
+    return dict;
+  }, [dancers]);
+
+  useEffect(() => {
+    if (timeline.length > 0) {
+      const lastEntry = [...timeline].sort((a, b) => (b.timestampMillis + b.durationMillis) - (a.timestampMillis + a.durationMillis))[0];
+      const duration = (lastEntry.timestampMillis + lastEntry.durationMillis) / 1000;
+      if (onDurationDetected) onDurationDetected(duration);
+    }
+  }, [timeline]);
+
+  useEffect(() => {
+    const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+    let prevE = null, nextE = null;
+    for (let e of sorted) {
+      if (e.timestampMillis <= currentTimeMs) prevE = e;
+      else { nextE = e; break; }
+    }
+
+    dancers.forEach(d => {
+      let p = { x: 0.5, y: 0.5 };
+      const getScenePos = (sId: string) => scenes.find(s => s.id === sId)?.positions[d.id] || { x: 0.5, y: 0.5 };
+      
+      if (!prevE) {
+        p = sorted.length > 0 ? getScenePos(sorted[0]?.sceneId) : { x: 0.5, y: 0.5 };
+      } else {
+        const prevPos = getScenePos(prevE.sceneId);
+        if (currentTimeMs <= prevE.timestampMillis + prevE.durationMillis) {
+          p = prevPos;
+        } else if (nextE) {
+          const nextPos = getScenePos(nextE.sceneId);
+          const gapStart = prevE.timestampMillis + prevE.durationMillis, gapEnd = nextE.timestampMillis;
+          const progress = Math.max(0, Math.min(1, (currentTimeMs - gapStart) / (gapEnd - gapStart)));
+          const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+          p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
+        } else {
+          p = prevPos;
+        }
+      }
+      dancerPositions[d.id].value = p;
+    });
+  }, [currentTimeMs, timeline, scenes, dancers]);
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }]}>
+        <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
+        <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
+        <View style={styles.gridLayer}>
+          {Array.from({ length: gridRows + 1 }).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i / gridRows) * 100}%` }]} />)}
+          {Array.from({ length: gridCols + 5 }).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i / (gridCols + 4)) * 100}%` }]} />)}
+        </View>
+        {dancers.map((d, i) => (
+          <DancerNode
+            key={d.id}
+            index={i}
+            dancer={d}
+            dancerPos={dancerPositions[d.id]}
+            stageWidth={STAGE_WIDTH}
+            stageHeight={STAGE_HEIGHT}
+            cellSize={STAGE_CELL_SIZE}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#333', overflow: 'hidden' },
+  offStageArea: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.05)', zIndex: 1 },
+  gridLayer: { ...StyleSheet.absoluteFillObject },
+  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+  gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+  dancerNode: { position: 'absolute', alignItems: 'center' },
+  dancerCircle: { justifyContent: 'center', alignItems: 'center' },
+  dancerInitial: { color: '#FFF', fontWeight: 'bold' },
+  dancerNameText: { color: '#AAA', marginTop: 4, fontSize: 8 }
+});

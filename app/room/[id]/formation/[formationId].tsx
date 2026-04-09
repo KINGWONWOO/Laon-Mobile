@@ -358,7 +358,7 @@ export default function FormationEditorScreen() {
       const safeId = (formationId || 'new').replace(/[^a-z0-9]/gi, '_');
       const filePath = `${FileSystem.documentDirectory}formation_${safeId}.json`;
       
-      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: FileSystem.EncodingType.UTF8 });
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
       
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.');

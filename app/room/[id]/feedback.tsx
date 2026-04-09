@@ -11,18 +11,14 @@ import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
 import { Colors } from '../../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FormationPlayer from '../../../components/ui/FormationPlayer';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData } = useAppContext();
+  const { videos, addVideo, addComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations } = useAppContext();
 
   const handleSelectVideo = (video: VideoFeedback) => {
-    if (video.videoUrl.startsWith('formation://')) {
-      const formationId = video.videoUrl.replace('formation://', '');
-      router.push(`/room/${id}/formation/${formationId}`);
-      return;
-    }
     setSelectedVideo(video);
   };
   const insets = useSafeAreaInsets();
@@ -40,6 +36,33 @@ export default function FeedbackScreen() {
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+
+  // Formation specific state
+  const [isFormationPlaying, setIsFormationPlaying] = useState(false);
+  const [formationTime, setFormationTime] = useState(0);
+  const [formationDuration, setFormationDuration] = useState(60);
+  const formationTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isFormation = selectedVideo?.videoUrl?.startsWith('formation://');
+  const selectedFormation = useMemo(() => {
+    if (!isFormation || !selectedVideo) return null;
+    const fId = selectedVideo.videoUrl.replace('formation://', '');
+    return formations.find(f => f.id === fId);
+  }, [selectedVideo, formations]);
+
+  useEffect(() => {
+    if (isFormation && isFormationPlaying) {
+      formationTimerRef.current = setInterval(() => {
+        setFormationTime(prev => {
+          if (prev >= formationDuration * 1000) return 0;
+          return prev + 50;
+        });
+      }, 50);
+    } else {
+      if (formationTimerRef.current) clearInterval(formationTimerRef.current);
+    }
+    return () => { if (formationTimerRef.current) clearInterval(formationTimerRef.current); };
+  }, [isFormation, isFormationPlaying, formationDuration]);
   
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
@@ -68,7 +91,7 @@ export default function FeedbackScreen() {
 
   useEffect(() => {
     async function cacheAndPlay() {
-      if (!selectedVideo) { setCachedVideoUrl(null); return; }
+      if (!selectedVideo || isFormation) { setCachedVideoUrl(null); return; }
       markItemAsAccessed('video', selectedVideo.id);
       setIsCaching(true);
       try {
@@ -84,6 +107,10 @@ export default function FeedbackScreen() {
       } catch (error) { setCachedVideoUrl(selectedVideo.videoUrl); } finally { setIsCaching(false); }
     }
     cacheAndPlay();
+    if (isFormation) {
+      setFormationTime(0);
+      setIsFormationPlaying(true);
+    }
   }, [selectedVideo]);
 
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
@@ -132,14 +159,17 @@ export default function FeedbackScreen() {
 
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
-    const posMillis = Math.floor((player?.currentTime || 0) * 1000);
+    const posMillis = isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000);
     await addComment(selectedVideo.id, newComment.trim(), posMillis);
     setNewComment('');
     setShowCommentInput(false);
     setTimeout(() => refreshAllData(), 500);
   };
 
-  const seekTo = (ms: number) => { if (player) player.currentTime = ms / 1000; };
+  const seekTo = (ms: number) => { 
+    if (isFormation) setFormationTime(ms);
+    else if (player) player.currentTime = ms / 1000; 
+  };
   const formatTime = (ms: number) => {
     const s = Math.floor(ms / 1000);
     return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
@@ -151,7 +181,27 @@ export default function FeedbackScreen() {
         <View style={[styles.fullView, { paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
             <View style={[styles.videoSection, isFullScreen && styles.landscapeVideo]}>
-              {isCaching ? <ActivityIndicator size="large" color={Colors.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} />}
+              {isFormation ? (
+                selectedFormation ? (
+                  <View style={{flex: 1}}>
+                    <FormationPlayer 
+                      formation={selectedFormation} 
+                      currentTimeMs={formationTime} 
+                      onDurationDetected={setFormationDuration}
+                    />
+                    <TouchableOpacity 
+                      style={styles.formationPlayOverlay} 
+                      onPress={() => setIsFormationPlaying(!isFormationPlaying)}
+                    >
+                      <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.errorContainer}><Text style={{color:'#fff'}}>동선 정보를 불러올 수 없습니다.</Text></View>
+                )
+              ) : (
+                isCaching ? <ActivityIndicator size="large" color={Colors.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} />
+              )}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
@@ -194,7 +244,7 @@ export default function FeedbackScreen() {
           <Modal visible={showCommentInput} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <KeyboardAvoidingView behavior="padding" style={styles.modalContent}>
-                <Text style={{color:'#fff', marginBottom: 15}}>{formatTime(Math.floor(player.currentTime*1000))} 시점에 의견 남기기</Text>
+                <Text style={{color:'#fff', marginBottom: 15}}>{formatTime(isFormation ? formationTime : Math.floor(player.currentTime*1000))} 시점에 의견 남기기</Text>
                 <TextInput style={styles.input} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor="#666" autoFocus />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
                   <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color:'#666'}}>취소</Text></TouchableOpacity>
@@ -286,5 +336,7 @@ const styles = StyleSheet.create({
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
   titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
-  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' }
+  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' },
+  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }
 });
