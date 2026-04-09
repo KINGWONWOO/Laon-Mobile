@@ -369,29 +369,57 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const updateFormation = async (fid: string, updates: Partial<Formation>) => {
     const localRaw = await AsyncStorage.getItem('local_formations');
-    if (!localRaw) return;
-    const local = JSON.parse(localRaw);
-    const updated = local.map((f: any) => f.id === fid ? { ...f, ...updates } : f);
-    await AsyncStorage.setItem('local_formations', JSON.stringify(updated));
+    if (localRaw) {
+      const local = JSON.parse(localRaw);
+      const isLocal = local.some((f: any) => f.id === fid);
+      if (isLocal) {
+        const updated = local.map((f: any) => f.id === fid ? { ...f, ...updates } : f);
+        await AsyncStorage.setItem('local_formations', JSON.stringify(updated));
+        formationsQuery.refetch();
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('formations').update({
+      title: updates.title,
+      audio_url: updates.audioUrl,
+      settings: updates.settings,
+      data: updates.data
+    }).eq('id', fid);
+    
+    if (error) throw error;
     formationsQuery.refetch();
   };
 
   const deleteFormation = async (fid: string) => {
     const localRaw = await AsyncStorage.getItem('local_formations');
-    if (!localRaw) return;
-    const local = JSON.parse(localRaw);
-    await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid)));
+    if (localRaw) {
+      const local = JSON.parse(localRaw);
+      const isLocal = local.some((f: any) => f.id === fid);
+      if (isLocal) {
+        await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid)));
+        formationsQuery.refetch();
+        return;
+      }
+    }
+    
+    const { error } = await supabase.from('formations').delete().eq('id', fid);
+    if (error) throw error;
     formationsQuery.refetch();
   };
 
-  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string) => {
-    const localRaw = await AsyncStorage.getItem('local_formations');
-    const formation = JSON.parse(localRaw || '[]').find((f: any) => f.id === formationId);
-    if (!formation) throw new Error('동선 정보를 찾을 수 없습니다.');
+  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
+    let formation = formationsMapped.find(f => f.id === formationId);
+    
+    const finalData = currentData || formation?.data;
+    const finalSettings = currentData?.settings || formation?.settings;
+    const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
+
+    if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
 
     const { data: remote, error } = await supabase.from('formations').insert([{
-      room_id: roomId, user_id: currentUser?.id, title: title, audio_url: formation.audioUrl,
-      settings: formation.settings, data: formation.data
+      room_id: roomId, user_id: currentUser?.id, title: title, audio_url: finalAudioUrl,
+      settings: finalSettings, data: finalData
     }]).select().single();
 
     if (error) throw error;

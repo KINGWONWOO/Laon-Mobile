@@ -353,15 +353,39 @@ export default function FormationEditorScreen() {
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
   const exportAsFile = async () => {
-    const data = { title: formation?.title, settings, data: { dancers, scenes, timeline } };
-    const filePath = `${FileSystem.documentDirectory}formation_${formationId}.json`;
-    try { await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data)); await Sharing.shareAsync(filePath); } catch (e) { Alert.alert('오류', '파일 추출 실패'); }
+    try {
+      const data = { title: formation?.title, settings, data: { dancers, scenes, timeline } };
+      const safeId = (formationId || 'new').replace(/[^a-z0-9]/gi, '_');
+      const filePath = `${FileSystem.documentDirectory}formation_${safeId}.json`;
+      
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: FileSystem.EncodingType.UTF8 });
+      
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.');
+        return;
+      }
+      
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'application/json',
+        dialogTitle: '동선 파일 내보내기',
+        UTI: 'public.json'
+      });
+    } catch (e: any) {
+      Alert.alert('오류', `파일 추출 실패: ${e.message}`);
+    }
   };
 
   const exportAsVideo = async () => {
     setIsExporting(true);
-    try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); await publishFormationAsFeedback(id!, formationId!, formation!.title); Alert.alert('성공', '피드백 영상 업로드 완료'); } catch (e: any) { Alert.alert('오류', e.message); }
-    finally { setIsExporting(false); }
+    try { 
+      await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); 
+      await publishFormationAsFeedback(id!, formationId!, formation!.title, { settings, data: { dancers, scenes, timeline }, audioUrl: formation!.audioUrl }); 
+      Alert.alert('성공', '피드백 영상 업로드 완료'); 
+    } catch (e: any) { 
+      Alert.alert('오류', e.message); 
+    } finally { 
+      setIsExporting(false); 
+    }
   };
 
   const showExportOptions = () => { Alert.alert('내보내기', '방식을 선택하세요.', [{ text: 'JSON 파일 추출', onPress: exportAsFile }, { text: '피드백 영상 업로드', onPress: exportAsVideo }, { text: '취소', style: 'cancel' }]); };
