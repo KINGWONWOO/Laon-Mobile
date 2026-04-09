@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -49,7 +49,7 @@ export default function FormationListScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+        const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: 'utf8' });
         const importedData = JSON.parse(fileContent);
         
         if (!importedData.data || !importedData.settings) {

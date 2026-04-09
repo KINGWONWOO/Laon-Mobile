@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, useAnimatedReaction, cancelAnimation, runOnJS } from 'react-native-reanimated';
-import { Dancer, FormationScene, TimelineEntry, Position, Formation } from '../../types';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { Dancer, Formation } from '../../types';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -31,8 +31,12 @@ const DancerNode = ({ dancer, dancerPos, stageWidth, stageHeight, cellSize, inde
 };
 
 export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected }: FormationPlayerProps) {
-  const { dancers, scenes, timeline } = formation.data;
-  const { gridRows, gridCols } = formation.settings;
+  // 안전한 데이터 추출
+  const dancers = formation?.data?.dancers || [];
+  const scenes = formation?.data?.scenes || [];
+  const timeline = formation?.data?.timeline || [];
+  const gridRows = formation?.settings?.gridRows || 10;
+  const gridCols = formation?.settings?.gridCols || 10;
 
   const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / (gridCols + 4);
   const STAGE_WIDTH = (gridCols + 4) * STAGE_CELL_SIZE;
@@ -45,14 +49,17 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   }, [dancers]);
 
   useEffect(() => {
-    if (timeline.length > 0) {
-      const lastEntry = [...timeline].sort((a, b) => (b.timestampMillis + b.durationMillis) - (a.timestampMillis + a.durationMillis))[0];
+    if (timeline && timeline.length > 0) {
+      const sortedTimeline = [...timeline].sort((a, b) => (b.timestampMillis + b.durationMillis) - (a.timestampMillis + a.durationMillis));
+      const lastEntry = sortedTimeline[0];
       const duration = (lastEntry.timestampMillis + lastEntry.durationMillis) / 1000;
       if (onDurationDetected) onDurationDetected(duration);
     }
   }, [timeline]);
 
   useEffect(() => {
+    if (!timeline || timeline.length === 0) return;
+
     const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
     let prevE = null, nextE = null;
     for (let e of sorted) {
@@ -80,9 +87,13 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
           p = prevPos;
         }
       }
-      dancerPositions[d.id].value = p;
+      if (dancerPositions[d.id]) {
+        dancerPositions[d.id].value = p;
+      }
     });
   }, [currentTimeMs, timeline, scenes, dancers]);
+
+  if (!formation) return null;
 
   return (
     <View style={styles.container}>

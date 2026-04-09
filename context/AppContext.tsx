@@ -411,7 +411,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
     let formation = formationsMapped.find(f => f.id === formationId);
     
-    const finalData = currentData || formation?.data;
+    const finalData = currentData?.data || formation?.data;
     const finalSettings = currentData?.settings || formation?.settings;
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
 
