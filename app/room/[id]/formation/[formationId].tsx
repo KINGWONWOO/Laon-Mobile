@@ -8,7 +8,7 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, w
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 
@@ -282,8 +282,8 @@ export default function FormationEditorScreen() {
 
   const openTimelineMenuAt = (x: number) => {
     if (scenes.length === 0) { runOnJS(Alert.alert)('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; }
-    let t = Math.floor((x / PX_PER_SEC) * 1000);
-    setTouchTimeMs(t);
+    // 재생 바(needle) 위치에 정확히 맞추기 위해 currentTimeUI를 사용
+    setTouchTimeMs(currentTimeUI);
     setShowTimelineMenu(true);
   };
 
@@ -338,7 +338,7 @@ export default function FormationEditorScreen() {
     setDancers([...dancers, newDancer]);
   };
 
-  const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('저장 완료'); } catch (e: any) { Alert.alert('오류', e.message); } };
+  const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('성공', '로컬에 저장되었습니다.'); } catch (e: any) { Alert.alert('오류', e.message); } };
 
   const handleTimelineScroll = (e: any) => {
     if (isUserScrolling.current && !status.playing) {

@@ -55,7 +55,7 @@ type AppContextType = {
   addFormation: (roomId: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
   updateFormation: (formationId: string, updates: Partial<Formation>) => Promise<void>;
   deleteFormation: (formationId: string) => Promise<void>;
-  publishFormationAsFeedback: (roomId: string, formationId: string, title: string) => Promise<void>;
+  publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
@@ -411,6 +411,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
     let formation = formationsMapped.find(f => f.id === formationId);
     
+    // currentData가 있으면 직접 사용, 없으면 검색된 formation에서 가져옴
     const finalData = currentData?.data || formation?.data;
     const finalSettings = currentData?.settings || formation?.settings;
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;

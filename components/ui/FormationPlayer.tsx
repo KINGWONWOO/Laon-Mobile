@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
-import { Dancer, Formation } from '../../types';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { Formation } from '../../types';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -11,12 +11,47 @@ interface FormationPlayerProps {
   onDurationDetected?: (duration: number) => void;
 }
 
-const DancerNode = ({ dancer, dancerPos, stageWidth, stageHeight, cellSize, index }: any) => {
+const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stageHeight, cellSize, index }: any) => {
+  const pos = useSharedValue({ x: 0.5, y: 0.5 });
+
+  // 개별 노드에서 위치 계산 및 업데이트
+  useEffect(() => {
+    if (!timeline || timeline.length === 0) return;
+
+    const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+    let prevE = null, nextE = null;
+    for (let e of sorted) {
+      if (e.timestampMillis <= currentTimeMs) prevE = e;
+      else { nextE = e; break; }
+    }
+
+    const getScenePos = (sId: string) => scenes.find((s: any) => s.id === sId)?.positions[dancer.id] || { x: 0.5, y: 0.5 };
+    
+    let p = { x: 0.5, y: 0.5 };
+    if (!prevE) {
+      p = sorted.length > 0 ? getScenePos(sorted[0]?.sceneId) : { x: 0.5, y: 0.5 };
+    } else {
+      const prevPos = getScenePos(prevE.sceneId);
+      if (currentTimeMs <= prevE.timestampMillis + prevE.durationMillis) {
+        p = prevPos;
+      } else if (nextE) {
+        const nextPos = getScenePos(nextE.sceneId);
+        const gapStart = prevE.timestampMillis + prevE.durationMillis, gapEnd = nextE.timestampMillis;
+        const progress = Math.max(0, Math.min(1, (currentTimeMs - gapStart) / (gapEnd - gapStart)));
+        const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
+      } else {
+        p = prevPos;
+      }
+    }
+    pos.value = p;
+  }, [currentTimeMs, timeline, scenes, dancer.id]);
+
   const style = useAnimatedStyle(() => ({
     width: cellSize * 2.5,
     transform: [
-      { translateX: (dancerPos.value.x * stageWidth) - (cellSize * 1.25) },
-      { translateY: (dancerPos.value.y * stageHeight) - (cellSize * 0.35) },
+      { translateX: (pos.value.x * stageWidth) - (cellSize * 1.25) },
+      { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
     ],
   }));
 
@@ -31,7 +66,6 @@ const DancerNode = ({ dancer, dancerPos, stageWidth, stageHeight, cellSize, inde
 };
 
 export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected }: FormationPlayerProps) {
-  // 안전한 데이터 추출
   const dancers = formation?.data?.dancers || [];
   const scenes = formation?.data?.scenes || [];
   const timeline = formation?.data?.timeline || [];
@@ -42,12 +76,6 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const STAGE_WIDTH = (gridCols + 4) * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
 
-  const dancerPositions = useMemo(() => {
-    const dict: any = {};
-    dancers.forEach(d => { dict[d.id] = useSharedValue({ x: 0.5, y: 0.5 }); });
-    return dict;
-  }, [dancers]);
-
   useEffect(() => {
     if (timeline && timeline.length > 0) {
       const sortedTimeline = [...timeline].sort((a, b) => (b.timestampMillis + b.durationMillis) - (a.timestampMillis + a.durationMillis));
@@ -56,42 +84,6 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
       if (onDurationDetected) onDurationDetected(duration);
     }
   }, [timeline]);
-
-  useEffect(() => {
-    if (!timeline || timeline.length === 0) return;
-
-    const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-    let prevE = null, nextE = null;
-    for (let e of sorted) {
-      if (e.timestampMillis <= currentTimeMs) prevE = e;
-      else { nextE = e; break; }
-    }
-
-    dancers.forEach(d => {
-      let p = { x: 0.5, y: 0.5 };
-      const getScenePos = (sId: string) => scenes.find(s => s.id === sId)?.positions[d.id] || { x: 0.5, y: 0.5 };
-      
-      if (!prevE) {
-        p = sorted.length > 0 ? getScenePos(sorted[0]?.sceneId) : { x: 0.5, y: 0.5 };
-      } else {
-        const prevPos = getScenePos(prevE.sceneId);
-        if (currentTimeMs <= prevE.timestampMillis + prevE.durationMillis) {
-          p = prevPos;
-        } else if (nextE) {
-          const nextPos = getScenePos(nextE.sceneId);
-          const gapStart = prevE.timestampMillis + prevE.durationMillis, gapEnd = nextE.timestampMillis;
-          const progress = Math.max(0, Math.min(1, (currentTimeMs - gapStart) / (gapEnd - gapStart)));
-          const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-          p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
-        } else {
-          p = prevPos;
-        }
-      }
-      if (dancerPositions[d.id]) {
-        dancerPositions[d.id].value = p;
-      }
-    });
-  }, [currentTimeMs, timeline, scenes, dancers]);
 
   if (!formation) return null;
 
@@ -109,7 +101,9 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
             key={d.id}
             index={i}
             dancer={d}
-            dancerPos={dancerPositions[d.id]}
+            timeline={timeline}
+            scenes={scenes}
+            currentTimeMs={currentTimeMs}
             stageWidth={STAGE_WIDTH}
             stageHeight={STAGE_HEIGHT}
             cellSize={STAGE_CELL_SIZE}
