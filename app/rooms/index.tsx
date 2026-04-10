@@ -48,12 +48,9 @@ export default function RoomsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 상단 헤더: 프로필 설정 */}
+      {/* 상단 헤더: 프로필 정보 및 액션 버튼 */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.profileBtn} onPress={() => {
-          setNewName(currentUser?.name || '');
-          setShowProfileModal(true);
-        }}>
+        <View style={styles.profileSection}>
           {currentUser?.profileImage ? (
             <Image source={{ uri: currentUser.profileImage }} style={styles.headerAvatar} />
           ) : (
@@ -65,10 +62,28 @@ export default function RoomsScreen() {
             <Text style={[styles.welcomeText, { color: theme.textSecondary }]}>반가워요!</Text>
             <Text style={[styles.userName, { color: theme.text }]}>{currentUser?.name} 님</Text>
           </View>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={logout}>
-          <Ionicons name="log-out-outline" size={24} color={theme.textSecondary} />
-        </TouchableOpacity>
+        </View>
+        
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} 
+            onPress={() => {
+              setNewName(currentUser?.name || '');
+              setShowProfileModal(true);
+            }}
+          >
+            <Ionicons name="settings-outline" size={20} color={theme.text} />
+            <Text style={[styles.actionIconText, { color: theme.text }]}>수정</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionIconButton, { backgroundColor: theme.error + '22', marginLeft: 8 }]} 
+            onPress={logout}
+          >
+            <Ionicons name="log-out-outline" size={20} color={theme.error} />
+            <Text style={[styles.actionIconText, { color: theme.error }]}>로그아웃</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.titleRow}>
@@ -94,8 +109,8 @@ export default function RoomsScreen() {
             {item.image_uri ? (
               <Image source={{ uri: item.image_uri }} style={styles.roomImage} />
             ) : (
-              <View style={[styles.roomImage, { backgroundColor: theme.border, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: theme.primary, fontSize: 24, fontWeight: 'bold' }}>{item.name[0]}</Text>
+              <View style={[styles.roomImage, { backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ color: theme.background, fontSize: 24, fontWeight: 'bold' }}>{item.name[0].toUpperCase()}</Text>
               </View>
             )}
             <View style={styles.roomInfo}>
@@ -166,12 +181,15 @@ export default function RoomsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
-  profileBtn: { flexDirection: 'row', alignItems: 'center' },
+  profileSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerAvatar: { width: 45, height: 45, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontWeight: 'bold', fontSize: 18 },
   headerTextInfo: { marginLeft: 12 },
   welcomeText: { fontSize: 12 },
   userName: { fontSize: 16, fontWeight: 'bold' },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  actionIconButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10 },
+  actionIconText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 24, fontWeight: 'bold' },
   actionBtn: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

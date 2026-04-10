@@ -71,6 +71,7 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const timeline = formation?.data?.timeline || [];
   const gridRows = formation?.settings?.gridRows || 10;
   const gridCols = formation?.settings?.gridCols || 10;
+  const stageDirection = formation?.settings?.stageDirection || 'top';
 
   const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / (gridCols + 4);
   const STAGE_WIDTH = (gridCols + 4) * STAGE_CELL_SIZE;
@@ -89,26 +90,40 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
 
   return (
     <View style={styles.container}>
-      <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }]}>
-        <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
-        <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
-        <View style={styles.gridLayer}>
-          {Array.from({ length: gridRows + 1 }).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i / gridRows) * 100}%` }]} />)}
-          {Array.from({ length: gridCols + 5 }).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i / (gridCols + 4)) * 100}%` }]} />)}
+      <View style={styles.stageWrapper}>
+        <View style={[styles.directionLabelBox, { top: -35 }]}>
+          <Text style={styles.directionLabelText}>
+            {stageDirection === 'top' ? 'AUDIENCE (FRONT)' : 'BACKSTAGE'}
+          </Text>
         </View>
-        {dancers.map((d, i) => (
-          <DancerNode
-            key={d.id}
-            index={i}
-            dancer={d}
-            timeline={timeline}
-            scenes={scenes}
-            currentTimeMs={currentTimeMs}
-            stageWidth={STAGE_WIDTH}
-            stageHeight={STAGE_HEIGHT}
-            cellSize={STAGE_CELL_SIZE}
-          />
-        ))}
+
+        <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }]}>
+          <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
+          <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
+          <View style={styles.gridLayer}>
+            {Array.from({ length: gridRows + 1 }).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i / gridRows) * 100}%` }]} />)}
+            {Array.from({ length: gridCols + 5 }).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i / (gridCols + 4)) * 100}%` }]} />)}
+          </View>
+          {dancers.map((d, i) => (
+            <DancerNode
+              key={d.id}
+              index={i}
+              dancer={d}
+              timeline={timeline}
+              scenes={scenes}
+              currentTimeMs={currentTimeMs}
+              stageWidth={STAGE_WIDTH}
+              stageHeight={STAGE_HEIGHT}
+              cellSize={STAGE_CELL_SIZE}
+            />
+          ))}
+        </View>
+
+        <View style={[styles.directionLabelBox, { bottom: -35 }]}>
+          <Text style={styles.directionLabelText}>
+            {stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE (FRONT)'}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -116,7 +131,10 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  stageWrapper: { alignItems: 'center', justifyContent: 'center' },
   stage: { backgroundColor: '#0A0A0A', borderWidth: 1, borderColor: '#333', overflow: 'hidden' },
+  directionLabelBox: { position: 'absolute', paddingHorizontal: 15, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  directionLabelText: { color: '#666', fontSize: 9, fontWeight: 'bold', letterSpacing: 2 },
   offStageArea: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.05)', zIndex: 1 },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },

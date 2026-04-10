@@ -15,6 +15,9 @@ export default function ScheduleScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showVoterModal, setShowVoterModal] = useState(false);
+  const [voterModalTitle, setVoterModalTitle] = useState('');
+  const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
   
   // 생성 관련 상태
   const [title, setTitle] = useState('');
@@ -97,7 +100,6 @@ export default function ScheduleScreen() {
     const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => o.dateTime.split(' ')[0]))).sort();
     const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt((o.dateTime || ' 00').split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b);
 
-    // Heatmap max calculation
     const voteCounts = schedule.options.map((opt: any) => 
       Object.values(schedule.responses).filter((ids: any) => ids.includes(opt.id)).length
     );
@@ -112,11 +114,45 @@ export default function ScheduleScreen() {
     const getRanked = () => {
       return schedule.options.map((opt: any) => ({
         ...opt,
-        votes: Object.values(schedule.responses).filter((ids: any) => ids.includes(opt.id)).length
+        votes: Object.values(schedule.responses).filter((ids: any) => ids.includes(opt.id)).length,
+        voters: Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId)
       })).sort((a: any, b: any) => b.votes - a.votes);
     };
 
     const ranked = getRanked();
+    
+    // 연속된 시간 그룹화 로직 (Hook 제거)
+    const getGroupedRanked = () => {
+      if (!ranked || ranked.length === 0) return [];
+      const topVotes = ranked[0].votes;
+      if (topVotes === 0) return [];
+      
+      const topOptions = ranked.filter(r => r.votes === topVotes).sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+      const groups: any[] = [];
+      
+      if (topOptions.length > 0) {
+        let currentGroup: any[] = [topOptions[0]];
+        for (let i = 1; i < topOptions.length; i++) {
+          const prev = topOptions[i-1];
+          const curr = topOptions[i];
+          const prevDate = prev.dateTime.split(' ')[0];
+          const currDate = curr.dateTime.split(' ')[0];
+          const prevHour = parseInt(prev.dateTime.split(' ')[1]);
+          const currHour = parseInt(curr.dateTime.split(' ')[1]);
+          
+          if (prevDate === currDate && currHour === prevHour + 1) {
+            currentGroup.push(curr);
+          } else {
+            groups.push(currentGroup);
+            currentGroup = [curr];
+          }
+        }
+        groups.push(currentGroup);
+      }
+      return groups;
+    };
+
+    const groupedRanked = getGroupedRanked();
 
     return (
       <Modal visible={!!selectedScheduleId} animationType="slide">
@@ -189,14 +225,34 @@ export default function ScheduleScreen() {
 
             <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[styles.rankingHeader, { color: theme.primary }]}>가장 많이 모이는 시간</Text>
-              {ranked.slice(0, 3).filter((r:any)=>r.votes>0).map((r: any, idx: number) => (
-                <View key={r.id} style={styles.rankingItem}>
-                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx+1}위</Text>
-                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.dateTime.split(' ')[0].slice(5)}일 {parseInt(r.dateTime.split(' ')[1])}시</Text>
-                  <Text style={[styles.rankingCount, { color: theme.primary }]}>{r.votes}명</Text>
-                </View>
-              ))}
-              {ranked[0]?.votes === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 10 }}>아직 투표가 없습니다.</Text>}
+              {groupedRanked.length > 0 ? groupedRanked.map((group, idx) => {
+                const start = group[0];
+                const end = group[group.length-1];
+                const dateStr = start.dateTime.split(' ')[0].slice(5);
+                const startHour = parseInt(start.dateTime.split(' ')[1]);
+                const endHour = parseInt(end.dateTime.split(' ')[1]) + 1;
+                const displayTime = group.length === 1 ? `${dateStr}일 ${startHour}시` : `${dateStr}일 ${startHour}시-${endHour}시`;
+                
+                return (
+                  <View key={idx} style={styles.rankingItem}>
+                    <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx+1}위</Text>
+                    <Text style={[styles.rankingText, { color: theme.text }]}>{displayTime}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 10 }]}>{start.votes}명</Text>
+                      <TouchableOpacity 
+                        style={[styles.infoBtn, { backgroundColor: theme.primary + '22' }]} 
+                        onPress={() => {
+                          setVotersToDisplay(start.voters);
+                          setVoterModalTitle(displayTime);
+                          setShowVoterModal(true);
+                        }}
+                      >
+                        <Ionicons name="people" size={14} color={theme.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }) : <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 10 }}>아직 투표가 없습니다.</Text>}
             </View>
 
             <View style={styles.voterSummaryDetail}>
@@ -245,6 +301,26 @@ export default function ScheduleScreen() {
       />
 
       {renderDetail()}
+
+      <Modal visible={showVoterModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.voterModalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text, fontSize: 16 }]}>{voterModalTitle} 가능 인원</Text>
+              <TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={20} color={theme.text} /></TouchableOpacity>
+            </View>
+            <View style={styles.voterList}>
+              {votersToDisplay.map(vId => (
+                <View key={vId} style={styles.voterListItem}>
+                  <Ionicons name="person-circle" size={24} color={theme.primary} style={{ marginRight: 10 }} />
+                  <Text style={{ color: theme.text }}>{getUserById(vId)?.name || '알 수 없음'}</Text>
+                </View>
+              ))}
+              {votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>가능한 인원이 없습니다.</Text>}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showAddModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -333,6 +409,7 @@ const styles = StyleSheet.create({
   rankingIdx: { width: 30, fontSize: 13, fontWeight: 'bold' },
   rankingText: { flex: 1, fontSize: 14 },
   rankingCount: { fontSize: 14, fontWeight: 'bold' },
+  infoBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 
   voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 50 },
   voterRow: { flexDirection: 'row' },
@@ -343,6 +420,9 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', marginTop: 100, fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '85%' },
+  voterModalContent: { padding: 20, borderRadius: 25, width: '80%', alignSelf: 'center', marginBottom: 'auto', marginTop: 'auto' },
+  voterList: { marginTop: 10 },
+  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 22, fontWeight: 'bold' },
   label: { fontSize: 13, fontWeight: '700', marginTop: 15, marginBottom: 8 },

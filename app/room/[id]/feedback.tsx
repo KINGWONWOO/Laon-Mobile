@@ -160,11 +160,42 @@ export default function FeedbackScreen() {
   const handleAddComment = async () => {
     if (!selectedVideo || !newComment.trim()) return;
     const posMillis = isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000);
+    
+    const tempComment = {
+      id: Math.random().toString(),
+      userId: currentUser?.id || '',
+      text: newComment.trim(),
+      timestampMillis: posMillis,
+      createdAt: Date.now()
+    };
+    
+    // selectedVideo 객체 참조를 유지하려고 시도하지만, 
+    // 사실 VideoView가 player 객체에 의존하므로 player가 유지되면 괜찮아야 함.
+    // player는 cachedVideoUrl에 의존함. URL이 같으면 player는 유지됨.
+    setSelectedVideo(prev => {
+      if (!prev) return null;
+      // 비디오 URL이 변경되지 않도록 확실히 함
+      return {
+        ...prev,
+        comments: [...prev.comments, tempComment]
+      };
+    });
+
     await addComment(selectedVideo.id, newComment.trim(), posMillis);
     setNewComment('');
     setShowCommentInput(false);
-    setTimeout(() => refreshAllData(), 500);
+    
+    // refreshAllData는 배경에서 수행 (캐시 로직이 URL 기반이므로 안정적일 것)
+    refreshAllData();
   };
+
+  // Point 2: 댓글 입력창 열릴 때 일시정지
+  useEffect(() => {
+    if (showCommentInput) {
+      if (isFormation) setIsFormationPlaying(false);
+      else if (player) player.pause();
+    }
+  }, [showCommentInput]);
 
   const seekTo = (ms: number) => { 
     if (isFormation) setFormationTime(ms);

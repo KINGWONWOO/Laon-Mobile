@@ -61,6 +61,8 @@ type AppContextType = {
   themeType: ThemeType;
   setThemeType: (theme: ThemeType) => void;
   theme: any;
+  updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null) => Promise<void>;
+  getRoomUserProfile: (roomId: string, userId: string) => { name?: string, profileImage?: string } | null;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -70,6 +72,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [themeType, setThemeType] = useState<ThemeType>('dark');
+  const [roomProfiles, setRoomProfiles] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem('room_profiles').then(val => {
+      if (val) setRoomProfiles(JSON.parse(val));
+    });
+  }, []);
+
+  const updateRoomUserProfile = async (roomId: string, name: string, profileImage: string | null) => {
+    const key = `${roomId}_${currentUser?.id}`;
+    const newProfiles = { ...roomProfiles, [key]: { name, profileImage } };
+    setRoomProfiles(newProfiles);
+    await AsyncStorage.setItem('room_profiles', JSON.stringify(newProfiles));
+  };
+
+  const getRoomUserProfile = (roomId: string, userId: string) => {
+    return roomProfiles[`${roomId}_${userId}`] || null;
+  };
 
   const theme = getThemeColors(themeType);
 
@@ -439,7 +459,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       schedules: schedulesMapped, addSchedule, respondToSchedule, deleteSchedule,
       votes: votesMapped, addVote, respondToVote, deleteVote,
       formations: formationsMapped, addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
-      refreshAllData, themeType, setThemeType, theme
+      refreshAllData, themeType, setThemeType, theme,
+      updateRoomUserProfile, getRoomUserProfile
     }}>
       {children}
     </AppContext.Provider>

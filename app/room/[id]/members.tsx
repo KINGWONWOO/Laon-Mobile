@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { theme, users, getRoomByIdRemote } = useAppContext();
+  const { theme, users, getRoomByIdRemote, getRoomUserProfile } = useAppContext();
   const router = useRouter();
   
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -62,24 +62,29 @@ export default function MembersScreen() {
         keyExtractor={item => item.id}
         renderItem={({ item }) => {
           const isLeader = item.id === leaderId;
+          const roomProfile = getRoomUserProfile(id as string, item.id);
+          const displayName = roomProfile?.name || item.name;
+          const displayImage = roomProfile?.profileImage || item.profileImage;
+
           return (
             <View style={[styles.memberCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {item.profileImage ? (
-                <Image source={{ uri: item.profileImage }} style={styles.avatar} />
+              {displayImage ? (
+                <Image source={{ uri: displayImage }} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, { backgroundColor: theme.primary + '22' }]}>
-                  <Text style={[styles.avatarText, { color: theme.primary }]}>{item.name[0]?.toUpperCase()}</Text>
+                  <Text style={[styles.avatarText, { color: theme.primary }]}>{displayName[0]?.toUpperCase()}</Text>
                 </View>
               )}
               <View style={styles.info}>
                 <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: theme.text }]}>{item.name}</Text>
+                  <Text style={[styles.name, { color: theme.text }]}>{displayName}</Text>
                   {isLeader && (
                     <View style={[styles.leaderBadge, { backgroundColor: theme.primary }]}>
                       <Text style={styles.leaderText}>방장</Text>
                     </View>
                   )}
                 </View>
+                {roomProfile?.name && <Text style={{ color: theme.textSecondary, fontSize: 11 }}>원래 이름: {item.name}</Text>}
               </View>
             </View>
           );
