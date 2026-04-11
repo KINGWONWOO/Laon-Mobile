@@ -91,9 +91,9 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   return (
     <View style={styles.container}>
       <View style={styles.stageWrapper}>
-        <View style={[styles.directionLabelBox, { top: -35 }]}>
-          <Text style={styles.directionLabelText}>
-            {stageDirection === 'top' ? 'AUDIENCE (FRONT)' : 'BACKSTAGE'}
+        <View style={[styles.directionLabelBox, { top: -35, backgroundColor: stageDirection === 'top' ? 'rgba(255, 51, 102, 0.2)' : 'rgba(255, 255, 255, 0.05)' }]}>
+          <Text style={[styles.directionLabelText, { color: stageDirection === 'top' ? '#FF3366' : '#AAA', fontSize: 10, fontWeight: '900' }]}>
+            {stageDirection === 'top' ? '▼ FRONT (AUDIENCE)' : '▲ BACK'}
           </Text>
         </View>
 
@@ -119,9 +119,9 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
           ))}
         </View>
 
-        <View style={[styles.directionLabelBox, { bottom: -35 }]}>
-          <Text style={styles.directionLabelText}>
-            {stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE (FRONT)'}
+        <View style={[styles.directionLabelBox, { bottom: -35, backgroundColor: stageDirection === 'bottom' ? 'rgba(255, 51, 102, 0.2)' : 'rgba(255, 255, 255, 0.05)' }]}>
+          <Text style={[styles.directionLabelText, { color: stageDirection === 'bottom' ? '#FF3366' : '#AAA', fontSize: 10, fontWeight: '900' }]}>
+            {stageDirection === 'bottom' ? '▲ FRONT (AUDIENCE)' : '▼ BACK'}
           </Text>
         </View>
       </View>

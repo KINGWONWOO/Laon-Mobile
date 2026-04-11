@@ -598,13 +598,14 @@ export default function FormationEditorScreen() {
         </View>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
-            <View style={[styles.directionLabelBox, { top: -45, backgroundColor: settings.stageDirection === 'top' ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 255, 255, 0.05)' }]}>
-              <Text style={[styles.directionLabelText, { color: settings.stageDirection === 'top' ? '#FF3366' : '#888', fontSize: 11 }]}>
-                {settings.stageDirection === 'top' ? '▼ AUDIENCE (FRONT)' : '▲ BACKSTAGE'}
-              </Text>
-            </View>
-
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
+              {/* 상단 라벨 (무대 밖 상단) */}
+              <View style={{ position: 'absolute', top: -30, left: 0, right: 0, alignItems: 'center' }}>
+                <Text style={{ color: settings.stageDirection === 'top' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>
+                  {settings.stageDirection === 'top' ? '앞 FRONT' : '뒤 BACK'}
+                </Text>
+              </View>
+
               <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} /><View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
               <GridLayer settings={settings} />
               {dancers.map((d, i) => (
@@ -624,13 +625,14 @@ export default function FormationEditorScreen() {
                   onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} 
                 />
               ))}
-            </Animated.View>
 
-            <View style={[styles.directionLabelBox, { bottom: -45, backgroundColor: settings.stageDirection === 'bottom' ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 255, 255, 0.05)' }]}>
-              <Text style={[styles.directionLabelText, { color: settings.stageDirection === 'bottom' ? '#FF3366' : '#888', fontSize: 11 }]}>
-                {settings.stageDirection === 'top' ? '▲ BACKSTAGE' : '▼ AUDIENCE (FRONT)'}
-              </Text>
-            </View>
+              {/* 하단 라벨 (무대 밖 하단) */}
+              <View style={{ position: 'absolute', bottom: -30, left: 0, right: 0, alignItems: 'center' }}>
+                <Text style={{ color: settings.stageDirection === 'bottom' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>
+                  {settings.stageDirection === 'bottom' ? '앞 FRONT' : '뒤 BACK'}
+                </Text>
+              </View>
+            </Animated.View>
           </View>
         </GestureDetector>
       </View>
