@@ -562,6 +562,26 @@ export default function FormationEditorScreen() {
     return map;
   }, [scenes]);
 
+  const [tempRows, setTempRows] = useState('');
+  const [tempCols, setTempCols] = useState('');
+
+  const openStageSettings = () => {
+    setTempRows(String(settings.gridRows));
+    setTempCols(String(settings.gridCols));
+    setShowStageSettings(true);
+  };
+
+  const handleApplySettings = () => {
+    const r = parseInt(tempRows);
+    const c = parseInt(tempCols);
+    if (isNaN(r) || isNaN(c) || r <= 0 || c <= 0) {
+      Alert.alert('입력 오류', '격자 행과 열은 1 이상의 숫자여야 합니다.');
+      return;
+    }
+    setSettings({ ...settings, gridRows: r, gridCols: c });
+    setShowStageSettings(false);
+  };
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
@@ -629,7 +649,7 @@ export default function FormationEditorScreen() {
               {/* 하단 라벨 (무대 밖 하단) */}
               <View style={{ position: 'absolute', bottom: -30, left: 0, right: 0, alignItems: 'center' }}>
                 <Text style={{ color: settings.stageDirection === 'bottom' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>
-                  {settings.stageDirection === 'bottom' ? '앞 FRONT' : '뒤 BACK'}
+                  {settings.stageDirection === 'bottom' ? ' 앞 FRONT' : '뒤 BACK'}
                 </Text>
               </View>
             </Animated.View>
@@ -667,7 +687,7 @@ export default function FormationEditorScreen() {
                         const next = arr[idx+1];
                         const minX = prev ? (prev.timestampMillis + prev.durationMillis) / 1000 * PX_PER_SEC : 0;
                         const maxX = next ? next.timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC;
-                        
+
                         return (
                           <React.Fragment key={e.id}>
                             <TimelineBlock 
@@ -700,7 +720,7 @@ export default function FormationEditorScreen() {
           </View>
         ) : (
           <View style={styles.createDock}>
-            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={styles.toolBtnText}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => setShowStageSettings(true)}><Ionicons name="settings-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>무대 설정</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity></View>
+            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={styles.toolBtnText}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={openStageSettings}><Ionicons name="settings-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>무대 설정</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color="#AAA" /><Text style={styles.toolBtnText}>가이드</Text></TouchableOpacity></View>
             <View style={styles.sceneSection}><TouchableOpacity style={styles.addSceneBtnWide} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={20} color="#000" /><Text style={styles.addSceneText}>대형 추가</Text></TouchableOpacity><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => (<TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => setScenes(scenes.filter(x => x.id !== s.id)) }, { text: '취소' }]); }} onPress={() => setActiveSceneId(s.id)} style={[styles.scenePill, activeSceneId === s.id && { backgroundColor: theme.primary }]}><Text style={{color: activeSceneId === s.id ? '#000' : '#FFF'}}>{s.name}</Text></TouchableOpacity>))}</ScrollView></View>
           </View>
         )}
@@ -710,11 +730,12 @@ export default function FormationEditorScreen() {
       <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={styles.sheetInput} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:'#888'}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
       <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={styles.sheet}><TextInput style={styles.sheetInput} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d))} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: '#FFF' }]} onPress={() => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d))} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
       <Modal visible={showStageSettings} transparent animationType="fade">
-        <View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { color: theme.primary }]} keyboardType="number-pad" value={String(settings.gridRows)} onChangeText={v => setSettings({...settings, gridRows: parseInt(v) || 10})} /></View>
-            <View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { color: theme.primary }]} keyboardType="number-pad" value={String(settings.gridCols)} onChangeText={v => setSettings({...settings, gridCols: parseInt(v) || 10})} /></View>
+        <View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>무대 설정</Text>
+            <View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { color: theme.primary }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View>
+            <View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { color: theme.primary }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View>
             <View style={styles.settingRow}><Text style={{color:'#FFF'}}>Audience 위치</Text><TouchableOpacity style={styles.toggleBtn} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View>
             <View style={styles.settingRow}><Text style={{color:'#FFF'}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View>
-            <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={() => setShowStageSettings(false)}><Text style={{fontWeight:'bold', color: '#000'}}>확인</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: '#000'}}>확인</Text></TouchableOpacity>
           </View></View></Modal>
       <Modal visible={showGuide} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, {width:'90%'}]}><Text style={styles.menuTitle}>{GUIDE_STEPS[guideIndex].title}</Text><Text style={{color:'#CCC', marginVertical:15}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:'#FFF'}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></View></Modal>
     </GestureHandlerRootView>
