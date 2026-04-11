@@ -460,7 +460,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       votes: votesMapped, addVote, respondToVote, deleteVote,
       formations: formationsMapped, addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
       refreshAllData, themeType, setThemeType, theme,
-      updateRoomUserProfile, getRoomUserProfile
+      updateRoomUserProfile, getRoomUserProfile, roomProfiles
     }}>
       {children}
     </AppContext.Provider>

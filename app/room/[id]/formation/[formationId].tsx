@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ScrollView, ActivityIndicator, Pressable, Image } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { Dancer, FormationScene, TimelineEntry, Position, Formation, FormationSettings } from '../../../../types';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction, useAnimatedRef, scrollTo } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -19,25 +19,8 @@ const TIMELINE_CONTAINER_WIDTH = width - 30;
 const CENTER_OFFSET = TIMELINE_CONTAINER_WIDTH / 2;
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
 
-const GUIDE_STEPS = [
-  {
-    title: '댄서 관리',
-    description: '1. 하단의 "댄서 추가" 버튼으로 멤버를 무대에 올릴 수 있습니다.\n2. 무대 위 댄서 노드를 탭하면 이름 변경, 고유 색상 지정, 삭제가 가능합니다.',
-    image: null
-  },
-  {
-    title: '대형 생성 (Create Mode)',
-    description: '1. "대형 생성" 탭을 선택하세요.\n2. 하단의 "대형 목록"에서 대형을 추가(+)하거나 선택하세요.\n3. 무대 위 댄서들을 드래그하여 원하는 위치에 배치하세요.',
-    image: null
-  },
-  {
-    title: '대형 배치 (Place Mode)',
-    description: '1. "대형 배치" 탭을 선택하세요.\n2. 재생 바(타임라인)를 터치하여 원하는 시점에 대형을 추가하세요.\n3. 생성된 블록의 좌우 핸들을 드래그하여 유지 시간을 조절할 수 있습니다.',
-    image: require('../../../../example/transitionexample.jpg')
-  }
-];
-
-const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
+// 메모이제이션된 정적 컴포넌트
+const WaveformBackground = React.memo(({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6));
   const bars = useMemo(() => {
     const getVal = (i: number) => {
@@ -61,9 +44,9 @@ const WaveformBackground = ({ duration, seed = 'default' }: { duration: number, 
       ))}
     </View>
   );
-};
+});
 
-const TimeMarkers = ({ duration }: { duration: number }) => {
+const TimeMarkers = React.memo(({ duration }: { duration: number }) => {
   const markers = useMemo(() => {
     const list = [];
     for (let i = 0; i <= duration; i += 5) {
@@ -76,17 +59,9 @@ const TimeMarkers = ({ duration }: { duration: number }) => {
     return list;
   }, [duration]);
   return <View style={styles.timeMarkersLayer}>{markers}</View>;
-};
+});
 
-const formatTime = (ms: number) => {
-  if (typeof ms !== 'number' || isNaN(ms)) return '0:00';
-  const totalSec = Math.floor(ms / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
-
-const TransitionX = ({ width, left }: { width: number, left: number }) => {
+const TransitionX = React.memo(({ width, left }: { width: number, left: number }) => {
   if (width <= 5) return null;
   const height = 45; 
   const angle = Math.atan2(height, width) * (180 / Math.PI);
@@ -97,16 +72,18 @@ const TransitionX = ({ width, left }: { width: number, left: number }) => {
       <View style={[styles.xLine, { width: length, top: height/2, left: (width-length)/2, transform: [{ rotate: `-${angle}deg` }] }]} />
     </View>
   );
-};
+});
 
 const ResizeHandle = ({ direction, onDragStart, onDrag }: any) => {
   const pan = Gesture.Pan()
-    .onStart(() => { if(onDragStart) runOnJS(onDragStart)(); })
-    .onUpdate((e) => { if(onDrag) runOnJS(onDrag)(e.translationX); });
+    .runOnJS(true)
+    .onStart(onDragStart)
+    .onUpdate((e) => onDrag(e.translationX));
+
   return (
     <GestureDetector gesture={pan}>
       <View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
-        <View style={styles.handleCircle}><Ionicons name={direction === 'left' ? "chevron-back" : "chevron-forward"} size={14} color="#000" /></View>
+        <View style={styles.handleCircle} />
       </View>
     </GestureDetector>
   );
@@ -148,7 +125,7 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
   }));
 
   return (
-    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().onEnd(() => runOnJS(onPress)()))}>
+    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => onPress()))}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
         <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? '#FFF' : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
         <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: (settings.dancerNameSize || 8) }]} numberOfLines={1}>{dancer.name}</Text>
@@ -195,7 +172,7 @@ export default function FormationEditorScreen() {
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
       let newScale = Math.max(0.5, Math.min(5, savedScale.value * e.scale));
-      if (Math.abs(newScale - 1) < 0.07) newScale = 1; // 100% snap
+      if (Math.abs(newScale - 1) < 0.07) newScale = 1; 
       scale.value = newScale;
       runOnJS(setZoomUI)(Math.round(newScale * 100));
     })
@@ -218,30 +195,51 @@ export default function FormationEditorScreen() {
   const player = useAudioPlayer(formation?.audioUrl || '');
   const status = useAudioPlayerStatus(player);
   const currentTimeMs = useSharedValue(0);
-  const [currentTimeUI, setCurrentTimeUI] = useState(0);
-  const timelineScrollViewRef = useRef<ScrollView>(null);
-  const isUserScrolling = useRef(false);
+  const isPlayerPlayingSV = useSharedValue(false);
+  const isUserScrollingSV = useSharedValue(false);
+  const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
 
   useEffect(() => {
+    isPlayerPlayingSV.value = status.playing;
     if (status.playing && status.duration > 0) {
       const remaining = (status.duration - status.currentTime) * 1000;
       currentTimeMs.value = status.currentTime * 1000;
-      currentTimeMs.value = withTiming(status.duration * 1000, { duration: remaining, easing: Easing.linear });
+      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     } else {
       cancelAnimation(currentTimeMs);
-      if (status.currentTime !== undefined) currentTimeMs.value = status.currentTime * 1000;
-    }
-  }, [status.playing, status.currentTime]);
-
-  useEffect(() => {
-    let interval = setInterval(() => {
-      runOnJS(setCurrentTimeUI)(currentTimeMs.value);
-      if (status.playing && !isUserScrolling.current) {
-        timelineScrollViewRef.current?.scrollTo({ x: (currentTimeMs.value / 1000) * PX_PER_SEC, animated: false });
+      if (status.currentTime !== undefined) {
+        currentTimeMs.value = status.currentTime * 1000;
       }
-    }, 50);
-    return () => clearInterval(interval);
+    }
   }, [status.playing]);
+
+  // Timeline 자동 스크롤 로직 (UI 스레드에서 직접 처리하여 안정성 극대화)
+  useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
+    if (data.isPlaying && !data.isScrolling) {
+      scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false);
+    }
+  });
+
+  const handleTimelineScroll = (e: any) => {
+    if (isUserScrollingSV.value) {
+      const offset = e.nativeEvent.contentOffset.x;
+      const newTimeMs = (offset / PX_PER_SEC) * 1000;
+      cancelAnimation(currentTimeMs);
+      currentTimeMs.value = newTimeMs;
+      runOnJS((t: number) => {
+        player.seekTo(t / 1000);
+      })(newTimeMs);
+    }
+  };
+
+  const onScrollEnd = (e: any) => {
+    isUserScrollingSV.value = false;
+    if (isPlayerPlayingSV.value) {
+      const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
+      const remaining = (status.duration * 1000) - time;
+      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
+    }
+  };
 
   const dancerPositions = useMemo(() => {
     const dict: any = {};
@@ -282,8 +280,8 @@ export default function FormationEditorScreen() {
   }, [mode, timeline, scenes, dancers]);
 
   const openTimelineMenuAt = (x: number) => {
-    if (scenes.length === 0) { runOnJS(Alert.alert)('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; }
-    setTouchTimeMs(currentTimeUI);
+    if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; }
+    setTouchTimeMs(currentTimeMs.value);
     setShowTimelineMenu(true);
   };
 
@@ -304,16 +302,12 @@ export default function FormationEditorScreen() {
 
   const handleMoveBlock = (entryId: string, dx: number) => {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
-    const current = timeline.find(e => e.id === entryId);
-    if (!current) return;
     const newStart = Math.max(0, dragStartMs.value + deltaMs);
     setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart } : e));
   };
 
   const handleResize = (entryId: string, dx: number, dir: 'left' | 'right') => {
     const deltaMs = (dx / PX_PER_SEC) * 1000;
-    const current = timeline.find(e => e.id === entryId);
-    if (!current) return;
     if (dir === 'left') {
       let newStart = Math.max(0, dragStartMs.value + deltaMs);
       let newDuration = Math.max(500, dragStartDuration.value - deltaMs);
@@ -339,16 +333,6 @@ export default function FormationEditorScreen() {
   };
 
   const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('성공', '로컬에 저장되었습니다.'); } catch (e: any) { Alert.alert('오류', e.message); } };
-
-  const handleTimelineScroll = (e: any) => {
-    if (isUserScrolling.current && !status.playing) {
-      const offset = e.nativeEvent.contentOffset.x;
-      const newTimeMs = (offset / PX_PER_SEC) * 1000;
-      currentTimeMs.value = newTimeMs;
-      setCurrentTimeUI(newTimeMs);
-      runOnJS(player.seekTo)(newTimeMs / 1000);
-    }
-  };
 
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
@@ -396,6 +380,17 @@ export default function FormationEditorScreen() {
 
   const showExportOptions = () => { Alert.alert('내보내기', '방식을 선택하세요.', [{ text: 'JSON 파일 추출', onPress: exportAsFile }, { text: '피드백 영상 업로드', onPress: exportAsVideo }, { text: '취소', style: 'cancel' }]); };
 
+  const formatTime = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  };
+
+  const GUIDE_STEPS = [
+    { title: '댄서 추가', description: '댄서 추가 버튼을 눌러 무대에 댄서를 배치하세요. 댄서를 탭하여 이름과 색상을 변경할 수 있습니다.' },
+    { title: '대형 생성', description: '하단의 대형 추가 버튼으로 현재 댄서들의 위치를 대형으로 저장하세요. 여러 개의 대형을 만들어 전환을 구성할 수 있습니다.' },
+    { title: '타임라인 배치', description: '대형 배치 탭에서 음악의 특정 시점에 저장한 대형을 배치하세요. 대형 사이의 이동은 자동으로 계산됩니다.' }
+  ];
+
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
   const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
@@ -437,7 +432,12 @@ export default function FormationEditorScreen() {
         </View>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
-            <View style={[styles.directionLabelBox, { top: -35 }]}><Text style={styles.directionLabelText}>{settings.stageDirection === 'top' ? 'AUDIENCE (FRONT)' : 'BACKSTAGE'}</Text></View>
+            <View style={[styles.directionLabelBox, { top: -45, backgroundColor: settings.stageDirection === 'top' ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 255, 255, 0.05)' }]}>
+              <Text style={[styles.directionLabelText, { color: settings.stageDirection === 'top' ? '#FF3366' : '#888', fontSize: 11 }]}>
+                {settings.stageDirection === 'top' ? '▼ AUDIENCE (FRONT)' : '▲ BACKSTAGE'}
+              </Text>
+            </View>
+
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
               <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} /><View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
               <View style={styles.gridLayer}>
@@ -448,7 +448,12 @@ export default function FormationEditorScreen() {
                 <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />
               ))}
             </Animated.View>
-            <View style={[styles.directionLabelBox, { bottom: -35 }]}><Text style={styles.directionLabelText}>{settings.stageDirection === 'top' ? 'BACKSTAGE' : 'AUDIENCE (FRONT)'}</Text></View>
+
+            <View style={[styles.directionLabelBox, { bottom: -45, backgroundColor: settings.stageDirection === 'bottom' ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 255, 255, 0.05)' }]}>
+              <Text style={[styles.directionLabelText, { color: settings.stageDirection === 'bottom' ? '#FF3366' : '#888', fontSize: 11 }]}>
+                {settings.stageDirection === 'top' ? '▲ BACKSTAGE' : '▼ AUDIENCE (FRONT)'}
+              </Text>
+            </View>
           </View>
         </GestureDetector>
       </View>
@@ -457,26 +462,50 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={styles.timelineWrapper}>
-              <ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }} onScrollBeginDrag={() => { isUserScrolling.current = true; cancelAnimation(currentTimeMs); runOnJS(setSelectedEntryId)(null); }} onScrollEndDrag={() => isUserScrolling.current = false}>
-                <GestureDetector gesture={Gesture.Tap().onEnd((e) => runOnJS(openTimelineMenuAt)(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}><WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} /><TimeMarkers duration={status.duration || 60} /><View style={styles.timelineTrack}>
+              <Animated.ScrollView 
+                ref={timelineScrollViewRef} 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                scrollEventThrottle={16} 
+                onScroll={handleTimelineScroll} 
+                onScrollBeginDrag={() => { 
+                  isUserScrollingSV.value = true; 
+                  cancelAnimation(currentTimeMs); 
+                  runOnJS(setSelectedEntryId)(null); 
+                }} 
+                onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }}
+                onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }}
+                onMomentumScrollEnd={onScrollEnd}
+                contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}
+              >
+                <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
+                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}>
+                    <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
+                    <TimeMarkers duration={status.duration || 60} />
+                    <View style={styles.timelineTrack}>
                       {[...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis).map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <GestureDetector gesture={Gesture.Exclusive(Gesture.Pan().onStart(() => { runOnJS(handleDragStart)(e.timestampMillis, e.durationMillis, e.id); }).onUpdate((g) => runOnJS(handleMoveBlock)(e.id, g.translationX)), Gesture.Tap().onEnd(() => { if (selectedEntryId === e.id) { runOnJS(Alert.alert)('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else runOnJS(setSelectedEntryId)(e.id); }))}>
+                          <GestureDetector gesture={Gesture.Exclusive(
+                            Gesture.Pan().runOnJS(true).onStart(() => handleDragStart(e.timestampMillis, e.durationMillis, e.id)).onUpdate((g) => handleMoveBlock(e.id, g.translationX)), 
+                            Gesture.Tap().runOnJS(true).onEnd(() => { if (selectedEntryId === e.id) { Alert.alert('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else setSelectedEntryId(e.id); })
+                          )}>
                             <View style={[styles.block, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : '#AAA' }]}><Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
                               {selectedEntryId === e.id && (<><ResizeHandle direction="left" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'left')} /><ResizeHandle direction="right" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'right')} /></>)}
                             </View>
                           </GestureDetector>
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
-                      ))}</View></View>
+                      ))}
+                    </View>
+                  </View>
                 </GestureDetector>
-              </ScrollView><View style={styles.needle} />
+              </Animated.ScrollView>
+              <View style={[styles.needle, { left: CENTER_OFFSET }]} pointerEvents="none" />
             </View>
             <View style={styles.controls}>
               <TouchableOpacity onPress={handlePickAudio} style={styles.toolBtnSmall}><Ionicons name="musical-notes" size={24} color="#AAA" /><Text style={styles.toolBtnText}>노래 변경</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => { if(status.playing) player.pause(); else { player.seekTo(currentTimeUI / 1000); player.play(); } }} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
-              <Text style={styles.timeText}>{formatTime(currentTimeUI)}</Text>
+              <TouchableOpacity onPress={() => { if(status.playing) player.pause(); else { player.seekTo(currentTimeMs.value / 1000); player.play(); } }} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
+              <Text style={styles.timeText}>{formatTime(status.currentTime * 1000)}</Text>
             </View>
           </View>
         ) : (
@@ -487,7 +516,6 @@ export default function FormationEditorScreen() {
         )}
       </View>
 
-      {/* 모달들은 이전과 동일하지만 가독성을 위해 생략 또는 유지 */}
       <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={styles.menu}><Text style={styles.menuTitle}>대형 선택 ({formatTime(touchTimeMs)})</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={styles.menuItem}><Text style={{color:'#FFF'}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
       <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={styles.menu}><Text style={styles.menuTitle}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={styles.sheetInput} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:'#888'}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
       <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={styles.sheet}><TextInput style={styles.sheetInput} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d))} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: '#FFF' }]} onPress={() => setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d))} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color="#FF4444" /><Text style={{ color: '#FF4444', marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
@@ -533,7 +561,7 @@ const styles = StyleSheet.create({
   timelineTrack: { flex: 1, position: 'relative' },
   block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
   blockText: { fontSize: 10, fontWeight: 'bold' },
-  needle: { position: 'absolute', top: 0, bottom: 0, left: CENTER_OFFSET, width: 2, backgroundColor: '#FFD700', zIndex: 100 },
+  needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   toolBtnSmall: { alignItems: 'center', width: 60 },
   playBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
@@ -563,7 +591,7 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   smallInput: { backgroundColor: '#000', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, width: 60, textAlign: 'center', fontWeight: 'bold' },
   toggleBtn: { backgroundColor: '#222', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  directionLabelBox: { position: 'absolute', paddingHorizontal: 15, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  directionLabelBox: { position: 'absolute', paddingHorizontal: 15, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   directionLabelText: { color: '#666', fontSize: 9, fontWeight: 'bold', letterSpacing: 2 },
   doneBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   zoomControls: { position: 'absolute', top: 15, right: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },

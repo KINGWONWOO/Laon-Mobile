@@ -11,12 +11,13 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 const { width } = Dimensions.get('window');
 const GRID_SIZE = width / 3;
 
-const VideoItem = ({ url, style, usePlayerControls = false }: { url: string, style?: any, usePlayerControls?: boolean }) => {
+// 상세 보기에서만 사용되는 비디오 컴포넌트
+const DetailVideoPlayer = ({ url }: { url: string }) => {
   const player = useVideoPlayer(url, p => {
     p.loop = true;
     p.play();
   });
-  return <VideoView style={style || styles.feedImage} player={player} allowsFullscreen={false} contentFit="cover" nativeControls={usePlayerControls} />;
+  return <VideoView style={styles.detailMedia} player={player} allowsFullscreen={false} contentFit="contain" nativeControls={true} />;
 };
 
 export default function ArchiveScreen() {
@@ -83,7 +84,6 @@ export default function ArchiveScreen() {
     await addPhotoComment(selectedItem.id, commentText.trim(), replyToId);
     setCommentText('');
     setReplyToId(undefined);
-    // 상세 모달 데이터 갱신을 위해 roomPhotos에서 다시 찾기
     refreshAllData();
   };
 
@@ -99,7 +99,6 @@ export default function ArchiveScreen() {
 
   const isVideo = (url: string) => url.toLowerCase().match(/\.(mp4|mov|m4v|webm)$/) || url.includes('video');
 
-  // 상세 모달에서 사용할 최신 데이터 선택
   const activeDetailItem = useMemo(() => {
     if (!selectedItem) return null;
     return roomPhotos.find(p => p.id === selectedItem.id) || selectedItem;
@@ -127,15 +126,15 @@ export default function ArchiveScreen() {
             return (
               <TouchableOpacity 
                 style={styles.gridItem} 
+                activeOpacity={0.7}
                 onPress={() => { setSelectedItem(item); markItemAsAccessed('photo', item.id); }}
               >
-                {itemIsVideo ? (
-                  <View style={styles.gridImage}>
-                    <VideoItem url={item.photoUrl} style={styles.gridImage} />
-                    <View style={styles.videoBadge}><Ionicons name="play" size={12} color="#FFF" /></View>
+                {/* 목록에서는 비디오를 재생하지 않고 이미지만 보여줌 (성공 최적화) */}
+                <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
+                {itemIsVideo && (
+                  <View style={styles.videoBadge}>
+                    <Ionicons name="play" size={14} color="#FFF" />
                   </View>
-                ) : (
-                  <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
                 )}
               </TouchableOpacity>
             );
@@ -149,18 +148,18 @@ export default function ArchiveScreen() {
       <Modal visible={showUploadModal} animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1, backgroundColor: theme.background}}>
           <ScrollView contentContainerStyle={styles.uploadContainer}>
-            <TouchableOpacity onPress={() => { setShowUploadModal(false); setNewFileUri(null); }} style={styles.closeBtn}>
-              <Ionicons name="close" size={28} color={theme.text} />
-            </TouchableOpacity>
+            <View style={styles.uploadHeader}>
+              <TouchableOpacity onPress={() => { setShowUploadModal(false); setNewFileUri(null); }}>
+                <Ionicons name="close" size={28} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>공유하기</Text>
+              <View style={{ width: 28 }} />
+            </View>
             {newFileUri && (
-              fileType === 'video' ? (
-                <VideoItem url={newFileUri} style={styles.previewImage} />
-              ) : (
-                <Image source={{ uri: newFileUri }} style={styles.previewImage} />
-              )
+              <Image source={{ uri: newFileUri }} style={styles.previewImage} />
             )}
             <TextInput 
-              style={[styles.descInput, { color: theme.text }]} 
+              style={[styles.descInput, { color: theme.text, borderColor: theme.border }]} 
               placeholder="설명을 입력하세요..." 
               placeholderTextColor={theme.textSecondary} 
               multiline
@@ -168,15 +167,15 @@ export default function ArchiveScreen() {
               onChangeText={setDescription}
             />
             <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: theme.primary }]} onPress={handleUpload} disabled={isUploading}>
-              {isUploading ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.uploadBtnText, { color: theme.background }]}>공유하기</Text>}
+              {isUploading ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.uploadBtnText, { color: theme.background }]}>올리기</Text>}
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 상세 보기 및 댓글 모달 */}
+      {/* 상세 보기 모달 */}
       {activeDetailItem && (
-        <Modal visible={!!activeDetailItem} animationType="fade" transparent={false}>
+        <Modal visible={true} animationType="fade">
           <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
             <View style={styles.detailHeader}>
               <TouchableOpacity onPress={() => setSelectedItem(null)} style={styles.closeBtn}>
@@ -188,7 +187,7 @@ export default function ArchiveScreen() {
 
             <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
               {isVideo(activeDetailItem.photoUrl) ? (
-                <VideoItem url={activeDetailItem.photoUrl} style={styles.detailMedia} usePlayerControls={true} />
+                <DetailVideoPlayer url={activeDetailItem.photoUrl} />
               ) : (
                 <Image source={{ uri: activeDetailItem.photoUrl }} style={styles.detailMedia} resizeMode="contain" />
               )}
@@ -271,12 +270,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
   gridItem: { width: GRID_SIZE, height: GRID_SIZE, padding: 1 },
   gridImage: { width: '100%', height: '100%', backgroundColor: '#111' },
-  videoBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, padding: 4 },
-  fab: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 },
-  uploadContainer: { flex: 1, padding: 20, paddingTop: 60 },
-  closeBtn: { padding: 5 },
+  videoBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  fab: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 10 },
+  uploadContainer: { flex: 1, padding: 20 },
+  uploadHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold' },
   previewImage: { width: '100%', height: width - 40, borderRadius: 15, marginBottom: 20 },
-  descInput: { fontSize: 16, minHeight: 100, textAlignVertical: 'top', marginBottom: 20 },
+  descInput: { fontSize: 15, minHeight: 80, padding: 15, borderWidth: 1, borderRadius: 12, textAlignVertical: 'top', marginBottom: 20 },
   uploadBtn: { padding: 18, borderRadius: 15, alignItems: 'center' },
   uploadBtnText: { fontWeight: 'bold', fontSize: 16 },
   
