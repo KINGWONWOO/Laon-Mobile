@@ -19,6 +19,37 @@ const TIMELINE_CONTAINER_WIDTH = width - 30;
 const CENTER_OFFSET = TIMELINE_CONTAINER_WIDTH / 2;
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
 
+// 헬퍼 함수
+const formatTime = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+};
+
+// 시간 표시부 독립 컴포넌트 (리렌더링 최적화)
+const PlaybackTimeDisplay = React.memo(({ player }: { player: any }) => {
+  const status = useAudioPlayerStatus(player);
+  return <Text style={styles.timeText}>{formatTime(status.currentTime * 1000)}</Text>;
+});
+
+// 재생 버튼 독립 컴포넌트
+const PlayButton = React.memo(({ player, theme, currentTimeMs }: { player: any, theme: any, currentTimeMs: any }) => {
+  const status = useAudioPlayerStatus(player);
+  return (
+    <TouchableOpacity 
+      onPress={() => { 
+        if(status.playing) player.pause(); 
+        else {
+          player.seekTo(currentTimeMs.value / 1000);
+          player.play();
+        }
+      }} 
+      style={[styles.playBtn, { backgroundColor: theme.primary }]}
+    >
+      <Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" />
+    </TouchableOpacity>
+  );
+});
+
 // 메모이제이션된 정적 컴포넌트
 const WaveformBackground = React.memo(({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
   const barsCount = Math.max(20, Math.floor(duration * 6));
@@ -62,34 +93,127 @@ const TimeMarkers = React.memo(({ duration }: { duration: number }) => {
 });
 
 const TransitionX = React.memo(({ width, left }: { width: number, left: number }) => {
-  if (width <= 5) return null;
+  const safeWidth = Math.max(0, width);
+  if (safeWidth <= 5) return null;
   const height = 45; 
-  const angle = Math.atan2(height, width) * (180 / Math.PI);
-  const length = Math.sqrt(width * width + height * height);
+  const angle = Math.atan2(height, safeWidth) * (180 / Math.PI);
+  const length = Math.sqrt(safeWidth * safeWidth + height * height);
   return (
-    <View style={[styles.transitionXContainer, { left, width, height, top: 10 }]} pointerEvents="none">
-      <View style={[styles.xLine, { width: length, top: height/2, left: (width-length)/2, transform: [{ rotate: `${angle}deg` }] }]} />
-      <View style={[styles.xLine, { width: length, top: height/2, left: (width-length)/2, transform: [{ rotate: `-${angle}deg` }] }]} />
+    <View style={[styles.transitionXContainer, { left, width: safeWidth, height, top: 10 }]} pointerEvents="none">
+      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `${angle}deg` }] }]} />
+      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `-${angle}deg` }] }]} />
     </View>
   );
 });
 
-const ResizeHandle = ({ direction, onDragStart, onDrag }: any) => {
+const ResizeHandle = ({ direction, localX, localWidth, startX, startW, minX, maxX, onCommit }: any) => {
   const pan = Gesture.Pan()
-    .runOnJS(true)
-    .onStart(onDragStart)
-    .onUpdate((e) => onDrag(e.translationX));
+    .onStart(() => {
+      'worklet';
+      startX.value = localX.value;
+      startW.value = localWidth.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (direction === 'left') {
+        // 왼쪽으로 늘릴 때는 minX까지만, 오른쪽으로 줄일 때는 현재 위치 + 너비 - 10px까지만
+        const newX = Math.max(minX, Math.min(startX.value + e.translationX, startX.value + startW.value - 10));
+        const actualDiff = newX - startX.value;
+        localX.value = newX;
+        localWidth.value = startW.value - actualDiff;
+      } else {
+        // 오른쪽으로 늘릴 때는 maxX까지만, 왼쪽으로 줄일 때는 최소 10px
+        const newW = Math.max(10, Math.min(startW.value + e.translationX, maxX - localX.value));
+        localWidth.value = newW;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      runOnJS(onCommit)(e.translationX);
+    });
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
-        <View style={styles.handleCircle} />
-      </View>
+      <Animated.View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
+        <View style={styles.handleCircle}>
+          <Ionicons name={direction === 'left' ? "chevron-back" : "chevron-forward"} size={14} color="#000" />
+        </View>
+      </Animated.View>
     </GestureDetector>
   );
 };
 
-const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) => {
+const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete }: any) => {
+  const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
+  const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
+  const startX = useSharedValue(0);
+  const startW = useSharedValue(0);
+
+  useEffect(() => {
+    localX.value = (entry.timestampMillis / 1000) * PX_PER_SEC;
+    localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
+  }, [entry.timestampMillis, entry.durationMillis]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    left: localX.value,
+    width: localWidth.value,
+    backgroundColor: isSelected ? theme.primary : '#AAA',
+    zIndex: isSelected ? 100 : 50
+  }));
+
+  const pan = Gesture.Pan()
+    .enabled(isSelected) // 선택된 경우에만 이동 가능
+    .onStart(() => {
+      'worklet';
+      startX.value = localX.value;
+    })
+    .onUpdate((g) => {
+      'worklet';
+      const newX = startX.value + g.translationX;
+      // 인접 블록과 겹치지 않게 제한
+      localX.value = Math.max(minX, Math.min(newX, maxX - localWidth.value));
+    })
+    .onEnd((g) => {
+      'worklet';
+      runOnJS(onCommitMove)(entry.id, g.translationX);
+    });
+
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd(() => {
+      if (isSelected) {
+        Alert.alert('삭제', '제거할까요?', [{ text: '취소' }, { text: '삭제', onPress: () => onDelete(entry.id) }]);
+      } else {
+        onSelect(entry.id);
+      }
+    });
+
+  return (
+    <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
+      <Animated.View style={[styles.block, animatedStyle]}>
+        <Text style={[styles.blockText, { color: isSelected ? '#000' : '#FFF' }]} numberOfLines={1}>{sceneName}</Text>
+        {isSelected && (
+          <>
+            <ResizeHandle 
+              direction="left" 
+              localX={localX} localWidth={localWidth} startX={startX} startW={startW}
+              minX={minX} maxX={maxX}
+              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'left')}
+            />
+            <ResizeHandle 
+              direction="right" 
+              localX={localX} localWidth={localWidth} startX={startX} startW={startW}
+              minX={minX} maxX={maxX}
+              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'right')}
+            />
+          </>
+        )}
+      </Animated.View>
+    </GestureDetector>
+  );
+});
+
+const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) => {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -98,12 +222,19 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
   const pos = useDerivedValue(() => isDragging.value ? { x: dragX.value, y: dragY.value } : dancerPos.value);
 
   const panGesture = Gesture.Pan().enabled(mode === 'create')
-    .onStart(() => { isDragging.value = true; startX.value = dancerPos.value.x; startY.value = dancerPos.value.y; })
+    .onStart(() => { 
+      'worklet';
+      isDragging.value = true; 
+      startX.value = dancerPos.value.x; 
+      startY.value = dancerPos.value.y; 
+    })
     .onUpdate((e) => {
+      'worklet';
       dragX.value = Math.max(0.01, Math.min(0.99, startX.value + (e.translationX / (stageWidth * scale.value))));
       dragY.value = Math.max(0.01, Math.min(0.99, startY.value + (e.translationY / (stageHeight * scale.value))));
     })
     .onEnd(() => {
+      'worklet';
       isDragging.value = false;
       let fx = dragX.value, fy = dragY.value;
       if (settings.snapToGrid) {
@@ -132,7 +263,20 @@ const DancerNode = ({ dancer, dancerPos, isSelected, onPress, scale, index, sett
       </Animated.View>
     </GestureDetector>
   );
-};
+});
+
+const GridLayer = React.memo(({ settings }: { settings: FormationSettings }) => {
+  return (
+    <View style={styles.gridLayer}>
+      {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
+        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%` }]} />
+      ))}
+      {Array.from({ length: settings.gridCols + 5 }).map((_, i) => (
+        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / (settings.gridCols + 4)) * 100}%` }]} />
+      ))}
+    </View>
+  );
+});
 
 export default function FormationEditorScreen() {
   const { id, formationId } = useGlobalSearchParams<{ id: string, formationId: string }>();
@@ -213,7 +357,6 @@ export default function FormationEditorScreen() {
     }
   }, [status.playing]);
 
-  // Timeline 자동 스크롤 로직 (UI 스레드에서 직접 처리하여 안정성 극대화)
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) {
       scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false);
@@ -291,32 +434,52 @@ export default function FormationEditorScreen() {
     setShowTimelineMenu(false);
   };
 
-  const dragStartMs = useSharedValue(0);
-  const dragStartDuration = useSharedValue(0);
+  const handleCommitMove = useCallback((entryId: string, totalDx: number) => {
+    const deltaMs = (totalDx / PX_PER_SEC) * 1000;
+    setTimeline(prev => {
+      const idx = prev.findIndex(x => x.id === entryId);
+      if (idx === -1) return prev;
+      const target = prev[idx];
+      const sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis);
+      const sIdx = sorted.findIndex(x => x.id === entryId);
+      
+      const prevBlock = sorted[sIdx-1];
+      const nextBlock = sorted[sIdx+1];
+      
+      let newTs = Math.max(0, target.timestampMillis + deltaMs);
+      const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
+      const maxTs = nextBlock ? nextBlock.timestampMillis - target.durationMillis : Infinity;
+      
+      newTs = Math.max(minTs, Math.min(newTs, maxTs));
+      return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newTs } : e);
+    });
+  }, []);
 
-  const handleDragStart = (ts: number, dur: number, id: string | null) => {
-    dragStartMs.value = ts;
-    dragStartDuration.value = dur;
-    if(id) setSelectedEntryId(id);
-  };
+  const handleCommitResize = useCallback((entryId: string, totalDx: number, dir: 'left' | 'right') => {
+    const deltaMs = (totalDx / PX_PER_SEC) * 1000;
+    setTimeline(prev => {
+      const sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis);
+      const sIdx = sorted.findIndex(x => x.id === entryId);
+      const target = sorted[sIdx];
+      const prevBlock = sorted[sIdx-1];
+      const nextBlock = sorted[sIdx+1];
 
-  const handleMoveBlock = (entryId: string, dx: number) => {
-    const deltaMs = (dx / PX_PER_SEC) * 1000;
-    const newStart = Math.max(0, dragStartMs.value + deltaMs);
-    setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart } : e));
-  };
+      if (dir === 'left') {
+        const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
+        const newStart = Math.max(minTs, Math.min(target.timestampMillis + deltaMs, target.timestampMillis + target.durationMillis - 500));
+        const diff = target.timestampMillis - newStart;
+        return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: target.durationMillis + diff } : e);
+      } else {
+        const maxTs = nextBlock ? nextBlock.timestampMillis : Infinity;
+        const newDur = Math.max(500, Math.min(target.durationMillis + deltaMs, maxTs - target.timestampMillis));
+        return prev.map(e => e.id === entryId ? { ...e, durationMillis: newDur } : e);
+      }
+    });
+  }, []);
 
-  const handleResize = (entryId: string, dx: number, dir: 'left' | 'right') => {
-    const deltaMs = (dx / PX_PER_SEC) * 1000;
-    if (dir === 'left') {
-      let newStart = Math.max(0, dragStartMs.value + deltaMs);
-      let newDuration = Math.max(500, dragStartDuration.value - deltaMs);
-      setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: newDuration } : e));
-    } else {
-      let newDuration = Math.max(500, dragStartDuration.value + deltaMs);
-      setTimeline(prevT => prevT.map(e => e.id === entryId ? { ...e, durationMillis: newDuration } : e));
-    }
-  };
+  const handleDeleteEntry = useCallback((entryId: string) => {
+    setTimeline(prev => prev.filter(x => x.id !== entryId));
+  }, []);
 
   const handleSceneAction = () => {
     if (sceneModalMode === 'add') {
@@ -380,11 +543,6 @@ export default function FormationEditorScreen() {
 
   const showExportOptions = () => { Alert.alert('내보내기', '방식을 선택하세요.', [{ text: 'JSON 파일 추출', onPress: exportAsFile }, { text: '피드백 영상 업로드', onPress: exportAsVideo }, { text: '취소', style: 'cancel' }]); };
 
-  const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-  };
-
   const GUIDE_STEPS = [
     { title: '댄서 추가', description: '댄서 추가 버튼을 눌러 무대에 댄서를 배치하세요. 댄서를 탭하여 이름과 색상을 변경할 수 있습니다.' },
     { title: '대형 생성', description: '하단의 대형 추가 버튼으로 현재 댄서들의 위치를 대형으로 저장하세요. 여러 개의 대형을 만들어 전환을 구성할 수 있습니다.' },
@@ -395,6 +553,14 @@ export default function FormationEditorScreen() {
   const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
   const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = settings.gridRows * STAGE_CELL_SIZE;
+
+  // 정렬된 타임라인 및 씬 이름 캐싱
+  const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
+  const sceneNamesMap = useMemo(() => {
+    const map: any = {};
+    scenes.forEach(s => { map[s.id] = s.name; });
+    return map;
+  }, [scenes]);
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -440,12 +606,23 @@ export default function FormationEditorScreen() {
 
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
               <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} /><View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
-              <View style={styles.gridLayer}>
-                {Array.from({length: settings.gridRows + 1}).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i/settings.gridRows)*100}%` }]} />)}
-                {Array.from({length: settings.gridCols + 5}).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i/(settings.gridCols+4))*100}%` }]} />)}
-              </View>
+              <GridLayer settings={settings} />
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} />
+                <DancerNode 
+                  key={d.id} 
+                  index={i} 
+                  dancer={d} 
+                  dancerPos={dancerPositions[d.id]} 
+                  isSelected={selectedDancerId === d.id} 
+                  onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} 
+                  mode={mode} 
+                  settings={settings} 
+                  stageWidth={STAGE_WIDTH} 
+                  stageHeight={STAGE_HEIGHT} 
+                  cellSize={STAGE_CELL_SIZE} 
+                  scale={scale} 
+                  onDragEnd={(id:string, p:Position) => { if(activeSceneId) setScenes(prev => prev.map(s => s.id === activeSceneId ? {...s, positions: {...s.positions, [id]: p}} : s)); }} 
+                />
               ))}
             </Animated.View>
 
@@ -483,19 +660,30 @@ export default function FormationEditorScreen() {
                     <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
                     <TimeMarkers duration={status.duration || 60} />
                     <View style={styles.timelineTrack}>
-                      {[...timeline].sort((a,b)=>a.timestampMillis-b.timestampMillis).map((e, idx, arr) => (
-                        <React.Fragment key={e.id}>
-                          <GestureDetector gesture={Gesture.Exclusive(
-                            Gesture.Pan().runOnJS(true).onStart(() => handleDragStart(e.timestampMillis, e.durationMillis, e.id)).onUpdate((g) => handleMoveBlock(e.id, g.translationX)), 
-                            Gesture.Tap().runOnJS(true).onEnd(() => { if (selectedEntryId === e.id) { Alert.alert('삭제', '제거할까요?', [{text:'취소'}, {text:'삭제', onPress:()=>setTimeline(prev=>prev.filter(x=>x.id!==e.id))}]); } else setSelectedEntryId(e.id); })
-                          )}>
-                            <View style={[styles.block, { left: (e.timestampMillis/1000)*PX_PER_SEC, width: (e.durationMillis/1000)*PX_PER_SEC, backgroundColor: selectedEntryId === e.id ? theme.primary : '#AAA' }]}><Text style={[styles.blockText, { color: selectedEntryId === e.id ? '#000' : '#FFF' }]} numberOfLines={1}>{scenes.find(s=>s.id===e.sceneId)?.name}</Text>
-                              {selectedEntryId === e.id && (<><ResizeHandle direction="left" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'left')} /><ResizeHandle direction="right" onDragStart={() => handleDragStart(e.timestampMillis, e.durationMillis, null)} onDrag={(dx:number) => handleResize(e.id, dx, 'right')} /></>)}
-                            </View>
-                          </GestureDetector>
-                          {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
-                        </React.Fragment>
-                      ))}
+                      {sortedTimeline.map((e, idx, arr) => {
+                        const prev = arr[idx-1];
+                        const next = arr[idx+1];
+                        const minX = prev ? (prev.timestampMillis + prev.durationMillis) / 1000 * PX_PER_SEC : 0;
+                        const maxX = next ? next.timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC;
+                        
+                        return (
+                          <React.Fragment key={e.id}>
+                            <TimelineBlock 
+                              entry={e}
+                              isSelected={selectedEntryId === e.id}
+                              sceneName={sceneNamesMap[e.sceneId]}
+                              theme={theme}
+                              minX={minX}
+                              maxX={maxX}
+                              onSelect={setSelectedEntryId}
+                              onCommitMove={handleCommitMove}
+                              onCommitResize={handleCommitResize}
+                              onDelete={handleDeleteEntry}
+                            />
+                            {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
+                          </React.Fragment>
+                        );
+                      })}
                     </View>
                   </View>
                 </GestureDetector>
@@ -504,8 +692,8 @@ export default function FormationEditorScreen() {
             </View>
             <View style={styles.controls}>
               <TouchableOpacity onPress={handlePickAudio} style={styles.toolBtnSmall}><Ionicons name="musical-notes" size={24} color="#AAA" /><Text style={styles.toolBtnText}>노래 변경</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => { if(status.playing) player.pause(); else { player.seekTo(currentTimeMs.value / 1000); player.play(); } }} style={[styles.playBtn, { backgroundColor: theme.primary }]}><Ionicons name={status.playing ? "pause" : "play"} size={32} color="#000" /></TouchableOpacity>
-              <Text style={styles.timeText}>{formatTime(status.currentTime * 1000)}</Text>
+              <PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} />
+              <PlaybackTimeDisplay player={player} />
             </View>
           </View>
         ) : (
@@ -578,11 +766,11 @@ const styles = StyleSheet.create({
   menu: { backgroundColor: '#1A1A1A', padding: 25, borderRadius: 20, width: '80%' },
   menuTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
   menuItem: { padding: 15, backgroundColor: '#333', borderRadius: 10, marginRight: 10 },
-  transitionXContainer: { position: 'absolute', zIndex: 15 },
+  transitionXContainer: { position: 'absolute', zIndex: 15, alignItems: 'center', justifyContent: 'center' },
   xLine: { position: 'absolute', height: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
   resizeHandleLeft: { position: 'absolute', left: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
   resizeHandleRight: { position: 'absolute', right: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
-  handleCircle: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
+  handleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2 },
   sheet: { backgroundColor: '#111', padding: 25, borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', position: 'absolute', bottom: 0 },
   sheetInput: { backgroundColor: '#000', color: '#FFF', padding: 15, borderRadius: 12, marginBottom: 15 },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
