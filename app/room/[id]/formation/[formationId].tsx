@@ -162,7 +162,7 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
   const animatedStyle = useAnimatedStyle(() => ({
     left: localX.value,
     width: localWidth.value,
-    backgroundColor: isSelected ? (theme.primary + '99') : 'rgba(120, 120, 120, 0.25)',
+    backgroundColor: isSelected ? (theme.primary + 'AA') : 'rgba(120, 120, 120, 0.25)',
     zIndex: isSelected ? 100 : 50
   }));
 
@@ -571,6 +571,23 @@ export default function FormationEditorScreen() {
   const handleApplySettings = () => { const r = parseInt(tempRows), c = parseInt(tempCols); if (isNaN(r) || isNaN(c) || r <= 0 || c <= 0) { Alert.alert('입력 오류', '격자 행과 열은 1 이상의 숫자여야 합니다.'); return; } setSettings({ ...settings, gridRows: r, gridCols: c }); setShowStageSettings(false); };
   const applyMirror = (allScenes: boolean) => { pushHistory(); const flipPos = (pos: Position) => ({ x: (selectedMirrorType === 'horizontal' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.x)) : pos.x, y: (selectedMirrorType === 'vertical' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.y)) : pos.y }); if (allScenes) { setScenes(prev => { const next = prev.map(s => { const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); return { ...s, positions: nPos }; }); const current = next.find(s => s.id === activeSceneId); if (current) Object.keys(current.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = current.positions[dId]; }); return next; }); } else if (activeSceneId) { setScenes(prev => prev.map(s => { if (s.id !== activeSceneId) return s; const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); Object.keys(nPos).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = nPos[dId]; }); return { ...s, positions: nPos }; })); } setShowMirrorModal(false); };
   const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('성공', '로컬에 저장되었습니다.'); } catch (e: any) { Alert.alert('오류', e.message); } };
+  
+  const handleExportJSON = async () => {
+    try {
+      const data = { title: formation?.title, audioUrl: formation?.audioUrl, settings, data: { dancers, scenes, timeline } };
+      const safeId = (formationId || 'new').replace(/[^a-z0-9]/gi, '_');
+      const filePath = `${FileSystem.documentDirectory}formation_${safeId}.json`;
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.');
+        return;
+      }
+      await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
+    } catch (e: any) {
+      Alert.alert('오류', `파일 추출 실패: ${e.message}`);
+    }
+  };
+
   const handlePublish = async () => {
     if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
     try {
@@ -584,6 +601,15 @@ export default function FormationEditorScreen() {
       setIsExporting(false);
     }
   };
+
+  const showExportOptions = () => {
+    Alert.alert('내보내기', '동선을 내보낼 방식을 선택하세요.', [
+      { text: 'JSON 파일로 추출', onPress: handleExportJSON },
+      { text: '피드백 영상으로 발행', onPress: () => { setPublishTitle(`${formation?.title || '새 대형'} 피드백`); setShowPublishModal(true); } },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
   if (!formation) return null;
@@ -608,7 +634,7 @@ export default function FormationEditorScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 15 }}>
           <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
-          <TouchableOpacity onPress={() => { setPublishTitle(`${formation?.title || '새 대형'} 피드백`); setShowPublishModal(true); }}>
+          <TouchableOpacity onPress={showExportOptions}>
             <Ionicons name="share-outline" size={24} color={theme.primary} />
           </TouchableOpacity>
         </View>
@@ -808,7 +834,7 @@ const styles = StyleSheet.create({
   sceneCard: { width: 100, height: 112, backgroundColor: '#111', borderRadius: 12, borderWidth: 2, borderColor: '#333', marginRight: 12, overflow: 'hidden' },
   miniStage: { flex: 1, backgroundColor: 'transparent', position: 'relative' },
   miniDancer: { position: 'absolute', width: 6, height: 6, borderRadius: 3, marginLeft: -3, marginTop: -3 },
-  sceneCardLabel: { height: 28, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)' },
+  sceneCardLabel: { height: 28, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.03)' },
   sceneCardText: { color: '#888', fontSize: 10, fontWeight: 'bold' },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   menu: { backgroundColor: '#1A1A1A', padding: 25, borderRadius: 20, width: '80%' },
