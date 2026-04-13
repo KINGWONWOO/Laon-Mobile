@@ -162,7 +162,7 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
   const animatedStyle = useAnimatedStyle(() => ({
     left: localX.value,
     width: localWidth.value,
-    backgroundColor: isSelected ? (theme.primary + 'AA') : 'rgba(150, 150, 150, 0.4)',
+    backgroundColor: isSelected ? (theme.primary + '99') : 'rgba(120, 120, 120, 0.25)',
     zIndex: isSelected ? 100 : 50
   }));
 
@@ -349,6 +349,8 @@ export default function FormationEditorScreen() {
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [showMirrorModal, setShowMirrorModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishTitle, setPublishTitle] = useState('');
   const [selectedMirrorType, setSelectedMirrorType] = useState<'horizontal' | 'vertical' | 'both'>('horizontal');
   const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
   const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
@@ -569,6 +571,19 @@ export default function FormationEditorScreen() {
   const handleApplySettings = () => { const r = parseInt(tempRows), c = parseInt(tempCols); if (isNaN(r) || isNaN(c) || r <= 0 || c <= 0) { Alert.alert('입력 오류', '격자 행과 열은 1 이상의 숫자여야 합니다.'); return; } setSettings({ ...settings, gridRows: r, gridCols: c }); setShowStageSettings(false); };
   const applyMirror = (allScenes: boolean) => { pushHistory(); const flipPos = (pos: Position) => ({ x: (selectedMirrorType === 'horizontal' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.x)) : pos.x, y: (selectedMirrorType === 'vertical' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.y)) : pos.y }); if (allScenes) { setScenes(prev => { const next = prev.map(s => { const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); return { ...s, positions: nPos }; }); const current = next.find(s => s.id === activeSceneId); if (current) Object.keys(current.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = current.positions[dId]; }); return next; }); } else if (activeSceneId) { setScenes(prev => prev.map(s => { if (s.id !== activeSceneId) return s; const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); Object.keys(nPos).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = nPos[dId]; }); return { ...s, positions: nPos }; })); } setShowMirrorModal(false); };
   const handleSave = async () => { try { await updateFormation(formationId!, { settings, data: { dancers, scenes, timeline } }); Alert.alert('성공', '로컬에 저장되었습니다.'); } catch (e: any) { Alert.alert('오류', e.message); } };
+  const handlePublish = async () => {
+    if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
+    try {
+      setIsExporting(true);
+      await publishFormationAsFeedback(id!, formationId!, publishTitle, { settings, data: { dancers, scenes, timeline } });
+      setShowPublishModal(false);
+      Alert.alert('성공', '피드백이 성공적으로 발행되었습니다.');
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
   if (!formation) return null;
@@ -581,7 +596,7 @@ export default function FormationEditorScreen() {
   const hasPast = mode === 'create' ? createPast.length > 0 : placePast.length > 0;
   const hasFuture = mode === 'create' ? createFuture.length > 0 : placeFuture.length > 0;
 
-  const controlTop = insets.top + 75;
+  const controlTop = insets.top + 65;
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -593,6 +608,9 @@ export default function FormationEditorScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 15 }}>
           <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => { setPublishTitle(`${formation?.title || '새 대형'} 피드백`); setShowPublishModal(true); }}>
+            <Ionicons name="share-outline" size={24} color={theme.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -606,7 +624,7 @@ export default function FormationEditorScreen() {
         <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.max(0.5, (Math.ceil(scale.value * 4) - 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
       </View>
 
-      <View style={[styles.stageSection, mode === 'create' && { marginTop: 80 }]}>
+      <View style={[styles.stageSection, mode === 'create' && { marginTop: 100 }]}>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
@@ -698,6 +716,22 @@ export default function FormationEditorScreen() {
         )}
         <View style={{ height: 15 }} />
       </View>
+
+      <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.menu}>
+            <Text style={styles.menuTitle}>피드백 발행</Text>
+            <Text style={{ color: '#AAA', marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text>
+            <TextInput style={styles.sheetInput} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" autoFocus />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
+              <TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: '#888' }}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handlePublish} disabled={isExporting}>
+                {isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
         <View style={styles.modalBg}>
