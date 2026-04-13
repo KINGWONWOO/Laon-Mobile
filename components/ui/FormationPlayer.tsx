@@ -25,7 +25,7 @@ const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stage
       else { nextE = e; break; }
     }
 
-    const getScenePos = (sId: string) => scenes.find((s: any) => s.id === sId)?.positions[dancer.id] || { x: 0.5, y: 0.5 };
+    const getScenePos = (sId: string) => scenes.find((s: any) => s.id === sId)?.positions?.[dancer.id] || { x: 0.5, y: 0.5 };
     
     let p = { x: 0.5, y: 0.5 };
     if (!prevE) {

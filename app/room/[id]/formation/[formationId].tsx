@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
@@ -88,10 +88,21 @@ const TimeMarkers = React.memo(({ duration }: { duration: number }) => {
   return <View style={styles.timeMarkersLayer}>{markers}</View>;
 });
 
+const MiniFormationPreview = React.memo(({ scene, dancers }: { scene: FormationScene, dancers: Dancer[] }) => {
+  return (
+    <View style={styles.miniStage}>
+      {dancers.map(d => {
+        const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
+        return <View key={d.id} style={[styles.miniDancer, { backgroundColor: d.color, left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }]} />;
+      })}
+    </View>
+  );
+});
+
 const TransitionX = React.memo(({ width, left }: { width: number, left: number }) => {
   const safeWidth = Math.max(0, width);
   if (safeWidth <= 5) return null;
-  const height = 45; 
+  const height = 85; 
   const angle = Math.atan2(height, safeWidth) * (180 / Math.PI);
   const length = Math.sqrt(safeWidth * safeWidth + height * height);
   return (
@@ -136,7 +147,7 @@ const ResizeHandle = ({ direction, localX, localWidth, startX, startW, minX, max
   );
 };
 
-const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete }: any) => {
+const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes }: any) => {
   const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
   const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
   const startX = useSharedValue(0);
@@ -146,10 +157,12 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
     localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
   }, [entry.timestampMillis, entry.durationMillis]);
 
+  const scene = scenes.find((s: any) => s.id === entry.sceneId);
+
   const animatedStyle = useAnimatedStyle(() => ({
     left: localX.value,
     width: localWidth.value,
-    backgroundColor: isSelected ? theme.primary : '#AAA',
+    backgroundColor: isSelected ? (theme.primary + 'AA') : 'rgba(150, 150, 150, 0.4)',
     zIndex: isSelected ? 100 : 50
   }));
 
@@ -182,7 +195,12 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
   return (
     <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
       <Animated.View style={[styles.block, animatedStyle]}>
-        <Text style={[styles.blockText, { color: isSelected ? '#000' : '#FFF' }]} numberOfLines={1}>{sceneName}</Text>
+        {scene && (
+          <View style={styles.blockPreview}>
+            <MiniFormationPreview scene={scene} dancers={dancers} />
+          </View>
+        )}
+        <Text style={[styles.blockText, { color: isSelected ? '#FFF' : '#CCC' }]} numberOfLines={1}>{sceneName}</Text>
         {isSelected && (
           <>
             <ResizeHandle 
@@ -247,6 +265,7 @@ const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, 
       { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
       { scale: withSpring(isSelected || isDragging.value ? 1.1 : 1) }
     ],
+    opacity: mode === 'place' ? 0.7 : 1,
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
@@ -260,13 +279,25 @@ const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, 
   );
 });
 
-const MiniFormationPreview = React.memo(({ scene, dancers }: { scene: FormationScene, dancers: Dancer[] }) => {
+const GhostDancer = React.memo(({ dancer, pos, stageWidth, stageHeight, cellSize }: any) => {
   return (
-    <View style={styles.miniStage}>
-      {dancers.map(d => {
-        const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
-        return <View key={d.id} style={[styles.miniDancer, { backgroundColor: d.color, left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }]} />;
-      })}
+    <View 
+      style={[
+        styles.dancerNode, 
+        { 
+          position: 'absolute',
+          width: cellSize * 2.5,
+          transform: [
+            { translateX: (pos.x * stageWidth) - (cellSize * 1.25) },
+            { translateY: (pos.y * stageHeight) - (cellSize * 0.35) }
+          ],
+          opacity: 0.2,
+          zIndex: 0
+        }
+      ]} 
+      pointerEvents="none"
+    >
+      <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: 'rgba(255,255,255,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1 }]} />
     </View>
   );
 });
@@ -330,7 +361,21 @@ export default function FormationEditorScreen() {
   const [tempRows, setTempRows] = useState('');
   const [tempCols, setTempCols] = useState('');
 
-  // SharedValue 관리
+  // SharedValues 및 Refs 선언
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const currentTimeMs = useSharedValue(0);
+  const isPlayerPlayingSV = useSharedValue(false);
+  const isUserScrollingSV = useSharedValue(false);
+  const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
+
+  const player = useAudioPlayer(formation?.audioUrl || '');
+  const status = useAudioPlayerStatus(player);
+
   const dancerPositionsRef = useRef<Record<string, any>>({});
   dancers.forEach(d => {
     if (!dancerPositionsRef.current[d.id]) {
@@ -352,6 +397,31 @@ export default function FormationEditorScreen() {
     if (mode === 'create') { setCreatePast(prev => [...prev, current].slice(-30)); setCreateFuture([]); }
     else { setPlacePast(prev => [...prev, current].slice(-30)); setPlaceFuture([]); }
   }, [dancers, scenes, timeline, mode]);
+
+  const onDragEnd = useCallback((dancerId: string, pos: Position) => {
+    setScenes(prev => prev.map(s => s.id === activeSceneId ? {
+      ...s,
+      positions: { ...s.positions, [dancerId]: pos }
+    } : s));
+    pushHistory();
+  }, [activeSceneId, pushHistory]);
+
+  const [nextSceneId, setNextSceneId] = useState<string | null>(null);
+
+  useAnimatedReaction(
+    () => {
+      if (mode !== 'place') return null;
+      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+      const next = sorted.find(e => e.timestampMillis > currentTimeMs.value);
+      return next?.sceneId || null;
+    },
+    (nextId) => {
+      if (nextId !== nextSceneId) {
+        runOnJS(setNextSceneId)(nextId);
+      }
+    },
+    [mode, timeline]
+  );
 
   const undo = () => {
     if (mode === 'create') {
@@ -389,13 +459,6 @@ export default function FormationEditorScreen() {
     }
   };
 
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
       let newScale = Math.max(0.5, Math.min(5, savedScale.value * e.scale));
@@ -410,13 +473,6 @@ export default function FormationEditorScreen() {
     .onEnd(() => { savedTranslateX.value = translateX.value; savedTranslateY.value = translateY.value; });
 
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
-
-  const player = useAudioPlayer(formation?.audioUrl || '');
-  const status = useAudioPlayerStatus(player);
-  const currentTimeMs = useSharedValue(0);
-  const isPlayerPlayingSV = useSharedValue(false);
-  const isUserScrollingSV = useSharedValue(false);
-  const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
 
   useEffect(() => {
     isPlayerPlayingSV.value = status.playing;
@@ -525,6 +581,8 @@ export default function FormationEditorScreen() {
   const hasPast = mode === 'create' ? createPast.length > 0 : placePast.length > 0;
   const hasFuture = mode === 'create' ? createFuture.length > 0 : placeFuture.length > 0;
 
+  const controlTop = insets.top + 75;
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
@@ -538,23 +596,41 @@ export default function FormationEditorScreen() {
         </View>
       </View>
 
-      <View style={styles.stageSection}>
-        <View style={styles.historyControls}>
-          <TouchableOpacity style={[styles.zoomBtn, { borderRightWidth: 1, borderColor: '#333' }]} onPress={undo} disabled={!hasPast}><Ionicons name="arrow-undo" size={20} color={!hasPast ? '#444' : '#FFF'} /></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={redo} disabled={!hasFuture}><Ionicons name="arrow-redo" size={20} color={!hasFuture ? '#444' : '#FFF'} /></TouchableOpacity>
-        </View>
-        <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>{zoomUI}%</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.min(5, (Math.floor(scale.value * 4) + 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.max(0.5, (Math.ceil(scale.value * 4) - 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
-        </View>
+      <View style={[styles.historyControls, { top: controlTop }]}>
+        <TouchableOpacity style={[styles.zoomBtn, { borderRightWidth: 1, borderColor: '#333' }]} onPress={undo} disabled={!hasPast}><Ionicons name="arrow-undo" size={20} color={!hasPast ? '#444' : '#FFF'} /></TouchableOpacity>
+        <TouchableOpacity style={styles.zoomBtn} onPress={redo} disabled={!hasFuture}><Ionicons name="arrow-redo" size={20} color={!hasFuture ? '#444' : '#FFF'} /></TouchableOpacity>
+      </View>
+      <View style={[styles.zoomControls, { top: controlTop }]}>
+        <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={styles.zoomText}>{zoomUI}%</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.min(5, (Math.floor(scale.value * 4) + 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="add" size={20} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.max(0.5, (Math.ceil(scale.value * 4) - 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
+      </View>
+
+      <View style={[styles.stageSection, mode === 'create' && { marginTop: 80 }]}>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
           <View style={styles.stageWrapper}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
               <View style={{ position: 'absolute', top: -30, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: settings.stageDirection === 'top' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>{settings.stageDirection === 'top' ? '앞 FRONT' : '뒤 BACK'}</Text></View>
               <GridLayer settings={settings} />
+              
+              {/* Ghost Dancers */}
+              {mode === 'create' && activeSceneId && scenes.find(s => s.id === activeSceneId)?.positions && 
+                dancers.map(d => {
+                  const pos = scenes.find(s => s.id === activeSceneId)?.positions[d.id];
+                  if (!pos) return null;
+                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
+                })
+              }
+              {mode === 'place' && nextSceneId && scenes.find(s => s.id === nextSceneId)?.positions &&
+                dancers.map(d => {
+                  const pos = scenes.find(s => s.id === nextSceneId)?.positions[d.id];
+                  if (!pos) return null;
+                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
+                })
+              }
+
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={() => pushHistory()} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} />
               ))}
               <View style={{ position: 'absolute', bottom: -30, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: settings.stageDirection === 'bottom' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>{settings.stageDirection === 'bottom' ? ' 앞 FRONT' : '뒤 BACK'}</Text></View>
             </Animated.View>
@@ -568,13 +644,13 @@ export default function FormationEditorScreen() {
             <View style={styles.timelineWrapper}>
               <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); runOnJS(setSelectedEntryId)(null); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
                 <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 80 }}>
+                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 120 }}>
                     <WaveformBackground duration={status.duration || 60} seed={formation?.audioUrl || 'default'} />
                     <TimeMarkers duration={status.duration || 60} />
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} />
+                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scenes={scenes} />
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
                       ))}
@@ -620,7 +696,7 @@ export default function FormationEditorScreen() {
             </View>
           </View>
         )}
-        <View style={{ height: insets.bottom + 5 }} />
+        <View style={{ height: 15 }} />
       </View>
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
@@ -671,7 +747,7 @@ const styles = StyleSheet.create({
   dancerNameText: { color: '#AAA', marginTop: 4 },
   bottomDock: { backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#222' },
   placeDock: { padding: 15 },
-  timelineWrapper: { height: 80, position: 'relative', marginBottom: 15, backgroundColor: '#111', borderRadius: 10, overflow: 'hidden' },
+  timelineWrapper: { height: 120, position: 'relative', marginBottom: 15, backgroundColor: '#111', borderRadius: 10, overflow: 'hidden' },
   waveformContainer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
   waveformBar: { width: 3, backgroundColor: '#FFF', borderRadius: 1.5 },
   timeMarkersLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 20 },
@@ -679,15 +755,16 @@ const styles = StyleSheet.create({
   timeMarkerLine: { width: 1, height: 5, backgroundColor: '#444' },
   timeMarkerText: { color: '#444', fontSize: 9, marginTop: 2, fontWeight: 'bold' },
   timelineTrack: { flex: 1, position: 'relative' },
-  block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
-  blockText: { fontSize: 10, fontWeight: 'bold' },
+  block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', overflow: 'hidden' },
+  blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none' },
+  blockText: { fontSize: 9, fontWeight: 'bold' },
   needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   toolBtnSmall: { alignItems: 'center', width: 60 },
   playBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   timeText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', width: 60, textAlign: 'right' },
-  createDock: { paddingHorizontal: 12, paddingTop: 20, paddingBottom: 5 },
-  createToolbar: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 22 },
+  createDock: { paddingHorizontal: 12, paddingTop: 40, paddingBottom: 5 },
+  createToolbar: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
   toolBtn: { alignItems: 'center', gap: 4 },
   toolBtnText: { color: '#888', fontSize: 11 },
   sceneSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 10 },
@@ -695,7 +772,7 @@ const styles = StyleSheet.create({
   addSceneBtnWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 32, borderRadius: 8, gap: 4, backgroundColor: '#FFF' },
   addSceneText: { fontWeight: 'bold', fontSize: 10, color: '#000' },
   sceneCard: { width: 100, height: 112, backgroundColor: '#111', borderRadius: 12, borderWidth: 2, borderColor: '#333', marginRight: 12, overflow: 'hidden' },
-  miniStage: { flex: 1, backgroundColor: '#050505', position: 'relative' },
+  miniStage: { flex: 1, backgroundColor: 'transparent', position: 'relative' },
   miniDancer: { position: 'absolute', width: 6, height: 6, borderRadius: 3, marginLeft: -3, marginTop: -3 },
   sceneCardLabel: { height: 28, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)' },
   sceneCardText: { color: '#888', fontSize: 10, fontWeight: 'bold' },
@@ -712,8 +789,8 @@ const styles = StyleSheet.create({
   smallInput: { backgroundColor: '#000', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, width: 60, textAlign: 'center', fontWeight: 'bold' },
   toggleBtn: { backgroundColor: '#222', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   doneBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  zoomControls: { position: 'absolute', top: 15, right: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },
-  historyControls: { position: 'absolute', top: 15, left: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },
+  zoomControls: { position: 'absolute', right: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },
+  historyControls: { position: 'absolute', left: 15, zIndex: 100, flexDirection: 'row', backgroundColor: '#1A1A1A', borderRadius: 20, padding: 4, borderWidth: 1, borderColor: '#333' },
   zoomBtn: { paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', justifyContent: 'center' },
   zoomText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   settingLabel: { color: '#888', fontSize: 12, marginBottom: 12, fontWeight: 'bold' },
