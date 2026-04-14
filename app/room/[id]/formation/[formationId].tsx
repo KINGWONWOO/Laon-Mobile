@@ -336,7 +336,6 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
     </View>
   );
 });
-});
 
 const GUIDE_STEPS = [
   { title: '대형 생성', description: '댄서를 추가하고 드래그하여 원하는 위치에 배치하세요. 아래 씬 목록에서 대형을 전환하거나 관리할 수 있습니다.' },
