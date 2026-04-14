@@ -24,12 +24,12 @@ const formatTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
-const PlaybackTimeDisplay = React.memo(({ player }: { player: any }) => {
+const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player }: { player: any }) {
   const status = useAudioPlayerStatus(player);
   return <Text style={styles.timeText}>{formatTime(status.currentTime * 1000)}</Text>;
 });
 
-const PlayButton = React.memo(({ player, theme, currentTimeMs }: { player: any, theme: any, currentTimeMs: any }) => {
+const PlayButton = React.memo(function PlayButton({ player, theme, currentTimeMs }: { player: any, theme: any, currentTimeMs: any }) {
   const status = useAudioPlayerStatus(player);
   return (
     <TouchableOpacity 
@@ -47,7 +47,7 @@ const PlayButton = React.memo(({ player, theme, currentTimeMs }: { player: any, 
   );
 });
 
-const WaveformBackground = React.memo(({ duration, seed = 'default' }: { duration: number, seed?: string }) => {
+const WaveformBackground = React.memo(function WaveformBackground({ duration, seed = 'default' }: { duration: number, seed?: string }) {
   const barsCount = Math.max(20, Math.floor(duration * 6));
   const bars = useMemo(() => {
     const getVal = (i: number) => {
@@ -73,7 +73,7 @@ const WaveformBackground = React.memo(({ duration, seed = 'default' }: { duratio
   );
 });
 
-const TimeMarkers = React.memo(({ duration }: { duration: number }) => {
+const TimeMarkers = React.memo(function TimeMarkers({ duration }: { duration: number }) {
   const markers = useMemo(() => {
     const list = [];
     for (let i = 0; i <= duration; i += 5) {
@@ -88,18 +88,21 @@ const TimeMarkers = React.memo(({ duration }: { duration: number }) => {
   return <View style={styles.timeMarkersLayer}>{markers}</View>;
 });
 
-const MiniFormationPreview = React.memo(({ scene, dancers }: { scene: FormationScene, dancers: Dancer[] }) => {
+const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, dancers, settings }: { scene: FormationScene, dancers: Dancer[], settings: FormationSettings }) {
+  const aspectRatio = settings.gridCols / settings.gridRows;
   return (
-    <View style={styles.miniStage}>
-      {dancers.map(d => {
-        const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
-        return <View key={d.id} style={[styles.miniDancer, { backgroundColor: d.color, left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }]} />;
-      })}
+    <View style={{ width: '100%', height: 84, padding: 8, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: '100%', height: '100%', aspectRatio, maxHeight: '100%', maxWidth: '100%', position: 'relative' }}>
+        {dancers.map(d => {
+          const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
+          return <View key={d.id} style={[styles.miniDancer, { backgroundColor: d.color, left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }]} />;
+        })}
+      </View>
     </View>
   );
 });
 
-const TransitionX = React.memo(({ width, left }: { width: number, left: number }) => {
+const TransitionX = React.memo(function TransitionX({ width, left }: { width: number, left: number }) {
   const safeWidth = Math.max(0, width);
   if (safeWidth <= 5) return null;
   const height = 85; 
@@ -147,7 +150,7 @@ const ResizeHandle = ({ direction, localX, localWidth, startX, startW, minX, max
   );
 };
 
-const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes }: any) => {
+const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes, settings }: any) {
   const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
   const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
   const startX = useSharedValue(0);
@@ -197,7 +200,7 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
       <Animated.View style={[styles.block, animatedStyle]}>
         {scene && (
           <View style={styles.blockPreview}>
-            <MiniFormationPreview scene={scene} dancers={dancers} />
+            <MiniFormationPreview scene={scene} dancers={dancers} settings={settings} />
           </View>
         )}
         <Text style={[styles.blockText, { color: isSelected ? '#FFF' : '#CCC' }]} numberOfLines={1}>{sceneName}</Text>
@@ -222,7 +225,7 @@ const TimelineBlock = React.memo(({ entry, isSelected, sceneName, theme, minX, m
   );
 });
 
-const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) => {
+const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -251,7 +254,7 @@ const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, 
       isDragging.value = false;
       let fx = dragX.value, fy = dragY.value;
       if (settings.snapToGrid) {
-        const stepX = (1 / (settings.gridCols + 4)) / 2, stepY = (1 / settings.gridRows) / 2;
+        const stepX = (1 / settings.gridCols) / 2, stepY = (1 / settings.gridRows) / 2;
         fx = Math.round(fx / stepX) * stepX; fy = Math.round(fy / stepY) * stepY;
       }
       if (dancerPos) dancerPos.value = { x: fx, y: fy };
@@ -279,7 +282,7 @@ const DancerNode = React.memo(({ dancer, dancerPos, isSelected, onPress, scale, 
   );
 });
 
-const GhostDancer = React.memo(({ dancer, pos, stageWidth, stageHeight, cellSize }: any) => {
+const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, stageHeight, cellSize }: any) {
   return (
     <View 
       style={[
@@ -302,14 +305,14 @@ const GhostDancer = React.memo(({ dancer, pos, stageWidth, stageHeight, cellSize
   );
 });
 
-const GridLayer = React.memo(({ settings }: { settings: FormationSettings }) => {
+const GridLayer = React.memo(function GridLayer({ settings }: { settings: FormationSettings }) {
   return (
     <View style={styles.gridLayer}>
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
         <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%` }]} />
       ))}
-      {Array.from({ length: settings.gridCols + 5 }).map((_, i) => (
-        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / (settings.gridCols + 4)) * 100}%` }]} />
+      {Array.from({ length: settings.gridCols + 1 }).map((_, i) => (
+        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%` }]} />
       ))}
     </View>
   );
@@ -338,7 +341,7 @@ export default function FormationEditorScreen() {
   const [dancers, setDancers] = useState<Dancer[]>(formation?.data?.dancers || []);
   const [scenes, setScenes] = useState<FormationScene[]>(formation?.data?.scenes || []);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
-  const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
+  const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
@@ -612,17 +615,18 @@ export default function FormationEditorScreen() {
 
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
-  if (!formation) return null;
-  const STAGE_CELL_SIZE = (width - 40) / (settings.gridCols + 4);
-  const STAGE_WIDTH = (settings.gridCols + 4) * STAGE_CELL_SIZE;
-  const STAGE_HEIGHT = settings.gridRows * STAGE_CELL_SIZE;
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
   const sceneNamesMap = useMemo(() => { const map: any = {}; scenes.forEach(s => { map[s.id] = s.name; }); return map; }, [scenes]);
+
+  if (!formation) return null;
+  const STAGE_CELL_SIZE = (width - 40) / settings.gridCols;
+  const STAGE_WIDTH = settings.gridCols * STAGE_CELL_SIZE;
+  const STAGE_HEIGHT = settings.gridRows * STAGE_CELL_SIZE;
 
   const hasPast = mode === 'create' ? createPast.length > 0 : placePast.length > 0;
   const hasFuture = mode === 'create' ? createFuture.length > 0 : placeFuture.length > 0;
 
-  const controlTop = insets.top + 65;
+  const controlTop = insets.top + 100;
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -650,11 +654,15 @@ export default function FormationEditorScreen() {
         <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.max(0.5, (Math.ceil(scale.value * 4) - 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="remove" size={20} color="#FFF" /></TouchableOpacity>
       </View>
 
-      <View style={[styles.stageSection, mode === 'create' && { marginTop: 100 }]}>
+      <View style={styles.stageSection}>
         <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
-          <View style={styles.stageWrapper}>
+          <View style={[styles.stageWrapper, { paddingTop: 40 }]}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }, stageAnimatedStyle]}>
-              <View style={{ position: 'absolute', top: -30, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: settings.stageDirection === 'top' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>{settings.stageDirection === 'top' ? '앞 FRONT' : '뒤 BACK'}</Text></View>
+              <View style={{ position: 'absolute', top: -45, left: 0, right: 0, alignSelf: 'center' }}>
+                <Text style={[styles.directionLabelText, { color: '#FFF', textAlign: 'center' }]}>
+                  {settings.stageDirection === 'top' ? 'FRONT (앞)' : 'BACK (뒤)'}
+                </Text>
+              </View>
               <GridLayer settings={settings} />
               
               {/* Ghost Dancers */}
@@ -662,21 +670,25 @@ export default function FormationEditorScreen() {
                 dancers.map(d => {
                   const pos = scenes.find(s => s.id === activeSceneId)?.positions[d.id];
                   if (!pos) return null;
-                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
+                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
                 })
               }
               {mode === 'place' && nextSceneId && scenes.find(s => s.id === nextSceneId)?.positions &&
                 dancers.map(d => {
                   const pos = scenes.find(s => s.id === nextSceneId)?.positions[d.id];
                   if (!pos) return null;
-                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
+                  return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
                 })
               }
 
               {dancers.map((d, i) => (
                 <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} />
               ))}
-              <View style={{ position: 'absolute', bottom: -30, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: settings.stageDirection === 'bottom' ? '#FF3366' : '#666', fontSize: 14, fontWeight: '900' }}>{settings.stageDirection === 'bottom' ? ' 앞 FRONT' : '뒤 BACK'}</Text></View>
+              <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
+                <Text style={[styles.directionLabelText, { color: '#FFF', textAlign: 'center' }]}>
+                  {settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}
+                </Text>
+              </View>
             </Animated.View>
           </View>
         </GestureDetector>
@@ -694,7 +706,7 @@ export default function FormationEditorScreen() {
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scenes={scenes} />
+                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scenes={scenes} settings={settings} />
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
                       ))}
@@ -732,7 +744,7 @@ export default function FormationEditorScreen() {
                       setActiveSceneId(s.id);
                     }
                   }} style={[styles.sceneCard, activeSceneId === s.id && { borderColor: theme.primary, backgroundColor: 'rgba(255, 51, 102, 0.05)' }]}>
-                    <MiniFormationPreview scene={s} dancers={dancers} />
+                    <MiniFormationPreview scene={s} dancers={dancers} settings={settings} />
                     <View style={styles.sceneCardLabel}><Text style={[styles.sceneCardText, activeSceneId === s.id && { color: theme.primary }]}>{s.name}</Text></View>
                   </TouchableOpacity>
                 ))}
@@ -806,7 +818,7 @@ const styles = StyleSheet.create({
   dancerInitial: { color: '#FFF', fontWeight: 'bold' },
   dancerNameText: { color: '#AAA', marginTop: 4 },
   bottomDock: { backgroundColor: '#000', borderTopWidth: 1, borderTopColor: '#222' },
-  placeDock: { padding: 15 },
+  placeDock: { padding: 15, height: 220 },
   timelineWrapper: { height: 120, position: 'relative', marginBottom: 15, backgroundColor: '#111', borderRadius: 10, overflow: 'hidden' },
   waveformContainer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
   waveformBar: { width: 3, backgroundColor: '#FFF', borderRadius: 1.5 },
@@ -816,14 +828,14 @@ const styles = StyleSheet.create({
   timeMarkerText: { color: '#444', fontSize: 9, marginTop: 2, fontWeight: 'bold' },
   timelineTrack: { flex: 1, position: 'relative' },
   block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', overflow: 'hidden' },
-  blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none' },
+  blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none', alignItems: 'center' },
   blockText: { fontSize: 9, fontWeight: 'bold' },
   needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   toolBtnSmall: { alignItems: 'center', width: 60 },
   playBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   timeText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', width: 60, textAlign: 'right' },
-  createDock: { paddingHorizontal: 12, paddingTop: 40, paddingBottom: 5 },
+  createDock: { paddingHorizontal: 12, paddingTop: 15, paddingBottom: 5, height: 240 },
   createToolbar: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
   toolBtn: { alignItems: 'center', gap: 4 },
   toolBtnText: { color: '#888', fontSize: 11 },
@@ -831,10 +843,10 @@ const styles = StyleSheet.create({
   actionColumn: { gap: 6, width: 85, justifyContent: 'center' },
   addSceneBtnWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 32, borderRadius: 8, gap: 4, backgroundColor: '#FFF' },
   addSceneText: { fontWeight: 'bold', fontSize: 10, color: '#000' },
-  sceneCard: { width: 100, height: 112, backgroundColor: '#111', borderRadius: 12, borderWidth: 2, borderColor: '#333', marginRight: 12, overflow: 'hidden' },
+  sceneCard: { width: 100, height: 112, backgroundColor: '#111', borderRadius: 12, borderWidth: 2, borderColor: '#333', marginRight: 12, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   miniStage: { flex: 1, backgroundColor: 'transparent', position: 'relative' },
   miniDancer: { position: 'absolute', width: 6, height: 6, borderRadius: 3, marginLeft: -3, marginTop: -3 },
-  sceneCardLabel: { height: 28, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.03)' },
+  sceneCardLabel: { height: 28, width: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.03)' },
   sceneCardText: { color: '#888', fontSize: 10, fontWeight: 'bold' },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   menu: { backgroundColor: '#1A1A1A', padding: 25, borderRadius: 20, width: '80%' },
@@ -863,5 +875,7 @@ const styles = StyleSheet.create({
   xLine: { position: 'absolute', height: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
   resizeHandleLeft: { position: 'absolute', left: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
   resizeHandleRight: { position: 'absolute', right: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
-  handleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2 }
+  handleCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2 },
+  directionLabelBox: { position: 'absolute', paddingHorizontal: 15, paddingVertical: 4, borderRadius: 12 },
+  directionLabelText: { fontSize: 10, fontWeight: '900', letterSpacing: 2 }
 });

@@ -206,7 +206,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     
     const mappedRemote = (remote || []).map(form => ({
       id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url,
-      settings: form.settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
+      settings: form.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true },
       data: form.data || { dancers: [], scenes: [], timeline: [] },
       createdAt: new Date(form.created_at).getTime(),
       isLocal: false
@@ -376,7 +376,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const newId = Math.random().toString(36).substr(2, 9);
     const newFormation: Formation = {
       id: newId, roomId: rid, userId: currentUser.id, title, audioUrl,
-      settings: settings || { gridRows: 10, gridCols: 10, stageDirection: 'top', snapToGrid: true },
+      settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true },
       data: data || { dancers: [], scenes: [], timeline: [] },
       createdAt: Date.now()
     };

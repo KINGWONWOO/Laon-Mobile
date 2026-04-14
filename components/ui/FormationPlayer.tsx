@@ -73,8 +73,8 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const gridCols = formation?.settings?.gridCols || 10;
   const stageDirection = formation?.settings?.stageDirection || 'top';
 
-  const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / (gridCols + 4);
-  const STAGE_WIDTH = (gridCols + 4) * STAGE_CELL_SIZE;
+  const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / gridCols;
+  const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
 
   useEffect(() => {
@@ -98,11 +98,9 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
         </View>
 
         <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT }]}>
-          <View style={[styles.offStageArea, { left: 0, width: STAGE_CELL_SIZE * 2 }]} />
-          <View style={[styles.offStageArea, { right: 0, width: STAGE_CELL_SIZE * 2 }]} />
           <View style={styles.gridLayer}>
             {Array.from({ length: gridRows + 1 }).map((_, i) => <View key={i} style={[styles.gridH, { top: `${(i / gridRows) * 100}%` }]} />)}
-            {Array.from({ length: gridCols + 5 }).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i / (gridCols + 4)) * 100}%` }]} />)}
+            {Array.from({ length: gridCols + 1 }).map((_, i) => <View key={i} style={[styles.gridV, { left: `${(i / gridCols) * 100}%` }]} />)}
           </View>
           {dancers.map((d, i) => (
             <DancerNode
