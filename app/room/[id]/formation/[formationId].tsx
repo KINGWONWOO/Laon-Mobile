@@ -318,16 +318,24 @@ const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, s
 });
 
 const GridLayer = React.memo(function GridLayer({ settings }: { settings: FormationSettings }) {
+  const { theme } = useAppContext();
+  const gridColor = theme.textSecondary; 
+  const centerColor = theme.primary;
+
   return (
     <View style={styles.gridLayer}>
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
-        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%` }]} />
+        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.15 }]} />
       ))}
       {Array.from({ length: settings.gridCols + 1 }).map((_, i) => (
-        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%` }]} />
+        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.15 }]} />
       ))}
+      {/* Center Marker */}
+      <View style={[styles.gridH, { top: '50%', backgroundColor: centerColor, opacity: 0.5, height: 1.5 }]} />
+      <View style={[styles.gridV, { left: '50%', backgroundColor: centerColor, opacity: 0.5, width: 1.5 }]} />
     </View>
   );
+});
 });
 
 const GUIDE_STEPS = [
@@ -846,12 +854,12 @@ const styles = StyleSheet.create({
   stageWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   stage: { borderWidth: 1, overflow: 'visible' },
   gridLayer: { ...StyleSheet.absoluteFillObject },
-  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
-  gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+  gridH: { position: 'absolute', left: 0, right: 0 },
+  gridV: { position: 'absolute', top: 0, bottom: 0 },
   dancerNode: { position: 'absolute', alignItems: 'center' },
   dancerCircle: { justifyContent: 'center', alignItems: 'center' },
   dancerInitial: { color: '#FFF', fontWeight: 'bold' },
-  dancerNameText: { color: '#AAA', marginTop: 4 },
+  dancerNameText: { marginTop: 4 },
   bottomDock: { borderTopWidth: 1 },
   placeDock: { padding: 15, height: 220 },
   timelineWrapper: { height: 120, position: 'relative', marginBottom: 15, borderRadius: 10, overflow: 'hidden' },
