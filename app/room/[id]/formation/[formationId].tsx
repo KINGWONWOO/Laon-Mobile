@@ -319,20 +319,23 @@ const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, s
 
 const GridLayer = React.memo(function GridLayer({ settings }: { settings: FormationSettings }) {
   const { theme } = useAppContext();
-  const gridColor = theme.textSecondary; 
+  const gridColor = theme.border; 
   const centerColor = theme.primary;
 
   return (
     <View style={styles.gridLayer}>
+      {/* Horizontal Grid Lines */}
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
-        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.15 }]} />
+        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.3 }]} />
       ))}
+      {/* Vertical Grid Lines */}
       {Array.from({ length: settings.gridCols + 1 }).map((_, i) => (
-        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.15 }]} />
+        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.3 }]} />
       ))}
-      {/* Center Marker */}
-      <View style={[styles.gridH, { top: '50%', backgroundColor: centerColor, opacity: 0.5, height: 1.5 }]} />
-      <View style={[styles.gridV, { left: '50%', backgroundColor: centerColor, opacity: 0.5, width: 1.5 }]} />
+      
+      {/* Short Center Crosshair */}
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 20, height: 2, backgroundColor: centerColor, marginLeft: -10, marginTop: -1, opacity: 0.8, borderRadius: 1 }} />
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 20, backgroundColor: centerColor, marginLeft: -1, marginTop: -10, opacity: 0.8, borderRadius: 1 }} />
     </View>
   );
 });
