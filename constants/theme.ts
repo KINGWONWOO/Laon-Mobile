@@ -4,7 +4,7 @@ export const getThemeColors = (theme: ThemeType = 'dark') => {
   switch (theme) {
     case 'light':
       return {
-        primary: '#7B2CBF',
+        primary: '#45B7D1', // Sky Blue
         secondary: '#FF007A',
         accent: '#21F3A3',
         background: '#FFFFFF',
