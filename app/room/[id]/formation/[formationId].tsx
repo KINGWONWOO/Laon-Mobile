@@ -326,16 +326,16 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
     <View style={styles.gridLayer}>
       {/* Horizontal Grid Lines */}
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
-        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.3 }]} />
+        <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.4, height: 1 }]} />
       ))}
       {/* Vertical Grid Lines */}
       {Array.from({ length: settings.gridCols + 1 }).map((_, i) => (
-        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.3 }]} />
+        <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.4, width: 1 }]} />
       ))}
       
       {/* Short Center Crosshair */}
-      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 20, height: 2, backgroundColor: centerColor, marginLeft: -10, marginTop: -1, opacity: 0.8, borderRadius: 1 }} />
-      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 20, backgroundColor: centerColor, marginLeft: -1, marginTop: -10, opacity: 0.8, borderRadius: 1 }} />
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 24, height: 2, backgroundColor: centerColor, marginLeft: -12, marginTop: -1, opacity: 0.9, borderRadius: 1 }} />
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 24, backgroundColor: centerColor, marginLeft: -1, marginTop: -12, opacity: 0.9, borderRadius: 1 }} />
     </View>
   );
 });
@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
   timeMarkerLine: { width: 1, height: 5 },
   timeMarkerText: { fontSize: 9, marginTop: 2, fontWeight: 'bold' },
   timelineTrack: { flex: 1, position: 'relative' },
-  block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50, overflow: 'hidden' },
+  block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50 },
   blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none', alignItems: 'center' },
   blockText: { fontSize: 9, fontWeight: 'bold' },
   needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
