@@ -154,7 +154,7 @@ export default function RoomMainScreen() {
               style={[styles.editProfileBtn, { backgroundColor: theme.primary }]}
               onPress={() => { setRoomNickname(myRoomProfile?.name || currentUser?.name || ''); setRoomImage(myRoomProfile?.profileImage || currentUser?.profileImage || null); setShowProfileModal(true); }}
             >
-              <Text style={[styles.editProfileBtnText, { color: theme.background }]}>프로필 수정</Text>
+              <Text style={[styles.editProfileBtnText, { color: theme.background }]}>프로필 설정</Text>
             </TouchableOpacity>
           </View>
 
@@ -190,7 +190,7 @@ export default function RoomMainScreen() {
               style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}
               onPress={() => router.push(`/room/${id}/notice/${roomNotices[0].id}`)}
             >
-              <View style={styles.noticeTag}><Text style={styles.noticeTagText}>LATEST</Text></View>
+              <View style={[styles.noticeTag, { backgroundColor: theme.error }]}><Text style={[styles.noticeTagText, { color: theme.background }]}>LATEST</Text></View>
               <Text style={[styles.noticeTitle, { color: theme.text }]} numberOfLines={1}>{roomNotices[0].title}</Text>
               <Text style={[styles.noticeContent, { color: theme.textSecondary }]} numberOfLines={2}>{roomNotices[0].content}</Text>
             </TouchableOpacity>
@@ -260,9 +260,9 @@ export default function RoomMainScreen() {
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>새 팀 공지</Text><TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="공지 제목" placeholderTextColor="#888" value={noticeTitle} onChangeText={setNoticeTitle} />
-              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, borderColor: theme.border }]} placeholder="공지 내용" placeholderTextColor="#888" multiline numberOfLines={5} value={noticeContent} onChangeText={setNoticeContent} />
-              <TouchableOpacity style={styles.imagePickBtn} onPress={handlePickImages}><Ionicons name="camera-outline" size={20} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, marginLeft: 10 }}>사진 첨부 ({selectedImages.length})</Text></TouchableOpacity>
+              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={noticeTitle} onChangeText={setNoticeTitle} />
+              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={noticeContent} onChangeText={setNoticeContent} />
+              <TouchableOpacity style={[styles.imagePickBtn, { borderColor: theme.border }]} onPress={handlePickImages}><Ionicons name="camera-outline" size={20} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, marginLeft: 10 }}>사진 첨부 ({selectedImages.length})</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleAddNotice} disabled={isSubmitting}>{isSubmitting ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>공지 등록하기</Text>}</TouchableOpacity>
             </ScrollView>
           </View>

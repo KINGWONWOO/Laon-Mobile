@@ -73,7 +73,7 @@ export default function RoomsScreen() {
             }}
           >
             <Ionicons name="settings-outline" size={20} color={theme.text} />
-            <Text style={[styles.actionIconText, { color: theme.text }]}>수정</Text>
+            <Text style={[styles.actionIconText, { color: theme.text }]}>설정</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -158,8 +158,8 @@ export default function RoomsScreen() {
                     ]}
                     onPress={() => setThemeType(t.type as any)}
                   >
-                    <Ionicons name={t.icon as any} size={20} color={themeType === t.type ? theme.primary : '#888'} />
-                    <Text style={[styles.themeLabel, { color: themeType === t.type ? theme.primary : '#888' }]}>{t.label}</Text>
+                    <Ionicons name={t.icon as any} size={20} color={themeType === t.type ? theme.primary : theme.textSecondary} />
+                    <Text style={[styles.themeLabel, { color: themeType === t.type ? theme.primary : theme.textSecondary }]}>{t.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
