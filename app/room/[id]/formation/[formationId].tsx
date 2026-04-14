@@ -91,7 +91,7 @@ const TimeMarkers = React.memo(function TimeMarkers({ duration }: { duration: nu
 const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, dancers, settings }: { scene: FormationScene, dancers: Dancer[], settings: FormationSettings }) {
   const aspectRatio = settings.gridCols / settings.gridRows;
   return (
-    <View style={{ width: '100%', height: 84, padding: 8, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ flex: 1, width: '100%', padding: 8, justifyContent: 'center', alignItems: 'center' }}>
       <View style={{ width: '100%', height: '100%', aspectRatio, maxHeight: '100%', maxWidth: '100%', position: 'relative' }}>
         {dancers.map(d => {
           const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
@@ -225,7 +225,7 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
   );
 });
 
-const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) {
+const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlace }: any) {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -237,7 +237,9 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
     return dancerPos?.value || { x: 0.5, y: 0.5 };
   });
 
-  const panGesture = Gesture.Pan().enabled(mode === 'create')
+  const canDrag = mode === 'create' || (mode === 'place' && canDragInPlace);
+
+  const panGesture = Gesture.Pan().enabled(canDrag)
     .onStart(() => { 
       'worklet';
       isDragging.value = true; 
@@ -268,12 +270,14 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
       { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
       { scale: withSpring(isSelected || isDragging.value ? 1.1 : 1) }
     ],
-    opacity: mode === 'place' ? 0.7 : 1,
+    opacity: mode === 'place' ? (canDragInPlace ? 1 : 0.4) : 1,
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
   return (
-    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => onPress()))}>
+    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => {
+      if (canDrag) onPress();
+    }))}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
         <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? '#FFF' : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
         <Text style={[styles.dancerNameText, { color: isSelected ? '#FFF' : '#AAA', fontSize: (settings.dancerNameSize || 8) }]} numberOfLines={1}>{dancer.name}</Text>
@@ -397,6 +401,43 @@ export default function FormationEditorScreen() {
   const [placePast, setPlacePast] = useState<HistoryState[]>([]);
   const [placeFuture, setPlaceFuture] = useState<HistoryState[]>([]);
 
+  const [nextSceneId, setNextSceneId] = useState<string | null>(null);
+  const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
+
+  useAnimatedReaction(
+    () => {
+      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
+      const next = sorted.find(e => e.timestampMillis > currentTimeMs.value);
+      
+      let currentEntryId = null;
+      for (let e of sorted) {
+        // 재생바가 블록 범위 내에 정확히 있을 때만 에디팅 활성화
+        if (currentTimeMs.value >= e.timestampMillis && currentTimeMs.value < e.timestampMillis + e.durationMillis) {
+          currentEntryId = e.id;
+          break;
+        }
+      }
+      return { nextId: next?.sceneId || null, currentEntryId };
+    },
+    (data) => {
+      if (data.nextId !== nextSceneId) {
+        runOnJS(setNextSceneId)(data.nextId);
+      }
+      if (data.currentEntryId !== activeEntryIdInPlace) {
+        runOnJS(setActiveEntryIdInPlace)(data.currentEntryId);
+      }
+    },
+    [timeline]
+  );
+
+  const activeSceneIdToEdit = useMemo(() => {
+    if (mode === 'create') return activeSceneId;
+    if (mode === 'place' && activeEntryIdInPlace) {
+      return timeline.find(e => e.id === activeEntryIdInPlace)?.sceneId || null;
+    }
+    return null;
+  }, [mode, activeSceneId, activeEntryIdInPlace, timeline]);
+
   const pushHistory = useCallback(() => {
     const current: HistoryState = { dancers: JSON.parse(JSON.stringify(dancers)), scenes: JSON.parse(JSON.stringify(scenes)), timeline: JSON.parse(JSON.stringify(timeline)) };
     if (mode === 'create') { setCreatePast(prev => [...prev, current].slice(-30)); setCreateFuture([]); }
@@ -404,29 +445,15 @@ export default function FormationEditorScreen() {
   }, [dancers, scenes, timeline, mode]);
 
   const onDragEnd = useCallback((dancerId: string, pos: Position) => {
-    setScenes(prev => prev.map(s => s.id === activeSceneId ? {
+    const targetId = activeSceneIdToEdit;
+    if (!targetId) return;
+
+    setScenes(prev => prev.map(s => s.id === targetId ? {
       ...s,
       positions: { ...s.positions, [dancerId]: pos }
     } : s));
     pushHistory();
-  }, [activeSceneId, pushHistory]);
-
-  const [nextSceneId, setNextSceneId] = useState<string | null>(null);
-
-  useAnimatedReaction(
-    () => {
-      if (mode !== 'place') return null;
-      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      const next = sorted.find(e => e.timestampMillis > currentTimeMs.value);
-      return next?.sceneId || null;
-    },
-    (nextId) => {
-      if (nextId !== nextSceneId) {
-        runOnJS(setNextSceneId)(nextId);
-      }
-    },
-    [mode, timeline]
-  );
+  }, [activeSceneIdToEdit, pushHistory]);
 
   const undo = () => {
     if (mode === 'create') {
@@ -682,7 +709,7 @@ export default function FormationEditorScreen() {
               }
 
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
               ))}
               <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
                 <Text style={[styles.directionLabelText, { color: '#FFF', textAlign: 'center' }]}>
