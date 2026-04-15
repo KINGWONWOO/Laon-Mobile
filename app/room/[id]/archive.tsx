@@ -129,31 +129,35 @@ export default function ArchiveScreen() {
       <Modal visible={!!selectedPhoto} animationType="fade" transparent>
         <View style={styles.detailOverlay}>
           <View style={[styles.detailContent, { backgroundColor: theme.background }]}>
+            {/* 💡 Social Media Style Header (Author Info) */}
             <View style={[styles.detailHeader, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
               <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.closeBtn}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
-              <View style={{flex: 1}} />
+              
+              <View style={styles.headerAuthorInfo}>
+                <Image source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.headerAuthorImg} />
+                <View>
+                  <Text style={{color: theme.text, fontWeight: '800', fontSize: 15}}>{getUserById(selectedPhoto?.userId)?.name}</Text>
+                  <Text style={{color: theme.textSecondary, fontSize: 11, fontWeight: '500'}}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
+                </View>
+              </View>
+
               {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                 <View style={{flexDirection: 'row'}}>
                   <TouchableOpacity onPress={() => { setEditDesc(selectedPhoto.description || ''); setIsEditingPhoto(true); }} style={styles.headerActionBtn}>
-                    <Ionicons name="pencil" size={22} color={theme.textSecondary} />
+                    <Ionicons name="pencil" size={20} color={theme.textSecondary} />
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleDeletePhoto(selectedPhoto)} style={styles.headerActionBtn}>
-                    <Ionicons name="trash" size={22} color={theme.error} />
+                    <Ionicons name="trash" size={20} color={theme.error} />
                   </TouchableOpacity>
                 </View>
               )}
             </View>
+
             <ScrollView showsVerticalScrollIndicator={false}>
+              {/* 💡 Content (Image) below header */}
               <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="contain" />
+              
               <View style={styles.detailInfoArea}>
-                <View style={[styles.authorSection, { backgroundColor: theme.card }, Shadows.soft]}>
-                  <Image source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.authorImg} />
-                  <View>
-                    <Text style={{color: theme.text, fontWeight: '800', fontSize: 16}}>{getUserById(selectedPhoto?.userId)?.name}</Text>
-                    <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500'}}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
-                  </View>
-                </View>
-                
                 <View style={[styles.descSection, { backgroundColor: theme.card }, Shadows.soft]}>
                   <Text style={{color: theme.text, fontSize: 16, lineHeight: 24, fontWeight: '500'}}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
                 </View>
@@ -196,7 +200,7 @@ export default function ArchiveScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }, Shadows.medium]}>
             <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>설명 수정</Text>
-            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} value={editDesc} onChangeText={setEditDesc} multiline />
+            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} value={editDesc} onChangeText={setEditDesc} multiline />
             <View style={{flexDirection:'row', justifyContent:'flex-end', marginTop: 10}}>
               <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
               <TouchableOpacity onPress={handleUpdatePhoto} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
@@ -229,13 +233,13 @@ const styles = StyleSheet.create({
   gridImage: { width: '100%', height: '100%' },
   detailOverlay: { flex: 1, backgroundColor: '#000' },
   detailContent: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, paddingBottom: 15 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10 },
+  headerAuthorInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
+  headerAuthorImg: { width: 36, height: 36, borderRadius: 14, marginRight: 10 },
   closeBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  headerActionBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
+  headerActionBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 5 },
   detailImage: { width: '100%', height: width * 1.1, backgroundColor: '#000' },
   detailInfoArea: { padding: 24 },
-  authorSection: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 24, marginBottom: 16 },
-  authorImg: { width: 44, height: 44, borderRadius: 18, marginRight: 14 },
   descSection: { padding: 20, borderRadius: 24, marginBottom: 32 },
   commentSection: { marginTop: 10 },
   cItem: { flexDirection: 'row', padding: 16, borderRadius: 24, marginBottom: 14 },

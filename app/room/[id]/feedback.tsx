@@ -40,7 +40,9 @@ export default function FeedbackScreen() {
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [filterType, setFilterType] = useState<'all' | 'mine' | 'formation'>('all');
+  
+  // 💡 Filter Types: 'all' | 'choreography' | 'formation'
+  const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
   // Formation specific state
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
@@ -71,17 +73,19 @@ export default function FeedbackScreen() {
   
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
-  // 💡 Filter Logic Implementation
+  // 💡 Refined Filter Logic
   const filteredVideos = useMemo(() => {
     switch (filterType) {
-      case 'mine':
-        return roomVideos.filter(v => v.userId === currentUser?.id);
+      case 'choreography':
+        // '안무': [동선]이 포함되지 않은 모든 영상
+        return roomVideos.filter(v => !v.title.includes('[동선]') && !v.videoUrl.startsWith('formation://'));
       case 'formation':
+        // '동선': [동선]이 포함된 모든 영상
         return roomVideos.filter(v => v.title.includes('[동선]') || v.videoUrl.startsWith('formation://'));
       default:
         return roomVideos;
     }
-  }, [roomVideos, filterType, currentUser]);
+  }, [roomVideos, filterType]);
 
   const sortedComments = useMemo(() => {
     if (!selectedVideo) return [];
@@ -309,9 +313,24 @@ export default function FeedbackScreen() {
       </View>
 
       <View style={styles.filterBar}>
-        <TouchableOpacity style={[styles.filterBtn, filterType === 'all' && {backgroundColor: theme.primary}]} onPress={() => setFilterType('all')}><Text style={[styles.filterText, filterType === 'all' && {color: '#fff'}]}>전체</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.filterBtn, filterType === 'mine' && {backgroundColor: theme.primary}]} onPress={() => setFilterType('mine')}><Text style={[styles.filterText, filterType === 'mine' && {color: '#fff'}]}>내 영상</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.filterBtn, filterType === 'formation' && {backgroundColor: theme.primary}]} onPress={() => setFilterType('formation')}><Text style={[styles.filterText, filterType === 'formation' && {color: '#fff'}]}>동선</Text></TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterBtn, filterType === 'all' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
+          onPress={() => setFilterType('all')}
+        >
+          <Text style={[styles.filterText, {color: filterType === 'all' ? '#fff' : theme.textSecondary}]}>전체</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterBtn, filterType === 'choreography' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
+          onPress={() => setFilterType('choreography')}
+        >
+          <Text style={[styles.filterText, {color: filterType === 'choreography' ? '#fff' : theme.textSecondary}]}>안무</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.filterBtn, filterType === 'formation' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
+          onPress={() => setFilterType('formation')}
+        >
+          <Text style={[styles.filterText, {color: filterType === 'formation' ? '#fff' : theme.textSecondary}]}>동선</Text>
+        </TouchableOpacity>
       </View>
       
       <FlatList
@@ -338,7 +357,6 @@ export default function FeedbackScreen() {
         )}
       />
 
-      {/* Add & Edit Modals remain with consistent styling... */}
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
@@ -372,7 +390,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
   filterBar: { flexDirection: 'row', padding: 15, paddingHorizontal: 20 },
-  filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10, backgroundColor: 'rgba(0,0,0,0.05)' },
+  filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10, ...Shadows.soft },
   filterText: { fontSize: 13, fontWeight: '800' },
   videoCard: { flexDirection: 'row', alignItems: 'center', padding: 18, marginHorizontal: 20, marginBottom: 14, borderRadius: 28 },
   vThumbPlaceholder: { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
