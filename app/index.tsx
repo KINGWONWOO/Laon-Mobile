@@ -4,10 +4,11 @@ import {
   Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/theme';
+import { Colors, Shadows } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { authService } from '../services/authService';
+import { useAppContext } from '../context/AppContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -16,6 +17,9 @@ export default function LoginScreen() {
   const [socialLoading, setSocialLoading] = useState<'google' | 'kakao' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
+  
+  // 테마 관리
+  const { themeType, setThemeType, theme } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -25,7 +29,7 @@ export default function LoginScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      await authService.login(email, password);
+      await authService.signIn(email, password);
       router.replace('/rooms');
     } catch (err: any) {
       setErrorMsg(err.message || '로그인에 실패했습니다.');
@@ -48,27 +52,41 @@ export default function LoginScreen() {
     }
   };
 
+  const toggleTheme = () => {
+    setThemeType(themeType === 'light' ? 'dark' : 'light');
+  };
+
+  const currentColors = theme || Colors;
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={[styles.container, { backgroundColor: Colors.background }]}
+      style={[styles.container, { backgroundColor: currentColors.background }]}
     >
+      {/* 테마 토글 버튼 */}
+      <TouchableOpacity 
+        style={[styles.themeToggle, { backgroundColor: currentColors.card }, Shadows.soft]} 
+        onPress={toggleTheme}
+      >
+        <Ionicons name={themeType === 'light' ? "moon" : "sunny"} size={20} color={currentColors.primary} />
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: Colors.primary }]}>LAON</Text>
-          <Text style={[styles.subtitle, { color: Colors.text }]}>DANCE FEEDBACK</Text>
-          <Text style={[styles.description, { color: Colors.textSecondary }]}>
+          <Text style={[styles.title, { color: currentColors.primary }]}>LAON</Text>
+          <Text style={[styles.subtitle, { color: currentColors.text }]}>DANCE FEEDBACK</Text>
+          <Text style={[styles.description, { color: currentColors.textSecondary }]}>
             더 나은 춤을 위한 크루들의 공간
           </Text>
         </View>
 
         <View style={styles.form}>
-          <View style={[styles.inputContainer, { borderColor: Colors.border }]}>
-            <Ionicons name="mail-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+          <View style={[styles.inputContainer, { backgroundColor: currentColors.card, borderColor: 'transparent' }, Shadows.soft]}>
+            <Ionicons name="mail-outline" size={20} color={currentColors.textSecondary} style={styles.inputIcon} />
             <TextInput
-              style={[styles.input, { color: Colors.text }]}
+              style={[styles.input, { color: currentColors.text }]}
               placeholder="이메일 주소"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={currentColors.textSecondary}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -76,12 +94,12 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View style={[styles.inputContainer, { borderColor: Colors.border, marginTop: 12 }]}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+          <View style={[styles.inputContainer, { backgroundColor: currentColors.card, borderColor: 'transparent', marginTop: 16 }, Shadows.soft]}>
+            <Ionicons name="lock-closed-outline" size={20} color={currentColors.textSecondary} style={styles.inputIcon} />
             <TextInput
-              style={[styles.input, { color: Colors.text }]}
+              style={[styles.input, { color: currentColors.text }]}
               placeholder="비밀번호"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={currentColors.textSecondary}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -94,12 +112,12 @@ export default function LoginScreen() {
             style={[styles.forgotPassword, { marginTop: 12 }]}
             onPress={() => router.push('/forgot-password')}
           >
-            <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>비밀번호를 잊으셨나요?</Text>
+            <Text style={{ color: currentColors.textSecondary, fontSize: 13, fontWeight: '600' }}>비밀번호를 잊으셨나요?</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             activeOpacity={0.8}
-            style={[styles.loginButton, { backgroundColor: Colors.primary }]}
+            style={[styles.loginButton, { backgroundColor: currentColors.primary }, Shadows.glow]}
             onPress={handleLogin}
             disabled={loading}
           >
@@ -107,32 +125,32 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <View style={styles.dividerContainer}>
-            <View style={[styles.divider, { backgroundColor: Colors.border }]} />
-            <Text style={[styles.dividerText, { color: Colors.textSecondary }]}>간편 로그인</Text>
-            <View style={[styles.divider, { backgroundColor: Colors.border }]} />
+            <View style={[styles.divider, { backgroundColor: currentColors.border }]} />
+            <Text style={[styles.dividerText, { color: currentColors.textSecondary }]}>간편 로그인</Text>
+            <View style={[styles.divider, { backgroundColor: currentColors.border }]} />
           </View>
 
           <View style={styles.socialButtons}>
             <TouchableOpacity 
-              style={[styles.socialBtn, { borderColor: Colors.border }]}
+              style={[styles.socialBtn, { backgroundColor: currentColors.card }, Shadows.soft]}
               onPress={() => handleSocialLogin('google')}
               disabled={!!socialLoading}
             >
-              {socialLoading === 'google' ? <ActivityIndicator size="small" /> : <Ionicons name="logo-google" size={22} color="#EA4335" />}
+              {socialLoading === 'google' ? <ActivityIndicator size="small" /> : <Ionicons name="logo-google" size={24} color="#EA4335" />}
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.socialBtn, { borderColor: Colors.border, marginLeft: 20 }]}
+              style={[styles.socialBtn, { backgroundColor: currentColors.card, marginLeft: 24 }, Shadows.soft]}
               onPress={() => handleSocialLogin('kakao')}
               disabled={!!socialLoading}
             >
-              {socialLoading === 'kakao' ? <ActivityIndicator size="small" /> : <Ionicons name="chatbubble" size={22} color="#FEE500" />}
+              {socialLoading === 'kakao' ? <ActivityIndicator size="small" /> : <Ionicons name="chatbubble" size={24} color="#FEE500" />}
             </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
-            <Text style={{ color: Colors.textSecondary }}>계정이 없으신가요? </Text>
+            <Text style={{ color: currentColors.textSecondary, fontWeight: '500' }}>계정이 없으신가요? </Text>
             <TouchableOpacity onPress={() => router.push('/register')}>
-              <Text style={{ color: Colors.primary, fontWeight: '700' }}>회원가입</Text>
+              <Text style={{ color: currentColors.primary, fontWeight: '800' }}>회원가입</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -143,23 +161,24 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 30, paddingTop: 100 },
-  header: { marginBottom: 40 },
-  title: { fontSize: 36, fontWeight: '900', letterSpacing: 2 },
-  subtitle: { fontSize: 24, fontWeight: '800', marginTop: -5 },
-  description: { fontSize: 14, marginTop: 10, fontWeight: '500' },
+  themeToggle: { position: 'absolute', top: 60, right: 25, width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  scrollContent: { padding: 30, paddingTop: 120 },
+  header: { marginBottom: 50 },
+  title: { fontSize: 42, fontWeight: '900', letterSpacing: -1.5 },
+  subtitle: { fontSize: 26, fontWeight: '800', marginTop: -8, letterSpacing: -0.5 },
+  description: { fontSize: 15, marginTop: 12, fontWeight: '600', opacity: 0.8 },
   form: { width: '100%' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 16, paddingHorizontal: 15, height: 56 },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, fontSize: 15, fontWeight: '500' },
-  errorText: { color: '#FF5A5F', fontSize: 12, marginTop: 8, marginLeft: 5 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 24, paddingHorizontal: 20, height: 64 },
+  inputIcon: { marginRight: 15 },
+  input: { flex: 1, fontSize: 16, fontWeight: '700' },
+  errorText: { color: '#FF3B30', fontSize: 13, marginTop: 10, marginLeft: 5, fontWeight: '600' },
   forgotPassword: { alignSelf: 'flex-end' },
-  loginButton: { height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginTop: 30, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
-  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
-  divider: { flex: 1, height: 1 },
-  dividerText: { marginHorizontal: 15, fontSize: 12, fontWeight: '600' },
+  loginButton: { height: 64, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginTop: 35 },
+  loginButtonText: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 40 },
+  divider: { flex: 1, height: 1, opacity: 0.5 },
+  dividerText: { marginHorizontal: 20, fontSize: 13, fontWeight: '700', opacity: 0.6 },
   socialButtons: { flexDirection: 'row', justifyContent: 'center' },
-  socialBtn: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 40 }
+  socialBtn: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 50 }
 });

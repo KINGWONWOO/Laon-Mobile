@@ -30,6 +30,14 @@ export const authService = {
         };
       }
 
+      if (provider === 'google') {
+        // 💡 구글 로그인 시 앱(Gmail 등) 인터셉트 방지 및 계정 선택 강제
+        options.queryParams = {
+          prompt: 'select_account',
+          access_type: 'offline',
+        };
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options,
