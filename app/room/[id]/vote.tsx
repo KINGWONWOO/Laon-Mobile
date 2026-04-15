@@ -206,41 +206,43 @@ export default function VoteScreen() {
               </View>
             </View>
 
-            {/* Ranking: Podium UI */}
-            <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
-              <Text style={[styles.rankingHeader, { color: theme.text }]}>투표 순위</Text>
-              {ranked.length > 0 ? (
-                <View style={styles.podiumContainer}>
-                  {/* 2nd Place */}
-                  {ranked[1] && (
-                    <View style={styles.podiumColumn}>
-                      <Text style={[styles.podiumVotes, {color: theme.textSecondary}]}>{ranked[1].votes}표</Text>
-                      <View style={[styles.podiumBar, {height: 60, backgroundColor: '#C0C0C0'}]}><Text style={styles.podiumRankText}>2</Text></View>
-                      <Text style={[styles.podiumLabel, {color: theme.text}]} numberOfLines={1}>{ranked[1].text}</Text>
-                    </View>
-                  )}
-                  {/* 1st Place */}
-                  {ranked[0] && (
-                    <View style={styles.podiumColumn}>
-                      <Ionicons name="trophy" size={24} color="#FFD700" style={{marginBottom: 4}} />
-                      <Text style={[styles.podiumVotes, {color: theme.primary}]}>{ranked[0].votes}표</Text>
-                      <View style={[styles.podiumBar, {height: 90, backgroundColor: '#FFD700'}]}><Text style={styles.podiumRankText}>1</Text></View>
-                      <Text style={[styles.podiumLabel, {color: theme.text, fontWeight: '800'}]} numberOfLines={1}>{ranked[0].text}</Text>
-                    </View>
-                  )}
-                  {/* 3rd Place */}
-                  {ranked[2] && (
-                    <View style={styles.podiumColumn}>
-                      <Text style={[styles.podiumVotes, {color: theme.textSecondary}]}>{ranked[2].votes}표</Text>
-                      <View style={[styles.podiumBar, {height: 40, backgroundColor: '#CD7F32'}]}><Text style={styles.podiumRankText}>3</Text></View>
-                      <Text style={[styles.podiumLabel, {color: theme.text}]} numberOfLines={1}>{ranked[2].text}</Text>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>아직 투표 데이터가 없습니다.</Text>
-              )}
-            </View>
+            {/* Ranking: Podium UI - Only shown when closed */}
+            {isClosed && (
+              <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
+                <Text style={[styles.rankingHeader, { color: theme.text }]}>투표 순위</Text>
+                {ranked.length > 0 ? (
+                  <View style={styles.podiumContainer}>
+                    {/* 2nd Place */}
+                    {ranked[1] && (
+                      <View style={styles.podiumColumn}>
+                        <Text style={[styles.podiumVotes, {color: theme.textSecondary}]}>{ranked[1].votes}표</Text>
+                        <View style={[styles.podiumBar, {height: 60, backgroundColor: '#C0C0C0'}]}><Text style={styles.podiumRankText}>2</Text></View>
+                        <Text style={[styles.podiumLabel, {color: theme.text}]} numberOfLines={1}>{ranked[1].text}</Text>
+                      </View>
+                    )}
+                    {/* 1st Place */}
+                    {ranked[0] && (
+                      <View style={styles.podiumColumn}>
+                        <Ionicons name="trophy" size={24} color="#FFD700" style={{marginBottom: 4}} />
+                        <Text style={[styles.podiumVotes, {color: theme.primary}]}>{ranked[0].votes}표</Text>
+                        <View style={[styles.podiumBar, {height: 90, backgroundColor: '#FFD700'}]}><Text style={styles.podiumRankText}>1</Text></View>
+                        <Text style={[styles.podiumLabel, {color: theme.text, fontWeight: '800'}]} numberOfLines={1}>{ranked[0].text}</Text>
+                      </View>
+                    )}
+                    {/* 3rd Place */}
+                    {ranked[2] && (
+                      <View style={styles.podiumColumn}>
+                        <Text style={[styles.podiumVotes, {color: theme.textSecondary}]}>{ranked[2].votes}표</Text>
+                        <View style={[styles.podiumBar, {height: 40, backgroundColor: '#CD7F32'}]}><Text style={styles.podiumRankText}>3</Text></View>
+                        <Text style={[styles.podiumLabel, {color: theme.text}]} numberOfLines={1}>{ranked[2].text}</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>아직 투표 데이터가 없습니다.</Text>
+                )}
+              </View>
+            )}
 
             {isOwner && !isClosed && (
               <TouchableOpacity style={[styles.manualCloseBtn, {backgroundColor: theme.error + '10', borderColor: theme.error}]} onPress={() => handleCloseVoteManual(vote.id)}>
@@ -334,7 +336,7 @@ export default function VoteScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, paddingHorizontal: 24 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingHorizontal: 4 },
   headerTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
   headerSub: { fontSize: 14, fontWeight: '500', marginTop: 2, opacity: 0.7 },
