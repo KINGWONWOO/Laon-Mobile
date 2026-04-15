@@ -47,7 +47,6 @@ export const NoticeItem = ({ notice, onPress, theme }: any) => {
             </View>
           )}
         </View>
-        <Text style={[styles.noticeContent, { color: theme.textSecondary }]} numberOfLines={2}>{notice.content}</Text>
         <View style={styles.noticeFooter}>
           <Text style={[styles.noticeDate, { color: theme.textSecondary }]}>
             {formatDateFull(notice.createdAt)}

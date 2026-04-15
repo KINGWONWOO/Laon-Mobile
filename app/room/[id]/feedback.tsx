@@ -190,6 +190,11 @@ export default function FeedbackScreen() {
     else if (player) player.currentTime = ms / 1000; 
   };
 
+  const formatTime = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+  };
+
   if (selectedVideo) {
     const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
     return (
