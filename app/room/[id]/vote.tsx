@@ -15,12 +15,10 @@ export default function VoteScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   
-  // Voter list modal
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
 
-  // Form states
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -71,7 +69,6 @@ export default function VoteScreen() {
     if (!question.trim() || !selectedVoteId) return;
     setIsUpdating(true);
     try {
-      // updateVote matches the required type updates
       await updateVote(selectedVoteId, { question: question.trim(), deadline: hasDeadline ? deadline.getTime() : undefined, isAnonymous, allowMultiple } as any);
       setShowEditModal(false);
     } catch (e: any) { Alert.alert('오류', e.message); }
@@ -157,6 +154,22 @@ export default function VoteScreen() {
             <View style={styles.voterSummaryDetail}>
               <View style={styles.voterRow}><Text style={[styles.voterLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text><View style={styles.voterNamesRow}>{participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}</View></View>
               <View style={[styles.voterRow, { marginTop: 10 }]}><Text style={[styles.voterLabel, { color: theme.error }]}>미참여({nonParticipants.length})</Text><View style={styles.voterNamesRow}>{nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.error }]}>{getUserById(vId)?.name} </Text>)}</View></View>
+            </View>
+
+            {/* Ranking: Positioned below participant lists */}
+            <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.rankingHeader, { color: theme.primary }]}>투표 순위</Text>
+              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
+                <TouchableOpacity key={idx} style={styles.rankingItem} onPress={() => { if(vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.'); setVotersToDisplay(r.voters); setVoterModalTitle(`'${r.text}' 투표자`); setShowVoterModal(true); }}>
+                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx + 1}위</Text>
+                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.text}</Text>
+                  <View style={{flexDirection:'row', alignItems:'center'}}>
+                    <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 5 }]}>{r.votes}표</Text>
+                    <Ionicons name="people" size={14} color={theme.primary} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {ranked.filter(r => r.votes > 0).length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>아직 투표가 없습니다.</Text>}
             </View>
 
             {isClosed && ranked[0].votes > 0 && (
@@ -253,11 +266,17 @@ const styles = StyleSheet.create({
   voteQuestion: { fontSize: 22, fontWeight: 'bold', marginBottom: 25 },
   optItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 12, borderWidth: 1 },
   voterCountBadge: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.05)' },
-  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 30, marginTop: 20 },
+  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 10, marginTop: 10 },
   voterRow: { flexDirection: 'row' },
   voterLabel: { fontSize: 13, fontWeight: 'bold', width: 70 },
   voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
   voterName: { fontSize: 13 },
+  rankingBox: { padding: 20, borderRadius: 20, borderWidth: 1, marginVertical: 20 },
+  rankingHeader: { fontSize: 15, fontWeight: 'bold', marginBottom: 15 },
+  rankingItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  rankingIdx: { width: 30, fontSize: 13, fontWeight: 'bold' },
+  rankingText: { flex: 1, fontSize: 14 },
+  rankingCount: { fontSize: 14, fontWeight: 'bold' },
   resultBanner: { padding: 15, borderRadius: 15, borderWidth: 1, alignItems: 'center', marginBottom: 20 },
   manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 15, borderWidth: 1, marginTop: 10, borderStyle: 'dashed' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },

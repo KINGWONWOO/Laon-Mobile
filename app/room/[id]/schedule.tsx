@@ -19,12 +19,10 @@ export default function ScheduleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   
-  // Voter list modal
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
   
-  // 생성/수정 공통 상태
   const [title, setTitle] = useState('');
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [startTime, setStartTime] = useState(14);
@@ -157,21 +155,6 @@ export default function ScheduleScreen() {
               {schedule.deadline && !isClosed && <Text style={{color: theme.error, fontSize: 12, marginLeft: 10}}>마감: {formatDateFull(schedule.deadline)}</Text>}
             </View>
             <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
-
-            <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.rankingHeader, { color: theme.primary }]}>가장 많이 모이는 시간</Text>
-              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
-                <TouchableOpacity key={idx} style={styles.rankingItem} onPress={() => { setVotersToDisplay(r.voters); setVoterModalTitle(`${r.dateTime.slice(5)} 투표자`); setShowVoterModal(true); }}>
-                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx + 1}위</Text>
-                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.dateTime.slice(5)}시</Text>
-                  <View style={{flexDirection:'row', alignItems:'center'}}>
-                    <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 5 }]}>{r.votes}명</Text>
-                    <Ionicons name="people" size={14} color={theme.primary} />
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {ranked.filter(r => r.votes > 0).length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>아직 투표가 없습니다.</Text>}
-            </View>
             
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
               <View>
@@ -212,6 +195,22 @@ export default function ScheduleScreen() {
             <View style={styles.voterSummaryDetail}>
               <View style={styles.voterRow}><Text style={[styles.voterLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text><View style={styles.voterNamesRow}>{participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}</View></View>
               <View style={[styles.voterRow, { marginTop: 10 }]}><Text style={[styles.voterLabel, { color: theme.error }]}>미참여({nonParticipants.length})</Text><View style={styles.voterNamesRow}>{nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.error }]}>{getUserById(vId)?.name} </Text>)}</View></View>
+            </View>
+
+            {/* Ranking: Positioned below participant lists */}
+            <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.rankingHeader, { color: theme.primary }]}>가장 많이 모이는 시간</Text>
+              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
+                <TouchableOpacity key={idx} style={styles.rankingItem} onPress={() => { setVotersToDisplay(r.voters); setVoterModalTitle(`${r.dateTime.slice(5)} 투표자`); setShowVoterModal(true); }}>
+                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx + 1}위</Text>
+                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.dateTime.slice(5)}시</Text>
+                  <View style={{flexDirection:'row', alignItems:'center'}}>
+                    <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 5 }]}>{r.votes}명</Text>
+                    <Ionicons name="people" size={14} color={theme.primary} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {ranked.filter(r => r.votes > 0).length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>아직 투표가 없습니다.</Text>}
             </View>
 
             {isClosed && ranked[0].votes > 0 && (
@@ -312,13 +311,13 @@ const styles = StyleSheet.create({
   dateHeaderDay: { fontSize: 16, fontWeight: 'bold' },
   gridCell: { width: 50, height: 40, borderWidth: 0.5, alignItems: 'center', justifyContent: 'center' },
   gridCellEmpty: { width: 50, height: 40 },
-  rankingBox: { padding: 20, borderRadius: 20, borderWidth: 1, marginBottom: 20 },
+  rankingBox: { padding: 20, borderRadius: 20, borderWidth: 1, marginVertical: 20 },
   rankingHeader: { fontSize: 15, fontWeight: 'bold', marginBottom: 15 },
   rankingItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   rankingIdx: { width: 30, fontSize: 13, fontWeight: 'bold' },
   rankingText: { flex: 1, fontSize: 14 },
   rankingCount: { fontSize: 14, fontWeight: 'bold' },
-  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 20 },
+  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 10, marginTop: 10 },
   voterRow: { flexDirection: 'row' },
   voterLabel: { fontSize: 13, fontWeight: 'bold', width: 70 },
   voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
