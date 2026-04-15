@@ -15,6 +15,11 @@ export default function VoteScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   
+  // Voter list modal
+  const [showVoterModal, setShowVoterModal] = useState(false);
+  const [voterModalTitle, setVoterModalTitle] = useState('');
+  const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
+
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -50,15 +55,10 @@ export default function VoteScreen() {
     }
     try {
       await addVote(id || '', question, options, { 
-        isAnonymous, 
-        allowMultiple, 
-        useNotification, 
-        deadline: hasDeadline ? deadline.getTime() : undefined 
+        isAnonymous, allowMultiple, useNotification, deadline: hasDeadline ? deadline.getTime() : undefined 
       });
       setShowAddModal(false);
-      setQuestion('');
-      setOptions(['', '']);
-      setHasDeadline(false);
+      setQuestion(''); setOptions(['', '']); setHasDeadline(false);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
@@ -76,7 +76,7 @@ export default function VoteScreen() {
   };
 
   const handleCloseVoteManual = (voteId: string) => {
-    Alert.alert('투표 종료', '지금 즉시 투표를 마감할까요? 종료 후에는 수정할 수 없습니다.', [
+    Alert.alert('투표 종료', '지금 즉시 투표를 마감할까요?', [
       { text: '취소', style: 'cancel' },
       { text: '종료하기', style: 'destructive', onPress: async () => {
         await closeVote(voteId);
@@ -88,12 +88,8 @@ export default function VoteScreen() {
   const renderVoteListItem = ({ item: vote }: { item: any }) => {
     const participants = Object.keys(vote.responses).length;
     const isClosed = vote.deadline && new Date(vote.deadline) < new Date();
-
     return (
-      <TouchableOpacity 
-        style={[styles.voteListCard, { backgroundColor: theme.card, borderColor: isClosed ? theme.border : theme.primary, borderWidth: isClosed ? 1 : 1.5 }]}
-        onPress={() => setSelectedVoteId(vote.id)}
-      >
+      <TouchableOpacity style={[styles.voteListCard, { backgroundColor: theme.card, borderColor: isClosed ? theme.border : theme.primary, borderWidth: isClosed ? 1 : 1.5 }]} onPress={() => setSelectedVoteId(vote.id)}>
         <View style={styles.voteListInfo}>
           <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
             <Text style={[styles.voteListTitle, { color: theme.text }]} numberOfLines={1}>{vote.question}</Text>
@@ -111,6 +107,7 @@ export default function VoteScreen() {
     const vote = selectedVote;
     const isClosed = vote.deadline && new Date(vote.deadline) < new Date();
     const participants = Object.keys(vote.responses);
+    const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
     const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
 
     return (
@@ -131,24 +128,33 @@ export default function VoteScreen() {
               {isClosed ? <View style={[styles.statusBadge, {backgroundColor: theme.error + '22'}]}><Text style={{color: theme.error, fontWeight:'bold', fontSize: 12}}>마감됨</Text></View> : <View style={[styles.statusBadge, {backgroundColor: theme.primary + '22'}]}><Text style={{color: theme.primary, fontWeight:'bold', fontSize: 12}}>진행 중</Text></View>}
               {vote.deadline && !isClosed && <Text style={{color: theme.error, fontSize: 12, marginLeft: 10}}>마감: {formatDateFull(vote.deadline)}</Text>}
             </View>
-            
             <Text style={[styles.voteQuestion, { color: theme.text }]}>{vote.question}</Text>
             
             {vote.options.map((opt: any) => {
-              const votersForThisOpt = Object.entries(vote.responses).filter(([_, optIds]: any) => optIds.includes(opt.id));
+              const votersForThisOpt = Object.entries(vote.responses).filter(([_, optIds]: any) => optIds.includes(opt.id)).map(([uId]) => uId);
               const isSelected = (vote.responses[currentUser?.id || ''] || []).includes(opt.id);
-              const count = votersForThisOpt.length;
               return (
                 <TouchableOpacity key={opt.id} disabled={isClosed} style={[styles.optItem, { backgroundColor: theme.card, borderColor: isSelected ? theme.primary : theme.border }]} onPress={() => {
                   const currentRes = vote.responses[currentUser?.id || ''] || [];
-                  const nextRes = isSelected ? currentRes.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...currentRes, opt.id] : [opt.id]);
-                  respondToVote(vote.id, nextRes);
+                  respondToVote(vote.id, isSelected ? currentRes.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...currentRes, opt.id] : [opt.id]));
                 }}>
                   <View style={{flex: 1}}><Text style={{color: theme.text, fontWeight: isSelected ? 'bold' : 'normal'}}>{opt.text}</Text></View>
-                  <Text style={{color: theme.primary, fontWeight: 'bold'}}>{count}명</Text>
+                  <TouchableOpacity style={styles.voterCountBadge} onPress={() => {
+                    if (vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.');
+                    setVotersToDisplay(votersForThisOpt);
+                    setVoterModalTitle(`'${opt.text}' 투표자`);
+                    setShowVoterModal(true);
+                  }}>
+                    <Text style={{color: theme.primary, fontWeight: 'bold'}}>{votersForThisOpt.length}명</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
               );
             })}
+
+            <View style={styles.voterSummaryDetail}>
+              <View style={styles.voterRow}><Text style={[styles.voterLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text><View style={styles.voterNamesRow}>{participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}</View></View>
+              <View style={[styles.voterRow, { marginTop: 10 }]}><Text style={[styles.voterLabel, { color: theme.error }]}>미참여({nonParticipants.length})</Text><View style={styles.voterNamesRow}>{nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.error }]}>{getUserById(vId)?.name} </Text>)}</View></View>
+            </View>
 
             {isOwner && !isClosed && (
               <TouchableOpacity style={[styles.manualCloseBtn, {borderColor: theme.error}]} onPress={() => handleCloseVoteManual(vote.id)}>
@@ -166,33 +172,14 @@ export default function VoteScreen() {
     const days = Array.from({length: 14}).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
     const hours = Array.from({length: 24}).map((_, i) => i);
     const minutes = [0, 10, 20, 30, 40, 50, 59];
-
     return (
       <View style={[styles.compactPicker, {borderColor: theme.border}]}>
         <View style={styles.pickerHeader}>
           <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 2}]} onPress={() => setShow('date')}><Text style={{color: theme.text}}>{date.toLocaleDateString()}</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 2}]} onPress={() => setShow('time')}><Text style={{color: theme.text}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text></TouchableOpacity>
         </View>
-        {show === 'date' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 10}}>
-            {days.map((d, i) => (
-              <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}>
-                <Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
-                <Text style={{fontWeight: 'bold', color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-        {show === 'time' && (
-          <View style={{flexDirection:'row', height: 100}}>
-            <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
-              {hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.background : theme.text}}>{h}시</Text></TouchableOpacity>)}
-            </ScrollView>
-            <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
-              {minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.background : theme.text}}>{m}분</Text></TouchableOpacity>)}
-            </ScrollView>
-          </View>
-        )}
+        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 10}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontWeight: 'bold', color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 100}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.background : theme.text}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.background : theme.text}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
@@ -204,75 +191,48 @@ export default function VoteScreen() {
         <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}><Ionicons name="add" size={24} color={theme.background} /></TouchableOpacity>
       </View>
 
-      <FlatList
-        data={roomVotes}
-        keyExtractor={item => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        renderItem={renderVoteListItem}
-        ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 투표가 없습니다.</Text>}
-      />
+      <FlatList data={roomVotes} keyExtractor={item => item.id} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} renderItem={renderVoteListItem} ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 투표가 없습니다.</Text>} />
 
       {renderDetail()}
 
+      <Modal visible={showVoterModal} transparent animationType="fade">
+        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 16 }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={20} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><Ionicons name="person-circle" size={24} color={theme.primary} style={{ marginRight: 10 }} /><Text style={{ color: theme.text }}>{getUserById(vId)?.name || '알 수 없음'}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>투표자가 없습니다.</Text>}</View></View></View>
+      </Modal>
+
       {/* Add Modal */}
       <Modal visible={showAddModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>새 투표 만들기</Text><TouchableOpacity onPress={() => setShowAddModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>질문</Text>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="무엇을 투표할까요?" placeholderTextColor="#888" value={question} onChangeText={setQuestion} />
-              
-              <View style={styles.settingRow}>
-                <Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text>
-                <Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} />
-              </View>
-              {hasDeadline && (
-                <View style={{marginBottom: 20}}>
-                  <TouchableOpacity style={[styles.compactRow, {borderColor: theme.border}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
-                    <Ionicons name="calendar-outline" size={18} color={theme.primary} />
-                    <Text style={{color: theme.text, marginLeft: 10}}>{formatDateFull(deadline.getTime())}</Text>
-                  </TouchableOpacity>
-                  {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
-                </View>
-              )}
+        <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card }]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>새 투표 만들기</Text><TouchableOpacity onPress={() => setShowAddModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><ScrollView showsVerticalScrollIndicator={false}>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>질문</Text>
+          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="무엇을 투표할까요?" placeholderTextColor="#888" value={question} onChangeText={setQuestion} />
+          
+          {options.map((opt, idx) => (
+            <View key={idx} style={styles.optInputRow}>
+              <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.border }]} placeholder={`선택지 ${idx + 1}`} placeholderTextColor="#888" value={opt} onChangeText={(val) => { const newOpts = [...options]; newOpts[idx] = val; setOptions(newOpts); }} />
+              {options.length > 2 && <TouchableOpacity onPress={() => setOptions(options.filter((_, i) => i !== idx))} style={{marginLeft: 10}}><Ionicons name="remove-circle-outline" size={24} color={theme.error} /></TouchableOpacity>}
+            </View>
+          ))}
+          <TouchableOpacity onPress={() => setOptions([...options, ''])} style={[styles.addOptBtn, { borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>+ 선택지 추가</Text></TouchableOpacity>
+          
+          <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} /></View>
+          <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} /></View>
+          
+          <View style={[styles.settingRow, {borderTopWidth: 0.5, borderTopColor: '#eee2', paddingTop: 15}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} /></View>
+          {hasDeadline && <View style={{marginBottom: 20}}><TouchableOpacity style={[styles.compactRow, {borderColor: theme.border}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}><Ionicons name="calendar-outline" size={18} color={theme.primary} /><Text style={{color: theme.text, marginLeft: 10}}>{formatDateFull(deadline.getTime())}</Text></TouchableOpacity>{showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}</View>}
 
-              {options.map((opt, idx) => (
-                <View key={idx} style={styles.optInputRow}>
-                  <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.border }]} placeholder={`선택지 ${idx + 1}`} placeholderTextColor="#888" value={opt} onChangeText={(val) => { const newOpts = [...options]; newOpts[idx] = val; setOptions(newOpts); }} />
-                  {options.length > 2 && <TouchableOpacity onPress={() => setOptions(options.filter((_, i) => i !== idx))} style={{marginLeft: 10}}><Ionicons name="remove-circle-outline" size={24} color={theme.error} /></TouchableOpacity>}
-                </View>
-              ))}
-              <TouchableOpacity onPress={() => setOptions([...options, ''])} style={[styles.addOptBtn, { borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>+ 선택지 추가</Text></TouchableOpacity>
-              
-              <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} /></View>
-              <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} /></View>
-              
-              <TouchableOpacity onPress={handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]}><Text style={[styles.saveBtnText, { color: theme.background }]}>등록하기</Text></TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
+          <TouchableOpacity onPress={handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]}><Text style={[styles.saveBtnText, { color: theme.background }]}>등록하기</Text></TouchableOpacity>
+        </ScrollView></View></View>
       </Modal>
 
       {/* Edit Modal */}
       <Modal visible={showEditModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>투표 수정</Text><TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="질문 수정" placeholderTextColor="#888" value={editQuestion} onChangeText={setEditQuestion} />
-            <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={editHasDeadline} onValueChange={setEditHasDeadline} trackColor={{ true: theme.primary }} /></View>
-            {editHasDeadline && (
-              <View style={{marginBottom: 20}}>
-                <TouchableOpacity style={[styles.compactRow, {borderColor: theme.border}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
-                  <Ionicons name="calendar-outline" size={18} color={theme.primary} />
-                  <Text style={{color: theme.text, marginLeft: 10}}>{formatDateFull(editDeadline.getTime())}</Text>
-                </TouchableOpacity>
-                {showPicker && <CompactPicker date={editDeadline} onDateChange={setEditDeadline} show={showPicker} setShow={setShowPicker} />}
-              </View>
-            )}
-            <TouchableOpacity onPress={handleUpdateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>수정 완료</Text>}</TouchableOpacity>
-          </View>
-        </View>
+        <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card }]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>투표 수정</Text><TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><ScrollView showsVerticalScrollIndicator={false}>
+          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="질문 수정" placeholderTextColor="#888" value={editQuestion} onChangeText={setEditQuestion} />
+          
+          <View style={[styles.settingRow, {borderTopWidth: 0.5, borderTopColor: '#eee2', paddingTop: 15}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={editHasDeadline} onValueChange={setEditHasDeadline} trackColor={{ true: theme.primary }} /></View>
+          {editHasDeadline && <View style={{marginBottom: 20}}><TouchableOpacity style={[styles.compactRow, {borderColor: theme.border}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}><Ionicons name="calendar-outline" size={18} color={theme.primary} /><Text style={{color: theme.text, marginLeft: 10}}>{formatDateFull(editDeadline.getTime())}</Text></TouchableOpacity>{showPicker && <CompactPicker date={editDeadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}</View>}
+          
+          <TouchableOpacity onPress={handleUpdateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>수정 완료</Text>}</TouchableOpacity>
+        </ScrollView></View></View>
       </Modal>
     </View>
   );
@@ -298,9 +258,19 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
   voteQuestion: { fontSize: 22, fontWeight: 'bold', marginBottom: 25 },
   optItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 12, borderWidth: 1 },
+  voterCountBadge: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.05)' },
+  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 30, marginTop: 20 },
+  voterRow: { flexDirection: 'row' },
+  voterLabel: { fontSize: 13, fontWeight: 'bold', width: 70 },
+  voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
+  voterName: { fontSize: 13 },
   manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 15, borderWidth: 1, marginTop: 30, borderStyle: 'dashed' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '90%' },
+  voterModalContent: { padding: 20, borderRadius: 25, width: '80%' },
+  voterList: { marginTop: 10 },
+  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 22, fontWeight: 'bold' },
   label: { fontSize: 13, fontWeight: '700', marginTop: 15, marginBottom: 8 },
