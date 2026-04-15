@@ -4,7 +4,7 @@ import {
   Alert, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/theme';
+import { Colors, Shadows } from '../constants/theme';
 import { StyledBackButton, DanceButton } from '../components/ui/Interactions';
 import { authService } from '../services/authService';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,9 +15,9 @@ function PwRule({ ok, label }: { ok: boolean; label: string }) {
       <Ionicons
         name={ok ? 'checkmark-circle' : 'ellipse-outline'}
         size={14}
-        color={ok ? '#34C759' : Colors.textSecondary}
+        color={ok ? Colors.success : Colors.textSecondary}
       />
-      <Text style={{ marginLeft: 6, fontSize: 12, color: ok ? '#34C759' : Colors.textSecondary }}>
+      <Text style={{ marginLeft: 6, fontSize: 12, color: ok ? Colors.success : Colors.textSecondary }}>
         {label}
       </Text>
     </View>
@@ -302,38 +302,42 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, color: Colors.text, marginBottom: 8, fontWeight: '600' },
   input: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 24,
     padding: 16,
+    paddingHorizontal: 20,
     color: Colors.text,
     fontSize: 16,
     marginBottom: 20,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadows.soft,
   },
-  inputError: { borderColor: '#FF4B4B' },
+  inputError: { borderColor: Colors.error },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 0, gap: 10 },
   codeBtn: {
     paddingVertical: 16,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 80,
+    minWidth: 100,
+    ...Shadows.soft,
   },
-  codeBtnVerified: { backgroundColor: '#34C759' },
+  codeBtnVerified: { backgroundColor: Colors.success },
   codeBtnDisabled: { opacity: 0.5 },
-  codeBtnText: { color: '#000', fontWeight: 'bold', fontSize: 13 },
+  codeBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
   codeInputSection: {
     marginTop: 12,
-    backgroundColor: 'rgba(33,243,163,0.05)',
-    borderRadius: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(33,243,163,0.2)',
-    padding: 14,
+    borderColor: Colors.border,
+    padding: 16,
+    ...Shadows.soft,
   },
   codeLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   codeHint: { color: Colors.textSecondary, fontSize: 12 },
   timerText: { color: Colors.primary, fontSize: 13, fontWeight: 'bold' },
-  registerBtn: { width: '100%', height: 60 },
+  registerBtn: { width: '100%', height: 60, borderRadius: 30 },
 });

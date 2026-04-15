@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppContext } from '../../context/AppContext';
-import { Colors } from '../../constants/theme';
+import { Colors, Shadows } from '../../constants/theme';
 import { DanceButton, StyledBackButton } from '../../components/ui/Interactions';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -96,23 +96,24 @@ export default function JoinRoomScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 60, marginBottom: 30 },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: '900', marginLeft: 15, letterSpacing: 1 },
+  headerTitle: { color: Colors.text, fontSize: 24, fontWeight: '900', marginLeft: 15, letterSpacing: 1 },
   content: { paddingHorizontal: 30 },
-  description: { color: Colors.textSecondary, fontSize: 14, lineHeight: 22, marginBottom: 30 },
+  description: { color: Colors.textSecondary, fontSize: 16, lineHeight: 24, marginBottom: 35 },
   inputGroup: { marginBottom: 25 },
-  label: { fontSize: 14, color: '#fff', marginBottom: 10, fontWeight: 'bold' },
+  label: { fontSize: 14, color: Colors.text, marginBottom: 10, fontWeight: '700' },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161622',
+    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    paddingHorizontal: 15,
+    borderColor: Colors.border,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    ...Shadows.soft,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, height: 55, color: '#fff', fontSize: 16 },
-  button: { width: '100%', marginTop: 20 },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, height: 60, color: Colors.text, fontSize: 16, fontWeight: '500' },
+  button: { width: '100%', marginTop: 20, borderRadius: 30, height: 60 },
 });

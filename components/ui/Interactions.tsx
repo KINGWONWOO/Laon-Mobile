@@ -66,7 +66,7 @@ export const DanceButton = ({
   };
 
   const getTextColor = () => {
-    if (variant === 'accent') return Colors.background;
+    if (variant === 'primary' || variant === 'accent') return '#FFFFFF';
     if (variant === 'ghost') return Colors.textSecondary;
     return Colors.text;
   };
@@ -80,7 +80,7 @@ export const DanceButton = ({
         style={[
           styles.button,
           { backgroundColor: getBackgroundColor() },
-          variant !== 'ghost' && (variant === 'secondary' ? Shadows.secondary : Shadows.primary),
+          variant !== 'ghost' && Shadows.soft,
           variant === 'ghost' && styles.ghostBorder,
           loading && styles.disabled,
           style
@@ -118,9 +118,9 @@ export const StyledBackButton = () => {
 
 const styles = StyleSheet.create({
   button: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -134,18 +134,19 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   icon: {
     marginRight: 8,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     paddingHorizontal: 0,
     paddingVertical: 0,
     backgroundColor: Colors.card,
-    borderWidth: 0,
+    borderWidth: 1,
+    borderColor: Colors.border,
   }
 });

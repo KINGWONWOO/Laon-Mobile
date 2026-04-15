@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/theme';
+import { Colors, Shadows } from '../constants/theme';
 import { StyledBackButton } from '../components/ui/Interactions';
 import { supabase } from '../lib/supabase';
 
@@ -104,17 +104,12 @@ export default function ResetPasswordScreen() {
           autoCapitalize="none"
         />
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: Colors.primary }]}
+        <DanceButton
+          title="비밀번호 변경"
           onPress={handleReset}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.buttonText}>비밀번호 변경</Text>
-          )}
-        </TouchableOpacity>
+          loading={loading}
+          style={styles.button}
+        />
       </View>
     </View>
   );
@@ -125,19 +120,20 @@ const styles = StyleSheet.create({
   center: { justifyContent: 'center', alignItems: 'center' },
   navHeader: { paddingTop: 60, paddingHorizontal: 20 },
   content: { padding: 30, paddingTop: 20 },
-  title: { fontSize: 28, fontWeight: '900', color: Colors.text, marginBottom: 10 },
-  subtitle: { fontSize: 15, color: Colors.textSecondary, marginBottom: 35, lineHeight: 22 },
+  title: { fontSize: 32, fontWeight: '900', color: Colors.text, marginBottom: 10 },
+  subtitle: { fontSize: 16, color: Colors.textSecondary, marginBottom: 35, lineHeight: 24 },
   label: { fontSize: 14, color: Colors.text, marginBottom: 8, fontWeight: '600' },
   input: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
+    borderRadius: 24,
     padding: 16,
+    paddingHorizontal: 20,
     color: Colors.text,
     fontSize: 16,
     marginBottom: 20,
     borderWidth: 1,
     borderColor: Colors.border,
+    ...Shadows.soft,
   },
-  button: { borderRadius: 12, padding: 18, alignItems: 'center', height: 60, justifyContent: 'center' },
-  buttonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  button: { borderRadius: 30, height: 60 },
 });

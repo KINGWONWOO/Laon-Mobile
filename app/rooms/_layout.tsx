@@ -33,16 +33,27 @@ export default function RoomsLayout() {
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       style={{ marginRight: 16 }}
     >
-      <Ionicons name="log-out-outline" size={24} color={Colors.textSecondary} />
+      <Ionicons name="log-out-outline" size={24} color={Colors.primary} />
     </TouchableOpacity>
   );
 
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: Colors.background },
-        headerTintColor: Colors.text,
+        headerStyle: { 
+          backgroundColor: Colors.background,
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: 0,
+        },
+        headerTitleStyle: {
+          fontWeight: '900',
+          fontSize: 18,
+          color: Colors.text,
+        },
+        headerTintColor: Colors.primary,
         headerRight: () => <LogoutButton />,
+        headerShadowVisible: false,
       }}
     >
       <Stack.Screen name="index" options={{ title: '내 방 목록' }} />

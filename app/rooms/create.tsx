@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
-import { Colors } from '../../constants/theme';
+import { Colors, Shadows } from '../../constants/theme';
 import { DanceButton, StyledBackButton } from '../../components/ui/Interactions';
 
 const { width } = Dimensions.get('window');
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: Colors.text,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '900',
     marginLeft: 15,
     letterSpacing: 1,
@@ -131,16 +131,17 @@ const styles = StyleSheet.create({
   },
   imagePicker: {
     alignSelf: 'center',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 35,
     overflow: 'hidden',
+    ...Shadows.soft,
   },
   selectedImage: {
     width: '100%',
@@ -153,37 +154,45 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 5,
+    fontWeight: '600',
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.text,
     marginBottom: 10,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   input: {
     backgroundColor: Colors.card,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 15,
+    borderRadius: 24,
+    padding: 16,
+    paddingHorizontal: 20,
     fontSize: 16,
     color: Colors.text,
     marginBottom: 25,
+    ...Shadows.soft,
   },
   infoBox: {
-    backgroundColor: 'rgba(33, 243, 163, 0.05)',
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: Colors.card,
+    padding: 18,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(33, 243, 163, 0.2)',
+    borderColor: Colors.border,
     marginBottom: 40,
+    ...Shadows.soft,
   },
   infoText: {
-    color: Colors.accent,
+    color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   button: {
     width: '100%',
+    borderRadius: 30,
+    height: 60,
   },
 });
