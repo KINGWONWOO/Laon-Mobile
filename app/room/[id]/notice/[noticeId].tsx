@@ -4,15 +4,27 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDateFull } from '../../../../components/ui/RoomComponents';
+import { Modal } from 'react-native';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
-  const { notices, addNoticeComment, deleteNoticeComment, getUserById, currentUser, theme, deleteNotice } = useAppContext();
+  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Edit states
+  const [showEditNotice, setShowEditNotice] = useState(false);
+  const [editNoticeTitle, setEditNoticeTitle] = useState('');
+  const [editNoticeContent, setEditNoticeContent] = useState('');
+  const [isUpdatingNotice, setIsUpdatingNotice] = useState(false);
+
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [isUpdatingComment, setIsUpdatingComment] = useState(false);
 
   const notice = useMemo(() => notices.find(n => n.id === noticeId), [notices, noticeId]);
   const author = useMemo(() => notice ? getUserById(notice.userId) : null, [notice]);
@@ -51,6 +63,66 @@ export default function NoticeDetailScreen() {
     ]);
   };
 
+  const handleNoticeOptions = () => {
+    Alert.alert('공지 설정', '어떤 작업을 하시겠습니까?', [
+      { text: notice.isPinned ? '고정 해제' : '상단 고정', onPress: async () => {
+        try {
+          await updateNotice(notice.id, { isPinned: !notice.isPinned });
+        } catch (e: any) { Alert.alert('오류', e.message); }
+      }},
+      { text: '제목/내용 수정', onPress: () => {
+        setEditNoticeTitle(notice.title);
+        setEditNoticeContent(notice.content);
+        setShowEditNotice(true);
+      }},
+      { text: '삭제', style: 'destructive', onPress: handleDeleteNotice },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
+  const handleUpdateNotice = async () => {
+    if (!editNoticeTitle.trim() || !editNoticeContent.trim()) return;
+    setIsUpdatingNotice(true);
+    try {
+      await updateNotice(notice.id, { title: editNoticeTitle.trim(), content: editNoticeContent.trim() });
+      setShowEditNotice(false);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setIsUpdatingNotice(false);
+    }
+  };
+
+  const handleUpdateComment = async () => {
+    if (!editCommentText.trim() || !editingCommentId) return;
+    setIsUpdatingComment(true);
+    try {
+      await updateNoticeComment(editingCommentId, editCommentText.trim());
+      setEditingCommentId(null);
+      setEditCommentText('');
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setIsUpdatingComment(false);
+    }
+  };
+
+  const handleCommentOptions = (comment: any) => {
+    Alert.alert('댓글 설정', '어떤 작업을 하시겠습니까?', [
+      { text: '수정', onPress: () => {
+        setEditingCommentId(comment.id);
+        setEditCommentText(comment.text);
+      }},
+      { text: '삭제', style: 'destructive', onPress: () => {
+        Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
+          { text: '취소' },
+          { text: '삭제', style: 'destructive', onPress: () => deleteNoticeComment(comment.id) }
+        ]);
+      }},
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
@@ -63,8 +135,8 @@ export default function NoticeDetailScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>공지 상세</Text>
         {(notice.userId === currentUser?.id) ? (
-          <TouchableOpacity onPress={handleDeleteNotice} style={styles.deleteBtn}>
-            <Ionicons name="trash-outline" size={24} color={theme.error} />
+          <TouchableOpacity onPress={handleNoticeOptions} style={styles.deleteBtn}>
+            <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
           </TouchableOpacity>
         ) : <View style={{ width: 40 }} />}
       </View>
@@ -84,11 +156,14 @@ export default function NoticeDetailScreen() {
               )}
               <View>
                 <Text style={[styles.authorName, { color: theme.text }]}>{author?.name || '알 수 없음'}</Text>
-                <Text style={[styles.dateText, { color: theme.textSecondary }]}>{new Date(notice.createdAt).toLocaleString()}</Text>
+                <Text style={[styles.dateText, { color: theme.textSecondary }]}>{formatDateFull(notice.createdAt)}</Text>
               </View>
             </View>
 
-            <Text style={[styles.title, { color: theme.text }]}>{notice.title}</Text>
+            <View style={styles.titleRow}>
+              {notice.isPinned && <Ionicons name="pin" size={16} color={theme.primary} style={{ marginRight: 6 }} />}
+              <Text style={[styles.title, { color: theme.text, flex: 1 }]}>{notice.title}</Text>
+            </View>
             <Text style={[styles.content, { color: theme.text }]}>{notice.content}</Text>
 
             {notice.imageUrls && notice.imageUrls.length > 0 && (
@@ -105,23 +180,61 @@ export default function NoticeDetailScreen() {
         }
         renderItem={({ item: comment }) => {
           const cAuthor = getUserById(comment.userId);
+          const isEditing = editingCommentId === comment.id;
+
           return (
             <View style={[styles.commentItem, { borderBottomColor: theme.border + '44' }]}>
               <View style={styles.commentHeader}>
                 <Text style={[styles.commentAuthor, { color: theme.text }]}>{cAuthor?.name || '...'}</Text>
-                <Text style={[styles.commentDate, { color: theme.textSecondary }]}>{new Date(comment.createdAt).toLocaleDateString()}</Text>
-                {comment.userId === currentUser?.id && (
-                  <TouchableOpacity onPress={() => deleteNoticeComment(comment.id)}>
-                    <Ionicons name="close-outline" size={16} color={theme.error} />
+                <Text style={[styles.commentDate, { color: theme.textSecondary }]}>{formatDateFull(comment.createdAt)}</Text>
+                {comment.userId === currentUser?.id && !isEditing && (
+                  <TouchableOpacity onPress={() => handleCommentOptions(comment)}>
+                    <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
                   </TouchableOpacity>
                 )}
               </View>
-              <Text style={[styles.commentText, { color: theme.text }]}>{comment.text}</Text>
+              {isEditing ? (
+                <View style={styles.commentEditBox}>
+                  <TextInput
+                    style={[styles.commentEditInput, { color: theme.text, borderColor: theme.primary, backgroundColor: theme.background }]}
+                    value={editCommentText}
+                    onChangeText={setEditCommentText}
+                    multiline
+                    autoFocus
+                  />
+                  <View style={styles.commentEditBtns}>
+                    <TouchableOpacity onPress={() => setEditingCommentId(null)}><Text style={{ color: theme.textSecondary, marginRight: 15 }}>취소</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={handleUpdateComment} disabled={isUpdatingComment}>
+                      {isUpdatingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>저장</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <Text style={[styles.commentText, { color: theme.text }]}>{comment.text}</Text>
+              )}
             </View>
           );
         }}
         contentContainerStyle={{ paddingBottom: 100 }}
       />
+
+      <Modal visible={showEditNotice} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>공지 수정</Text>
+              <TouchableOpacity onPress={() => setShowEditNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
+              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
+              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateNotice} disabled={isUpdatingNotice}>
+                {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>수정 완료</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card, borderTopColor: theme.border }]}>
         <TextInput
@@ -155,7 +268,8 @@ const styles = StyleSheet.create({
   authorAvatar: { width: 40, height: 40, borderRadius: 15, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
   authorName: { fontSize: 15, fontWeight: 'bold' },
   dateText: { fontSize: 12, marginTop: 2 },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  title: { fontSize: 22, fontWeight: 'bold' },
   content: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
   imageScroll: { marginBottom: 20 },
   noticeImage: { width: 200, height: 200, borderRadius: 15, marginRight: 10 },
@@ -166,7 +280,16 @@ const styles = StyleSheet.create({
   commentAuthor: { fontSize: 14, fontWeight: 'bold', marginRight: 10 },
   commentDate: { fontSize: 11, flex: 1 },
   commentText: { fontSize: 14, lineHeight: 20 },
+  commentEditBox: { marginTop: 5 },
+  commentEditInput: { borderWidth: 1, borderRadius: 10, padding: 8, fontSize: 14, minHeight: 60, textAlignVertical: 'top' },
+  commentEditBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, alignItems: 'center' },
   inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 1 },
   input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, maxHeight: 100, marginRight: 10 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }
+  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold' },
+  submitBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  submitBtnText: { fontWeight: 'bold' },
 });

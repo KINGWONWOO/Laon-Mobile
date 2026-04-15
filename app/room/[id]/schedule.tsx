@@ -4,15 +4,17 @@ import { useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDateFull } from '../../../components/ui/RoomComponents';
 
 const { width } = Dimensions.get('window');
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { schedules, addSchedule, respondToSchedule, deleteSchedule, theme, currentUser, refreshAllData, rooms, getUserById } = useAppContext();
+  const { schedules, addSchedule, respondToSchedule, updateSchedule, deleteSchedule, theme, currentUser, refreshAllData, rooms, getUserById } = useAppContext();
   const insets = useSafeAreaInsets();
   
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showVoterModal, setShowVoterModal] = useState(false);
@@ -26,6 +28,11 @@ export default function ScheduleScreen() {
   const [endTime, setEndTime] = useState(18);   // 6 PM
   const [useNotification, setUseNotification] = useState(true);
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
+
+  // Edit states
+  const [editTitle, setEditTitle] = useState('');
+  const [editDeadline, setEditDeadline] = useState<Date | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const roomSchedules = useMemo(() => schedules.filter(s => s.roomId === id), [schedules, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
@@ -78,6 +85,31 @@ export default function ScheduleScreen() {
     ]);
   };
 
+  const handleScheduleOptions = (sch: any) => {
+    Alert.alert('일정 설정', '어떤 작업을 하시겠습니까?', [
+      { text: '제목/기한 수정', onPress: () => {
+        setEditTitle(sch.title);
+        setEditDeadline(sch.deadline ? new Date(sch.deadline) : null);
+        setShowEditModal(true);
+      }},
+      { text: '삭제', style: 'destructive', onPress: () => handleDeleteSchedule(sch.id) },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
+  const handleUpdateSchedule = async () => {
+    if (!editTitle.trim() || !selectedScheduleId) return;
+    setIsUpdating(true);
+    try {
+      await updateSchedule(selectedScheduleId, { 
+        title: editTitle.trim(), 
+        deadline: editDeadline ? editDeadline.getTime() : undefined 
+      });
+      setShowEditModal(false);
+    } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsUpdating(false); }
+  };
+
   const renderScheduleListItem = ({ item: schedule }: { item: any }) => {
     const participants = Object.keys(schedule.responses).length;
     return (
@@ -87,7 +119,7 @@ export default function ScheduleScreen() {
       >
         <View style={styles.listInfo}>
           <Text style={[styles.listTitle, { color: theme.text }]} numberOfLines={1}>{schedule.title}</Text>
-          <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {new Date(schedule.createdAt).toLocaleDateString()}</Text>
+          <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {formatDateFull(schedule.createdAt)}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
       </TouchableOpacity>
@@ -167,14 +199,19 @@ export default function ScheduleScreen() {
             </TouchableOpacity>
             <Text style={[styles.detailHeaderTitle, { color: theme.text }]} numberOfLines={1}>일정 투표 상세</Text>
             {isOwner ? (
-              <TouchableOpacity onPress={() => handleDeleteSchedule(schedule.id)} style={styles.detailDeleteBtn}>
-                <Ionicons name="trash-outline" size={24} color={theme.error} />
+              <TouchableOpacity onPress={() => handleScheduleOptions(schedule)} style={styles.detailDeleteBtn}>
+                <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
               </TouchableOpacity>
             ) : <View style={{ width: 40 }} />}
           </View>
 
           <ScrollView contentContainerStyle={styles.detailScroll}>
             <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
+            {schedule.deadline && (
+              <Text style={{ color: theme.error, fontSize: 12, fontWeight: 'bold', marginBottom: 15 }}>
+                마감 기한: {formatDateFull(schedule.deadline)}
+              </Text>
+            )}
             
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
               <View>
@@ -403,6 +440,40 @@ export default function ScheduleScreen() {
               <TouchableOpacity onPress={handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]}><Text style={[styles.saveBtnText, { color: theme.background }]}>등록하기</Text></TouchableOpacity>
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showEditModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>일정 수정하기</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
+            </View>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="투표 제목" placeholderTextColor="#888" value={editTitle} onChangeText={setEditTitle} />
+            
+            <Text style={[styles.label, { color: theme.textSecondary, marginTop: 10 }]}>마감 기한 수정</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
+              {Array.from({length: 31}).map((_, day) => {
+                const d = new Date(); d.setDate(d.getDate() + day);
+                const isSelected = editDeadline?.toDateString() === d.toDateString();
+                return (
+                  <TouchableOpacity 
+                    key={day} 
+                    style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
+                    onPress={() => setEditDeadline(isSelected ? null : d)}
+                  >
+                    <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                    <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity onPress={handleUpdateSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>
+              {isUpdating ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>수정 완료</Text>}
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </Modal>
     </View>

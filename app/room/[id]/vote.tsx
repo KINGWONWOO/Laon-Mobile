@@ -4,14 +4,17 @@ import { useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDateFull } from '../../../components/ui/RoomComponents';
 
 export default function VoteScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, deleteVote, currentUser, theme, refreshAllData, rooms, getUserById } = useAppContext();
+  const { votes, addVote, respondToVote, updateVote, deleteVote, currentUser, theme, refreshAllData, rooms, getUserById } = useAppContext();
   const insets = useSafeAreaInsets();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
+  
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -19,6 +22,11 @@ export default function VoteScreen() {
   const [useNotification, setUseNotification] = useState(true);
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Edit states
+  const [editQuestion, setEditQuestion] = useState('');
+  const [editDeadline, setEditDeadline] = useState<Date | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const roomVotes = useMemo(() => votes.filter(v => v.roomId === id), [votes, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
@@ -60,9 +68,33 @@ export default function VoteScreen() {
     ]);
   };
 
+  const handleVoteOptions = (vote: any) => {
+    Alert.alert('투표 설정', '어떤 작업을 하시겠습니까?', [
+      { text: '질문/기한 수정', onPress: () => {
+        setEditQuestion(vote.question);
+        setEditDeadline(vote.deadline ? new Date(vote.deadline) : null);
+        setShowEditModal(true);
+      }},
+      { text: '삭제', style: 'destructive', onPress: () => handleDeleteVote(vote.id) },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
+  const handleUpdateVote = async () => {
+    if (!editQuestion.trim() || !selectedVoteId) return;
+    setIsUpdating(true);
+    try {
+      await updateVote(selectedVoteId, { 
+        question: editQuestion.trim(), 
+        deadline: editDeadline ? editDeadline.getTime() : undefined 
+      });
+      setShowEditModal(false);
+    } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsUpdating(false); }
+  };
+
   const renderVoteListItem = ({ item: vote }: { item: any }) => {
     const participants = Object.keys(vote.responses).length;
-    const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leader_id === currentUser?.id;
 
     return (
       <TouchableOpacity 
@@ -71,7 +103,7 @@ export default function VoteScreen() {
       >
         <View style={styles.voteListInfo}>
           <Text style={[styles.voteListTitle, { color: theme.text }]} numberOfLines={1}>{vote.question}</Text>
-          <Text style={[styles.voteListMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {new Date(vote.createdAt).toLocaleDateString()}</Text>
+          <Text style={[styles.voteListMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {formatDateFull(vote.createdAt)}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
       </TouchableOpacity>
@@ -95,14 +127,19 @@ export default function VoteScreen() {
             </TouchableOpacity>
             <Text style={[styles.detailHeaderTitle, { color: theme.text }]} numberOfLines={1}>투표 상세</Text>
             {isOwner ? (
-              <TouchableOpacity onPress={() => handleDeleteVote(vote.id)} style={styles.detailDeleteBtn}>
-                <Ionicons name="trash-outline" size={24} color={theme.error} />
+              <TouchableOpacity onPress={() => handleVoteOptions(vote)} style={styles.detailDeleteBtn}>
+                <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
               </TouchableOpacity>
             ) : <View style={{ width: 40 }} />}
           </View>
 
           <ScrollView contentContainerStyle={styles.detailScroll}>
             <Text style={[styles.voteQuestion, { color: theme.text }]}>{vote.question}</Text>
+            {vote.deadline && (
+              <Text style={[styles.deadlineText, { color: theme.error }]}>
+                마감 기한: {formatDateFull(vote.deadline)}
+              </Text>
+            )}
             <View style={styles.badgeRow}>
               {vote.isAnonymous && <View style={[styles.badge, { backgroundColor: theme.primary + '33' }]}><Text style={[styles.badgeText, { color: theme.primary }]}>익명</Text></View>}
               {vote.allowMultiple && <View style={[styles.badge, { backgroundColor: theme.accent + '33' }]}><Text style={[styles.badgeText, { color: theme.accent }]}>복수선택</Text></View>}
@@ -282,6 +319,40 @@ export default function VoteScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      <Modal visible={showEditModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>투표 수정하기</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
+            </View>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="투표 질문" placeholderTextColor="#888" value={editQuestion} onChangeText={setEditQuestion} />
+            
+            <Text style={[styles.label, { color: theme.textSecondary, marginTop: 10 }]}>마감 기한 수정</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
+              {Array.from({length: 31}).map((_, day) => {
+                const d = new Date(); d.setDate(d.getDate() + day);
+                const isSelected = editDeadline?.toDateString() === d.toDateString();
+                return (
+                  <TouchableOpacity 
+                    key={day} 
+                    style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
+                    onPress={() => setEditDeadline(isSelected ? null : d)}
+                  >
+                    <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                    <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity onPress={handleUpdateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>
+              {isUpdating ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>수정 완료</Text>}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -304,7 +375,8 @@ const styles = StyleSheet.create({
   detailDeleteBtn: { padding: 5 },
   detailScroll: { padding: 20 },
 
-  voteQuestion: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
+  voteQuestion: { fontSize: 20, fontWeight: '700', marginBottom: 6 },
+  deadlineText: { fontSize: 12, fontWeight: '600', marginBottom: 12 },
   badgeRow: { flexDirection: 'row', marginBottom: 20 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginRight: 8 },
   badgeText: { fontSize: 11, fontWeight: '600' },

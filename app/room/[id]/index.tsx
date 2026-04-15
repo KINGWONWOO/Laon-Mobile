@@ -9,6 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storageService } from '../../../services/storageService';
+import { NoticeItem, formatDateFull } from '../../../components/ui/RoomComponents';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -17,7 +18,7 @@ export default function RoomMainScreen() {
   const insets = useSafeAreaInsets();
   
   const room = rooms.find(r => r.id === id);
-  const roomNotices = useMemo(() => notices.filter(n => n.roomId === id).sort((a, b) => b.createdAt - a.createdAt), [notices, id]);
+  const roomNotices = useMemo(() => notices.filter(n => n.roomId === id).slice(0, 3), [notices, id]);
 
   const [showAddNotice, setShowAddAddNotice] = useState(false);
   const [noticeTitle, setNoticeTitle] = useState('');
@@ -182,18 +183,18 @@ export default function RoomMainScreen() {
             <Text style={[styles.sectionTitle, { color: theme.text }]}>팀 공지</Text>
             <View style={{ flexDirection: 'row', gap: 15 }}>
               <TouchableOpacity onPress={() => setShowAddAddNotice(true)}><Ionicons name="add-circle-outline" size={22} color={theme.primary} /></TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices`)}><Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>전체보기</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices` as any)}><Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>전체보기</Text></TouchableOpacity>
             </View>
           </View>
           {roomNotices.length > 0 ? (
-            <TouchableOpacity 
-              style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => router.push(`/room/${id}/notice/${roomNotices[0].id}`)}
-            >
-              <View style={[styles.noticeTag, { backgroundColor: theme.error }]}><Text style={[styles.noticeTagText, { color: theme.background }]}>LATEST</Text></View>
-              <Text style={[styles.noticeTitle, { color: theme.text }]} numberOfLines={1}>{roomNotices[0].title}</Text>
-              <Text style={[styles.noticeContent, { color: theme.textSecondary }]} numberOfLines={2}>{roomNotices[0].content}</Text>
-            </TouchableOpacity>
+            roomNotices.map(notice => (
+              <NoticeItem 
+                key={notice.id} 
+                notice={notice} 
+                theme={theme} 
+                onPress={() => router.push(`/room/${id}/notice/${notice.id}` as any)} 
+              />
+            ))
           ) : (
             <View style={[styles.emptyNotice, { backgroundColor: theme.card, borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>등록된 공지가 없습니다.</Text></View>
           )}

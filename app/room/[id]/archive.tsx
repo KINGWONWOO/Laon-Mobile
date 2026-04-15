@@ -1,43 +1,37 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, Dimensions, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
-import { Colors } from '../../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { formatDateFull } from '../../../components/ui/RoomComponents';
 
 const { width } = Dimensions.get('window');
-const GRID_SIZE = width / 3;
-
-// 상세 보기에서만 사용되는 비디오 컴포넌트
-const DetailVideoPlayer = ({ url }: { url: string }) => {
-  const player = useVideoPlayer(url, p => {
-    p.loop = true;
-    p.play();
-  });
-  return <VideoView style={styles.detailMedia} player={player} allowsFullscreen={false} contentFit="contain" nativeControls={true} />;
-};
+const COLUMN_COUNT = 3;
+const ITEM_SIZE = width / COLUMN_COUNT;
 
 export default function ArchiveScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { photos, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, theme, currentUser, refreshAllData, getUserById, markItemAsAccessed, rooms } = useAppContext();
   const insets = useSafeAreaInsets();
-  const { photos, addPhoto, deletePhoto, addPhotoComment, getUserById, currentUser, getRoomByIdRemote, markItemAsAccessed, refreshAllData, theme } = useAppContext();
-  
-  const [selectedItem, setSelectedItem] = useState<any | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [newFileUri, setNewFileUri] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<'image' | 'video'>('image');
+
+  const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [description, setDescription] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
-  const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
-  const [commentText, setCommentText] = useState('');
+  const [newComment, setNewComment] = useState('');
+
+  // Edit states
+  const [isEditingPhoto, setIsEditingPhoto] = useState(false);
+  const [editDesc, setEditDesc] = useState('');
+  const [editingComment, setEditingComment] = useState<any>(null);
+  const [editCommentText, setEditCommentText] = useState('');
 
   const roomPhotos = useMemo(() => photos.filter(p => p.roomId === id), [photos, id]);
+  const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -45,260 +39,222 @@ export default function ArchiveScreen() {
     setRefreshing(false);
   };
 
-  const [isLeader, setIsLeader] = useState(false);
-  React.useEffect(() => {
-    if (id) getRoomByIdRemote(id as string).then(room => { if (room && room.leader_id === currentUser?.id) setIsLeader(true); });
-  }, [id, currentUser]);
-
-  const handlePickMedia = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ 
-      mediaTypes: ['images', 'videos'], 
-      quality: 0.5 
-    });
-
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const asset = result.assets[0];
-      if (asset.type === 'video' && asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        Alert.alert('용량 초과', '영상은 5MB 이하만 업로드 가능합니다.');
-        return;
-      }
-      setNewFileUri(asset.uri);
-      setFileType(asset.type === 'video' ? 'video' : 'image');
-      setShowUploadModal(true);
+      setIsLoading(true);
+      try {
+        await addPhoto(id || '', result.assets[0].uri, description);
+        setShowAddModal(false);
+        setDescription('');
+      } catch (error: any) {
+        Alert.alert('업로드 실패', error.message);
+      } finally { setIsLoading(false); }
     }
   };
 
-  const handleUpload = async () => {
-    if (!newFileUri) return;
-    setIsUploading(true);
-    try {
-      await addPhoto(id || '', newFileUri, description);
-      setShowUploadModal(false);
-      setNewFileUri(null);
-      setDescription('');
-    } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsUploading(false); }
+  const handleAddComment = async () => {
+    if (!selectedPhoto || !newComment.trim()) return;
+    await addPhotoComment(selectedPhoto.id, newComment.trim());
+    setNewComment('');
+    const refreshed = photos.find(p => p.id === selectedPhoto.id);
+    if (refreshed) setSelectedPhoto(refreshed);
   };
 
-  const submitComment = async () => {
-    if (!selectedItem || !commentText.trim()) return;
-    await addPhotoComment(selectedItem.id, commentText.trim(), replyToId);
-    setCommentText('');
-    setReplyToId(undefined);
-    refreshAllData();
+  const handleUpdatePhoto = async () => {
+    if (!selectedPhoto || !editDesc.trim()) return;
+    await updatePhoto(selectedPhoto.id, editDesc);
+    setIsEditingPhoto(false);
+    const refreshed = photos.find(p => p.id === selectedPhoto.id);
+    if (refreshed) setSelectedPhoto(refreshed);
   };
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    if (diff < 60000) return '방금 전';
-    if (diff < 3600000) return `${Math.floor(diff/60000)}분 전`;
-    if (diff < 86400000) return `${Math.floor(diff/3600000)}시간 전`;
-    return `${d.getMonth()+1}월 ${d.getDate()}일`;
+  const handleDeletePhoto = (photo: any) => {
+    Alert.alert('사진 삭제', '정말 삭제하시겠습니까?', [
+      { text: '취소' },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deletePhoto(photo.id, photo.photoUrl);
+        setSelectedPhoto(null);
+        refreshAllData();
+      }}
+    ]);
   };
 
-  const isVideo = (url: string) => url.toLowerCase().match(/\.(mp4|mov|m4v|webm)$/) || url.includes('video');
+  const handleUpdateComment = async () => {
+    if (!editingComment || !editCommentText.trim()) return;
+    await updatePhotoComment(editingComment.id, editCommentText);
+    setEditingComment(null);
+    const refreshed = photos.find(p => p.id === selectedPhoto.id);
+    if (refreshed) setSelectedPhoto(refreshed);
+  };
 
-  const activeDetailItem = useMemo(() => {
-    if (!selectedItem) return null;
-    return roomPhotos.find(p => p.id === selectedItem.id) || selectedItem;
-  }, [roomPhotos, selectedItem]);
+  const handleDeleteComment = (cid: string) => {
+    Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
+      { text: '취소' },
+      { text: '삭제', style: 'destructive', onPress: async () => {
+        await deletePhotoComment(cid);
+        const refreshed = photos.find(p => p.id === selectedPhoto.id);
+        if (refreshed) setSelectedPhoto(refreshed);
+      }}
+    ]);
+  };
+
+  const renderItem = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+      style={styles.gridItem} 
+      onPress={() => { setSelectedPhoto(item); markItemAsAccessed('photo', item.id); }}
+    >
+      <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={28} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>아카이브</Text>
-        <View style={{ width: 28 }} />
+      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
+        <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
       </View>
 
-      <View style={{ flex: 1 }}>
-        <FlatList
-          data={roomPhotos}
-          keyExtractor={item => item.id}
-          numColumns={3}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
-          renderItem={({ item }) => {
-            const itemIsVideo = isVideo(item.photoUrl);
-            return (
-              <TouchableOpacity 
-                style={styles.gridItem} 
-                activeOpacity={0.7}
-                onPress={() => { setSelectedItem(item); markItemAsAccessed('photo', item.id); }}
-              >
-                {/* 목록에서는 비디오를 재생하지 않고 이미지만 보여줌 (성공 최적화) */}
-                <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
-                {itemIsVideo && (
-                  <View style={styles.videoBadge}>
-                    <Ionicons name="play" size={14} color="#FFF" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          }}
-        />
+      <FlatList
+        data={roomPhotos}
+        renderItem={renderItem}
+        keyExtractor={item => item.id}
+        numColumns={COLUMN_COUNT}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      />
 
-        <TouchableOpacity style={[styles.fab, { backgroundColor: theme.primary, bottom: insets.bottom + 80 }]} onPress={handlePickMedia}><Ionicons name="add" size={30} color={theme.background} /></TouchableOpacity>
-      </View>
-
-      {/* 업로드 모달 */}
-      <Modal visible={showUploadModal} animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1, backgroundColor: theme.background}}>
-          <ScrollView contentContainerStyle={styles.uploadContainer}>
-            <View style={styles.uploadHeader}>
-              <TouchableOpacity onPress={() => { setShowUploadModal(false); setNewFileUri(null); }}>
-                <Ionicons name="close" size={28} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>공유하기</Text>
-              <View style={{ width: 28 }} />
-            </View>
-            {newFileUri && (
-              <Image source={{ uri: newFileUri }} style={styles.previewImage} />
-            )}
-            <TextInput 
-              style={[styles.descInput, { color: theme.text, borderColor: theme.border }]} 
-              placeholder="설명을 입력하세요..." 
-              placeholderTextColor={theme.textSecondary} 
-              multiline
-              value={description}
-              onChangeText={setDescription}
-            />
-            <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: theme.primary }]} onPress={handleUpload} disabled={isUploading}>
-              {isUploading ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.uploadBtnText, { color: theme.background }]}>올리기</Text>}
-            </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* 상세 보기 모달 */}
-      {activeDetailItem && (
-        <Modal visible={true} animationType="fade">
-          <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
+      {/* Photo Detail Modal */}
+      <Modal visible={!!selectedPhoto} animationType="fade" transparent>
+        <View style={styles.detailOverlay}>
+          <View style={[styles.detailContent, { backgroundColor: theme.background }]}>
             <View style={styles.detailHeader}>
-              <TouchableOpacity onPress={() => setSelectedItem(null)} style={styles.closeBtn}>
-                <Ionicons name="close" size={28} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.detailHeaderTitle, { color: theme.text }]}>상세 보기</Text>
-              <View style={{ width: 28 }} />
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-              {isVideo(activeDetailItem.photoUrl) ? (
-                <DetailVideoPlayer url={activeDetailItem.photoUrl} />
-              ) : (
-                <Image source={{ uri: activeDetailItem.photoUrl }} style={styles.detailMedia} resizeMode="contain" />
-              )}
-
-              <View style={styles.detailInfoSection}>
-                <View style={styles.detailUploaderRow}>
-                  <View style={styles.uploaderInfo}>
-                    <Text style={[styles.uploaderName, { color: theme.text }]}>{getUserById(activeDetailItem.userId)?.name}</Text>
-                    <Text style={[styles.timeText, { color: theme.textSecondary }]}>{formatTime(activeDetailItem.createdAt)}</Text>
-                  </View>
-                  {(isLeader || activeDetailItem.userId === currentUser?.id) && (
-                    <TouchableOpacity onPress={() => {
-                      Alert.alert('삭제', '이 콘텐츠를 삭제할까요?', [
-                        { text: '취소' },
-                        { text: '삭제', style: 'destructive', onPress: () => { deletePhoto(activeDetailItem.id, activeDetailItem.photoUrl); setSelectedItem(null); } }
-                      ]);
-                    }}>
-                      <Ionicons name="trash-outline" size={20} color={theme.error} />
-                    </TouchableOpacity>
-                  )}
+              <TouchableOpacity onPress={() => setSelectedPhoto(null)}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
+              <View style={{flex: 1}} />
+              {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
+                <View style={{flexDirection: 'row'}}>
+                  <TouchableOpacity onPress={() => { setEditDesc(selectedPhoto.description || ''); setIsEditingPhoto(true); }} style={{marginRight: 15}}>
+                    <Ionicons name="pencil" size={22} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeletePhoto(selectedPhoto)}>
+                    <Ionicons name="trash" size={22} color={theme.error} />
+                  </TouchableOpacity>
                 </View>
-
-                {activeDetailItem.description && (
-                  <Text style={[styles.detailDescription, { color: theme.textSecondary }]}>{activeDetailItem.description}</Text>
-                )}
-
-                <View style={[styles.detailCommentsSection, { borderTopColor: theme.border }]}>
-                  <Text style={[styles.commentsTitle, { color: theme.text }]}>댓글 {(activeDetailItem.comments || []).length}</Text>
-                  {(activeDetailItem.comments || []).filter((c:any) => !c.parentId).map((c:any) => {
-                    const cUser = getUserById(c.userId);
-                    const replies = (activeDetailItem.comments || []).filter((r:any) => r.parentId === c.id);
-                    return (
-                      <View key={c.id} style={styles.commentItem}>
-                        <View style={styles.commentMainRow}>
-                          <Text style={[styles.cName, { color: theme.text }]}>{cUser?.name}</Text>
-                          <Text style={[styles.cText, { color: theme.textSecondary }]}>{c.text}</Text>
-                          <TouchableOpacity onPress={() => { setReplyToId(c.id); setCommentText(`@${cUser?.name} `); }}>
-                            <Text style={styles.replyBtnText}>답글</Text>
-                          </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="contain" />
+              <View style={styles.detailInfo}>
+                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 10}}>
+                  <Image source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.authorImg} />
+                  <View>
+                    <Text style={{color: theme.text, fontWeight: 'bold'}}>{getUserById(selectedPhoto?.userId)?.name}</Text>
+                    <Text style={{color: theme.textSecondary, fontSize: 11}}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
+                  </View>
+                </View>
+                <Text style={{color: theme.text, fontSize: 15, lineHeight: 22, marginBottom: 20}}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
+                
+                <View style={[styles.commentSection, { borderTopColor: theme.border }]}>
+                  <Text style={{color: theme.text, fontWeight: 'bold', marginBottom: 15}}>댓글 {selectedPhoto?.comments?.length || 0}</Text>
+                  {selectedPhoto?.comments?.map((c: any) => (
+                    <View key={c.id} style={styles.cItem}>
+                      <Image source={{ uri: getUserById(c.userId)?.profileImage }} style={styles.cAuthorImg} />
+                      <View style={{flex: 1}}>
+                        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+                          <Text style={{color: theme.text, fontWeight: 'bold', fontSize: 13}}>{getUserById(c.userId)?.name}</Text>
+                          {c.userId === currentUser?.id && (
+                            <View style={{flexDirection: 'row'}}>
+                              <TouchableOpacity onPress={() => { setEditingComment(c); setEditCommentText(c.text); }}><Ionicons name="pencil" size={12} color={theme.textSecondary} style={{marginRight: 8}} /></TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleDeleteComment(c.id)}><Ionicons name="trash" size={12} color={theme.error} /></TouchableOpacity>
+                            </View>
+                          )}
                         </View>
-                        {replies.map((r:any) => (
-                          <View key={r.id} style={styles.replyRow}>
-                            <Ionicons name="return-down-forward" size={12} color={theme.textSecondary} style={{marginRight: 5}}/>
-                            <Text style={[styles.cName, { color: theme.text }]}>{getUserById(r.userId)?.name}</Text>
-                            <Text style={[styles.cText, { color: theme.textSecondary }]}>{r.text}</Text>
-                          </View>
-                        ))}
+                        <Text style={{color: theme.text, fontSize: 14, marginTop: 2}}>{c.text}</Text>
+                        <Text style={{color: theme.textSecondary, fontSize: 10, marginTop: 4}}>{formatDateFull(c.createdAt)}</Text>
                       </View>
-                    );
-                  })}
+                    </View>
+                  ))}
                 </View>
               </View>
             </ScrollView>
-
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.detailCommentInputContainer}>
-              <View style={[styles.detailCommentInputRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <TextInput 
-                  style={[styles.detailCommentInput, { color: theme.text }]} 
-                  placeholder={replyToId ? "답글 남기는 중..." : "댓글 달기..."} 
-                  placeholderTextColor={theme.textSecondary}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                />
-                <TouchableOpacity onPress={submitComment}>
-                  <Ionicons name="send" size={20} color={theme.primary} />
-                </TouchableOpacity>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <View style={[styles.commentInputRow, { borderTopColor: theme.border, paddingBottom: insets.bottom + 10 }]}>
+                <TextInput style={[styles.cInput, { color: theme.text, backgroundColor: theme.card }]} placeholder="댓글 달기..." placeholderTextColor={theme.textSecondary} value={newComment} onChangeText={setNewComment} />
+                <TouchableOpacity onPress={handleAddComment} style={[styles.sendBtn, { backgroundColor: theme.primary }]}><Ionicons name="send" size={18} color={theme.background} /></TouchableOpacity>
               </View>
             </KeyboardAvoidingView>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
+
+      {/* Edit Description Modal */}
+      <Modal visible={isEditingPhoto} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>설명 수정</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={editDesc} onChangeText={setEditDesc} multiline />
+            <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
+              <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdatePhoto}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Comment Modal */}
+      <Modal visible={!!editingComment} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>댓글 수정</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
+            <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
+              <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Photo Modal */}
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalOverlayUpload}>
+          <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>사진 업로드</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="사진 설명 (선택)" placeholderTextColor={theme.textSecondary} value={description} onChangeText={setDescription} multiline />
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickImage} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold', color: theme.background}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center'}}>취소</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1 },
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: 'bold' },
-  gridItem: { width: GRID_SIZE, height: GRID_SIZE, padding: 1 },
-  gridImage: { width: '100%', height: '100%', backgroundColor: '#111' },
-  videoBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
-  fab: { position: 'absolute', right: 20, width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 10 },
-  uploadContainer: { flex: 1, padding: 20 },
-  uploadHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold' },
-  previewImage: { width: '100%', height: width - 40, borderRadius: 15, marginBottom: 20 },
-  descInput: { fontSize: 15, minHeight: 80, padding: 15, borderWidth: 1, borderRadius: 12, textAlignVertical: 'top', marginBottom: 20 },
-  uploadBtn: { padding: 18, borderRadius: 15, alignItems: 'center' },
-  uploadBtnText: { fontWeight: 'bold', fontSize: 16 },
-  
-  detailContainer: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  detailHeaderTitle: { fontSize: 16, fontWeight: 'bold' },
-  detailMedia: { width: width, height: width, backgroundColor: '#000' },
-  detailInfoSection: { padding: 15 },
-  detailUploaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  uploaderInfo: { flexDirection: 'row', alignItems: 'center' },
-  uploaderName: { fontWeight: 'bold', fontSize: 15, marginRight: 10 },
-  timeText: { fontSize: 12 },
-  detailDescription: { fontSize: 14, marginBottom: 20 },
-  detailCommentsSection: { borderTopWidth: 0.5, paddingTop: 20 },
-  commentsTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 15 },
-  commentItem: { marginBottom: 15 },
-  commentMainRow: { flexDirection: 'row', alignItems: 'center' },
-  cName: { fontWeight: '600', fontSize: 13, marginRight: 8 },
-  cText: { fontSize: 13, flex: 1 },
-  replyBtnText: { color: '#666', fontSize: 11, marginLeft: 8 },
-  replyRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 20, marginTop: 6 },
-  detailCommentInputContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 15, backgroundColor: 'transparent' },
-  detailCommentInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 25, borderWidth: 1 },
-  detailCommentInput: { flex: 1, fontSize: 14, marginRight: 10 },
+  gridItem: { width: ITEM_SIZE, height: ITEM_SIZE, padding: 1 },
+  gridImage: { width: '100%', height: '100%' },
+  detailOverlay: { flex: 1, backgroundColor: '#000' },
+  detailContent: { flex: 1 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', padding: 15 },
+  detailImage: { width: '100%', height: width * 1.2 },
+  detailInfo: { padding: 20 },
+  authorImg: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  commentSection: { marginTop: 20, paddingTop: 20, borderTopWidth: 0.5 },
+  cItem: { flexDirection: 'row', marginBottom: 20 },
+  cAuthorImg: { width: 30, height: 30, borderRadius: 15, marginRight: 10 },
+  commentInputRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 0.5 },
+  cInput: { flex: 1, height: 40, borderRadius: 20, paddingHorizontal: 15, marginRight: 10 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 30 },
+  modalContent: { padding: 25, borderRadius: 20 },
+  input: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20, minHeight: 80 },
+  modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+  modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20, minHeight: 100 },
+  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' }
 });
