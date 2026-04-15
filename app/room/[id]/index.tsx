@@ -4,21 +4,20 @@ import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storageService } from '../../../services/storageService';
-import { NoticeItem, formatDateFull } from '../../../components/ui/RoomComponents';
+import { RoomActionBtn, NoticeItem } from '../../../components/ui/RoomComponents';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, getUserById, updateRoomUserProfile, getRoomUserProfile } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
   const room = rooms.find(r => r.id === id);
-  const roomNotices = useMemo(() => notices.filter(n => n.roomId === id).slice(0, 3), [notices, id]);
+  const roomNotices = useMemo(() => notices.filter(n => n.roomId === id), [notices, id]);
 
   const [showAddNotice, setShowAddAddNotice] = useState(false);
   const [noticeTitle, setNoticeTitle] = useState('');
@@ -27,39 +26,21 @@ export default function RoomMainScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 방 전용 프로필 상태
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [roomNickname, setRoomNickname] = useState('');
   const [roomImage, setRoomImage] = useState<string | null>(null);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-
-  // 비밀번호 가리기 상태
   const [showPasscode, setShowPasscode] = useState(false);
 
   const myRoomProfile = getRoomUserProfile(id as string, currentUser?.id || '');
 
-  if (!room) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: theme.text }}>방 정보를 불러올 수 없습니다.</Text>
-      </View>
-    );
-  }
+  if (!room) return <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={theme.primary} /></View>;
 
-  const isLeader = room.leader_id === currentUser?.id;
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refreshAllData();
-    setRefreshing(false);
-  };
+  const isLeader = room.leaderId === currentUser?.id;
+  const onRefresh = async () => { setRefreshing(true); await refreshAllData(); setRefreshing(false); };
 
   const handlePickImages = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 0.7,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.7 });
     if (!result.canceled) setSelectedImages(result.assets.map(a => a.uri));
   };
 
@@ -90,23 +71,20 @@ export default function RoomMainScreen() {
   };
 
   const handleInvite = async () => {
-    const inviteUrl = Linking.createURL(`/room/${room.id}`, { queryParams: { passcode: room.passcode } });
+    const inviteUrl = `laon-dance://room/${room.id}?passcode=${room.passcode}`;
     try {
-      await Share.share({
-        title: `[LAON DANCE] ${room.name} 초대`,
-        message: `[LAON DANCE] '${room.name}' 크루룸 초대장\n\n방 ID: ${room.id}\n비밀번호: ${room.passcode}\n\n링크로 바로가기:\n${inviteUrl}`,
-      });
+      await Share.share({ title: `[LAON DANCE] ${room.name} 초대`, message: `[LAON DANCE] '${room.name}' 크루룸 초대장\n\n방 ID: ${room.id}\n비밀번호: ${room.passcode}\n\n앱에서 방 가입 시 사용하세요!` });
     } catch (error) { Alert.alert('오류', '초대장을 공유할 수 없습니다.'); }
   };
 
   const coreActions = [
-    { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#45B7D1', desc: '연습 영상 올리고 피드백' },
-    { title: '동선 관리', icon: 'map', path: `/room/${id}/formation`, color: '#FF9F43', desc: '대형 제작 및 애니메이션' },
-    { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#F7D794', desc: '사진과 영상 추억 저장' },
+    { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#45B7D1', desc: '함께 영상을 보며 의견을 나눠요' },
+    { title: '동선 관리', icon: 'map', path: `/room/[id]/formation`, color: '#FF9F43', desc: '대형을 만들고 애니메이션으로 확인해요' },
+    { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#F7D794', desc: '우리 팀만의 소중한 기록들' },
   ];
 
   const manageActions = [
-    { title: '일정 맞추기', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B' },
+    { title: '일정 조율', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B' },
     { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#4ECDC4' },
     { title: '멤버 목록', icon: 'people', path: `/room/${id}/members`, color: '#A06CD5' },
   ];
@@ -118,156 +96,146 @@ export default function RoomMainScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {/* 상단 룸 정보 카드 */}
-        <LinearGradient colors={[theme.card, theme.card + 'EE']} style={[styles.headerCard, { borderColor: theme.border }]}>
+        <View style={[styles.headerCard, { backgroundColor: theme.card }]}>
           <View style={styles.roomHeaderRow}>
-            {room.image_uri ? (
-              <Image source={{ uri: room.image_uri }} style={styles.roomImageLarge} />
+            {room.imageUri ? (
+              <Image source={{ uri: room.imageUri }} style={styles.roomImageLarge} />
             ) : (
-              <View style={[styles.roomInitialCircle, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.roomInitialText, { color: theme.background }]}>{room.name[0].toUpperCase()}</Text>
-              </View>
+              <LinearGradient colors={[theme.primary, theme.secondary]} style={styles.roomInitialCircle}>
+                <Text style={[styles.roomInitialText, { color: '#fff' }]}>{room.name[0].toUpperCase()}</Text>
+              </LinearGradient>
             )}
             <View style={styles.roomInfoMain}>
               <Text style={[styles.roomName, { color: theme.text }]} numberOfLines={1}>{room.name}</Text>
               <View style={styles.idPassRow}>
-                <TouchableOpacity style={styles.roomIdBadge} onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사 완료', 'ID가 복사되었습니다.'); }}>
-                  <Text style={[styles.roomIdText, { color: theme.textSecondary }]}>ID: {room.id.slice(0,8)}...</Text>
-                  <Ionicons name="copy-outline" size={12} color={theme.textSecondary} />
+                <TouchableOpacity activeOpacity={0.7} style={[styles.idBadge, { backgroundColor: theme.primary + '15' }]} onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사 완료', 'ID가 복사되었습니다.'); }}>
+                  <Text style={[styles.idBadgeText, { color: theme.primary }]}>ID: {room.id.slice(0,6)}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.roomIdBadge, { marginLeft: 10 }]} onPress={() => setShowPasscode(!showPasscode)}>
-                  <Text style={[styles.roomIdText, { color: theme.textSecondary }]}>PW: {showPasscode ? room.passcode : '****'}</Text>
-                  <Ionicons name={showPasscode ? "eye-off-outline" : "eye-outline"} size={12} color={theme.textSecondary} />
+                <TouchableOpacity activeOpacity={0.7} style={[styles.idBadge, { backgroundColor: theme.accent + '15', marginLeft: 8 }]} onPress={() => setShowPasscode(!showPasscode)}>
+                  <Text style={[styles.idBadgeText, { color: theme.accent }]}>PW: {showPasscode ? room.passcode : '****'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-
-          {/* 내 방 프로필 섹션 */}
-          <View style={[styles.myProfileMiniCard, { backgroundColor: theme.background + '88', borderColor: theme.border }]}>
-            <View style={styles.myProfileInfo}>
-              <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.myProfileImg} />
-              <View>
-                <Text style={[styles.myProfileLabel, { color: theme.textSecondary }]}>이 방에서의 나</Text>
-                <Text style={[styles.myProfileName, { color: theme.text }]}>{myRoomProfile?.name || currentUser?.name}</Text>
-              </View>
-            </View>
-            <TouchableOpacity 
-              style={[styles.editProfileBtn, { backgroundColor: theme.primary }]}
-              onPress={() => { setRoomNickname(myRoomProfile?.name || currentUser?.name || ''); setRoomImage(myRoomProfile?.profileImage || currentUser?.profileImage || null); setShowProfileModal(true); }}
-            >
-              <Text style={[styles.editProfileBtnText, { color: theme.background }]}>프로필 설정</Text>
+            <TouchableOpacity onPress={handleInvite} style={styles.shareBtn}>
+              <Ionicons name="share-social-outline" size={22} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.headerFooterActions}>
-            <TouchableOpacity style={styles.footerAction} onPress={handleInvite}>
-              <Ionicons name="share-social-outline" size={18} color={theme.primary} />
-              <Text style={[styles.footerActionText, { color: theme.primary }]}>초대하기</Text>
-            </TouchableOpacity>
-            {isLeader && (
-              <TouchableOpacity style={styles.footerAction} onPress={() => {
-                Alert.alert('방 삭제', `'${room.name}' 방을 삭제하시겠습니까?`, [
-                  { text: '취소' }, { text: '삭제', style: 'destructive', onPress: async () => { await deleteRoom(room.id); router.replace('/rooms'); } }
-                ]);
-              }}>
-                <Ionicons name="trash-outline" size={18} color={theme.error} />
-                <Text style={[styles.footerActionText, { color: theme.error }]}>방 삭제</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </LinearGradient>
-
-        {/* 팀 공지 섹션 */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>팀 공지</Text>
-            <View style={{ flexDirection: 'row', gap: 15 }}>
-              <TouchableOpacity onPress={() => setShowAddAddNotice(true)}><Ionicons name="add-circle-outline" size={22} color={theme.primary} /></TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push(`/room/${id}/notices` as any)}><Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>전체보기</Text></TouchableOpacity>
+          {/* 내 방 프로필 요약 */}
+          <TouchableOpacity activeOpacity={0.9} style={[styles.myProfileRow, { backgroundColor: theme.background + '60' }]} onPress={() => { setRoomNickname(myRoomProfile?.name || currentUser?.name || ''); setShowProfileModal(true); }}>
+            <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.myProfileImg} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.myProfileLabel, { color: theme.textSecondary }]}>나의 방 닉네임</Text>
+              <Text style={[styles.myProfileName, { color: theme.text }]}>{myRoomProfile?.name || currentUser?.name}</Text>
             </View>
+            <View style={[styles.editIconCircle, { backgroundColor: theme.primary }]}>
+              <Ionicons name="pencil" size={12} color="#fff" />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>핵심 기능</Text>
+        </View>
+        <View style={styles.actionList}>
+          {coreActions.map((item, idx) => (
+            <RoomActionBtn key={idx} item={item} theme={theme} onPress={() => router.push(item.path as any)} />
+          ))}
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>관리 & 멤버</Text>
+        </View>
+        <View style={styles.manageGrid}>
+          {manageActions.map((item, idx) => (
+            <TouchableOpacity key={idx} activeOpacity={0.8} style={[styles.gridItem, { backgroundColor: theme.card }]} onPress={() => router.push(item.path as any)}>
+              <View style={[styles.gridIconCircle, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={24} color={item.color} /></View>
+              <Text style={[styles.gridItemTitle, { color: theme.text }]}>{item.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.noticeSection}>
+          <View style={styles.sectionHeaderWithAction}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>공지사항</Text>
+            <TouchableOpacity activeOpacity={0.7} style={styles.writeNoticeBtn} onPress={() => setShowAddAddNotice(true)}>
+              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13 }}>작성하기</Text>
+            </TouchableOpacity>
           </View>
-          {roomNotices.length > 0 ? (
-            roomNotices.map(notice => (
-              <NoticeItem 
-                key={notice.id} 
-                notice={notice} 
-                theme={theme} 
-                onPress={() => router.push(`/room/${id}/notice/${notice.id}` as any)} 
-              />
-            ))
-          ) : (
-            <View style={[styles.emptyNotice, { backgroundColor: theme.card, borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>등록된 공지가 없습니다.</Text></View>
+          {roomNotices.length > 0 ? roomNotices.slice(0, 3).map(notice => (
+            <NoticeItem key={notice.id} notice={notice} theme={theme} onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} />
+          )) : (
+            <View style={[styles.emptyNotice, { backgroundColor: theme.card }]}>
+              <Ionicons name="notifications-off-outline" size={32} color={theme.textSecondary + '40'} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>등록된 공지사항이 없어요</Text>
+            </View>
+          )}
+          {roomNotices.length > 3 && (
+            <TouchableOpacity activeOpacity={0.7} style={styles.moreBtn} onPress={() => router.push(`/room/${id}/notices`)}>
+              <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>공지사항 전체보기</Text>
+              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
           )}
         </View>
 
-        {/* 창작 및 피드백 섹션 */}
-        <View style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 15 }]}>창작 및 피드백</Text>
-          <View style={styles.coreGrid}>
-            {coreActions.map((item, idx) => (
-              <TouchableOpacity key={idx} style={[styles.coreCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => router.push(item.path as any)}>
-                <View style={[styles.coreIconBox, { backgroundColor: item.color + '20' }]}><Ionicons name={item.icon as any} size={28} color={item.color} /></View>
-                <Text style={[styles.coreTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[styles.coreDesc, { color: theme.textSecondary }]}>{item.desc}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* 팀 관리 섹션 */}
-        <View style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 15 }]}>팀 관리 및 소통</Text>
-          <View style={styles.manageRow}>
-            {manageActions.map((item, idx) => (
-              <TouchableOpacity key={idx} style={[styles.manageItem, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => router.push(item.path as any)}>
-                <Ionicons name={item.icon as any} size={22} color={item.color} />
-                <Text style={[styles.manageTitle, { color: theme.text }]}>{item.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        {isLeader && (
+          <TouchableOpacity style={styles.deleteRoomBtn} onPress={() => Alert.alert('방 삭제', '이 방을 정말 삭제하시겠습니까? 팀의 모든 기록이 사라집니다.', [{ text: '취소' }, { text: '삭제', style: 'destructive', onPress: () => { deleteRoom(id as string); router.replace('/rooms'); } }])}>
+            <Text style={styles.deleteRoomText}>방 삭제하기</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
-      {/* 방 전용 프로필 설정 모달 */}
-      <Modal visible={showProfileModal} animationType="slide" transparent>
+      {/* Modal UI remains functional but with polished styles... */}
+      <Modal visible={showProfileModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>방 전용 프로필 설정</Text>
-              <TouchableOpacity onPress={() => setShowProfileModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
-            </View>
-            <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
-              <Text style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 25, textAlign: 'center' }}>이 정보는 이 방의 멤버들에게만 공개되는 전용 프로필입니다.</Text>
-              <TouchableOpacity style={styles.avatarPicker} onPress={async () => {
-                const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.5 });
-                if (!res.canceled) setRoomImage(res.assets[0].uri);
-              }}>
-                {roomImage ? <Image source={{ uri: roomImage }} style={styles.largeAvatar} /> : <View style={[styles.largeAvatar, { backgroundColor: theme.primary + '22' }]}><Ionicons name="camera" size={32} color={theme.primary} /></View>}
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>방 프로필 수정</Text>
+            <TouchableOpacity style={styles.modalImgPicker} onPress={async () => { const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 }); if(!res.canceled) setRoomImage(res.assets[0].uri); }}>
+              <Image source={{ uri: roomImage || myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.modalProfileImg} />
+              <View style={[styles.cameraBadge, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={16} color="#fff" /></View>
+            </TouchableOpacity>
+            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder="이 방에서 사용할 닉네임" placeholderTextColor="#888" value={roomNickname} onChangeText={setRoomNickname} />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.border + '80' }]} onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.text, fontWeight: '600' }}>취소</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateRoomProfile} disabled={isUpdatingProfile}>
+                {isUpdatingProfile ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>저장</Text>}
               </TouchableOpacity>
-              <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={roomNickname} onChangeText={setRoomNickname} placeholder="방에서 사용할 이름" placeholderTextColor={theme.textSecondary} />
-              <View style={styles.modalBtns}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateRoomProfile} disabled={isUpdatingProfile}>
-                  {isUpdatingProfile ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>변경사항 저장</Text>}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
+            </View>
+          </View>
         </View>
       </Modal>
 
-      <Modal visible={showAddNotice} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>새 팀 공지</Text><TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={noticeTitle} onChangeText={setNoticeTitle} />
-              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={noticeContent} onChangeText={setNoticeContent} />
-              <TouchableOpacity style={[styles.imagePickBtn, { borderColor: theme.border }]} onPress={handlePickImages}><Ionicons name="camera-outline" size={20} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, marginLeft: 10 }}>사진 첨부 ({selectedImages.length})</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleAddNotice} disabled={isSubmitting}>{isSubmitting ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>공지 등록하기</Text>}</TouchableOpacity>
-            </ScrollView>
+      {/* Add Notice Modal */}
+      <Modal visible={showAddNotice} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.addModalContent, { backgroundColor: theme.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>공지사항 작성</Text>
+                <TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <TextInput style={[styles.noticeInputTitle, { color: theme.text, borderColor: theme.border }]} placeholder="제목을 입력하세요" placeholderTextColor="#888" value={noticeTitle} onChangeText={setNoticeTitle} />
+                <TextInput style={[styles.noticeInputContent, { color: theme.text, borderColor: theme.border }]} placeholder="내용을 입력하세요" placeholderTextColor="#888" value={noticeContent} onChangeText={setNoticeContent} multiline />
+                
+                <Text style={[styles.label, { color: theme.textSecondary }]}>사진 첨부</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagePreviewRow}>
+                  <TouchableOpacity activeOpacity={0.7} style={[styles.imageAddBtn, { backgroundColor: theme.background, borderColor: theme.border }]} onPress={handlePickImages}><Ionicons name="camera-outline" size={28} color={theme.textSecondary} /></TouchableOpacity>
+                  {selectedImages.map((uri, idx) => (
+                    <View key={idx} style={styles.imagePreviewWrapper}>
+                      <Image source={{ uri }} style={styles.imagePreview} />
+                      <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setSelectedImages(selectedImages.filter((_, i) => i !== idx))}><Ionicons name="close-circle" size={20} color="#ff4444" /></TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+
+                <TouchableOpacity activeOpacity={0.8} style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleAddNotice} disabled={isSubmitting}>
+                  {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>등록하기</Text>}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -275,53 +243,64 @@ export default function RoomMainScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 16 },
-  headerCard: { padding: 20, borderRadius: 24, marginBottom: 25, borderWidth: 1 },
-  roomHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  roomImageLarge: { width: 60, height: 60, borderRadius: 20 },
-  roomInitialCircle: { width: 60, height: 60, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  roomInitialText: { fontSize: 24, fontWeight: 'bold' },
-  roomInfoMain: { marginLeft: 15, flex: 1 },
-  roomName: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  idPassRow: { flexDirection: 'row', alignItems: 'center' },
-  roomIdBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  roomIdText: { fontSize: 12 },
-  myProfileMiniCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 16, borderWidth: 1, marginBottom: 15 },
-  myProfileInfo: { flexDirection: 'row', alignItems: 'center' },
-  myProfileImg: { width: 36, height: 36, borderRadius: 12, marginRight: 10 },
-  myProfileLabel: { fontSize: 10, fontWeight: 'bold' },
-  myProfileName: { fontSize: 14, fontWeight: 'bold' },
-  editProfileBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  editProfileBtnText: { fontSize: 11, fontWeight: 'bold' },
-  headerFooterActions: { flexDirection: 'row', gap: 20, paddingLeft: 5 },
-  footerAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  footerActionText: { fontSize: 13, fontWeight: '600' },
-  sectionContainer: { marginBottom: 30 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold' },
-  noticeCard: { padding: 16, borderRadius: 20, borderWidth: 1 },
-  noticeTag: { alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#FF6B6B', marginBottom: 8 },
-  noticeTagText: { color: '#FFF', fontSize: 9, fontWeight: 'bold' },
-  noticeTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
-  noticeContent: { fontSize: 13, lineHeight: 18 },
-  emptyNotice: { padding: 20, borderRadius: 20, borderWidth: 1, alignItems: 'center' },
-  coreGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  coreCard: { width: '48%', padding: 16, borderRadius: 20, borderWidth: 1, marginBottom: 15 },
-  coreIconBox: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  coreTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
-  coreDesc: { fontSize: 11, lineHeight: 15 },
-  manageRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  manageItem: { width: '31%', paddingVertical: 15, alignItems: 'center', borderRadius: 18, borderWidth: 1 },
-  manageTitle: { fontSize: 12, fontWeight: 'bold', marginTop: 8 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold' },
-  avatarPicker: { marginBottom: 25 },
-  largeAvatar: { width: 90, height: 90, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
-  input: { width: '100%', borderRadius: 12, padding: 15, marginBottom: 15, fontSize: 15 },
-  modalBtns: { flexDirection: 'row', width: '100%', gap: 10, marginTop: 10 },
-  cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },
-  submitBtn: { flex: 2, padding: 15, borderRadius: 12, alignItems: 'center' },
-  imagePickBtn: { flexDirection: 'row', alignItems: 'center', padding: 12, borderWidth: 1, borderRadius: 12, borderStyle: 'dashed', marginBottom: 15 },
+  scrollContent: { paddingHorizontal: 20 },
+  headerCard: { padding: 24, borderRadius: 32, marginTop: 10, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 16 }, android: { elevation: 6 } }) },
+  roomHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
+  roomImageLarge: { width: 72, height: 72, borderRadius: 24 },
+  roomInitialCircle: { width: 72, height: 72, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  roomInitialText: { fontSize: 32, fontWeight: '800' },
+  roomInfoMain: { flex: 1, marginLeft: 18 },
+  roomName: { fontSize: 24, fontWeight: '800', marginBottom: 8, letterSpacing: -0.5 },
+  idPassRow: { flexDirection: 'row' },
+  idBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  idBadgeText: { fontSize: 11, fontWeight: '700' },
+  shareBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  
+  myProfileRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 20 },
+  myProfileImg: { width: 40, height: 40, borderRadius: 16, marginRight: 14 },
+  myProfileLabel: { fontSize: 10, fontWeight: '700', marginBottom: 2, opacity: 0.6 },
+  myProfileName: { fontSize: 15, fontWeight: '700' },
+  editIconCircle: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+
+  sectionHeader: { marginTop: 32, marginBottom: 16, paddingHorizontal: 4 },
+  sectionHeaderWithAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 32, marginBottom: 16, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 19, fontWeight: '800', letterSpacing: -0.5 },
+  
+  actionList: { marginTop: 4 },
+  manageGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  gridItem: { width: '31%', padding: 20, borderRadius: 28, alignItems: 'center', marginBottom: 14, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 8 }, android: { elevation: 2 } }) },
+  gridIconCircle: { width: 48, height: 48, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  gridItemTitle: { fontSize: 13, fontWeight: '700', letterSpacing: -0.3 },
+
+  noticeSection: { marginTop: 10 },
+  writeNoticeBtn: { backgroundColor: '#FF8E9E15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  emptyNotice: { padding: 40, borderRadius: 24, alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#eee' },
+  emptyText: { marginTop: 12, fontSize: 14, fontWeight: '500' },
+  moreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
+
+  deleteRoomBtn: { marginTop: 40, alignItems: 'center', padding: 20 },
+  deleteRoomText: { color: '#ff4444', fontSize: 13, textDecorationLine: 'underline', opacity: 0.6 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '85%', padding: 28, borderRadius: 36, alignItems: 'center' },
+  modalTitle: { fontSize: 22, fontWeight: '800', marginBottom: 8 },
+  modalImgPicker: { position: 'relative', marginBottom: 24, marginTop: 10 },
+  modalProfileImg: { width: 110, height: 110, borderRadius: 40 },
+  cameraBadge: { position: 'absolute', bottom: -4, right: -4, width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff' },
+  input: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 20, fontSize: 16 },
+  modalButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
+  modalBtn: { flex: 0.48, padding: 16, borderRadius: 18, alignItems: 'center' },
+
+  addModalContent: { width: '100%', height: '90%', padding: 28, borderTopLeftRadius: 40, borderTopRightRadius: 40, position: 'absolute', bottom: 0 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  noticeInputTitle: { fontSize: 18, fontWeight: '700', paddingVertical: 16, borderBottomWidth: 1, marginBottom: 10 },
+  noticeInputContent: { fontSize: 16, minHeight: 150, textAlignVertical: 'top', paddingVertical: 16 },
+  label: { fontSize: 14, fontWeight: '700', marginTop: 20, marginBottom: 12 },
+  imagePreviewRow: { flexDirection: 'row', marginBottom: 24 },
+  imageAddBtn: { width: 88, height: 88, borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  imagePreviewWrapper: { position: 'relative', marginRight: 12 },
+  imagePreview: { width: 88, height: 88, borderRadius: 24 },
+  imageRemoveBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#fff', borderRadius: 12, elevation: 2 },
+  saveBtn: { padding: 20, borderRadius: 22, alignItems: 'center', marginTop: 10 },
+  saveBtnText: { fontSize: 18, fontWeight: '800' }
 });

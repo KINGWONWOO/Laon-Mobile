@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Switch, Alert, RefreshControl, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Switch, Alert, RefreshControl, Image, ActivityIndicator, Platform } from 'react-native';
 import { useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -89,15 +89,24 @@ export default function VoteScreen() {
     const participants = Object.keys(vote.responses).length;
     const isClosed = vote.deadline && new Date(vote.deadline) < new Date();
     return (
-      <TouchableOpacity style={[styles.voteListCard, { backgroundColor: theme.card, borderColor: isClosed ? theme.border : theme.primary, borderWidth: isClosed ? 1 : 1.5 }]} onPress={() => setSelectedVoteId(vote.id)}>
+      <TouchableOpacity 
+        style={[
+          styles.voteListCard, 
+          { backgroundColor: theme.card, shadowColor: theme.text },
+          !isClosed && { borderColor: theme.primary + '33', borderWidth: 1 }
+        ]} 
+        onPress={() => setSelectedVoteId(vote.id)}
+      >
         <View style={styles.voteListInfo}>
-          <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
+          <View style={{flexDirection:'row', alignItems:'center', marginBottom: 8}}>
             <Text style={[styles.voteListTitle, { color: theme.text }]} numberOfLines={1}>{vote.question}</Text>
-            {isClosed && <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '33'}]}><Text style={{fontSize: 10, color: theme.textSecondary}}>종료</Text></View>}
+            {isClosed && <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '22'}]}><Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: 'bold'}}>종료</Text></View>}
           </View>
           <Text style={[styles.voteListMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {formatDateFull(vote.createdAt)}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        <View style={[styles.iconCircle, { backgroundColor: theme.primary + '15' }]}>
+          <Ionicons name="chevron-forward" size={18} color={theme.primary} />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -127,60 +136,109 @@ export default function VoteScreen() {
             ) : <View style={{ width: 40 }} />}
           </View>
 
-          <ScrollView contentContainerStyle={styles.detailScroll}>
-            <View style={{flexDirection:'row', alignItems:'center', marginBottom: 10}}>
-              {isClosed ? <View style={[styles.statusBadge, {backgroundColor: theme.error + '22'}]}><Text style={{color: theme.error, fontWeight:'bold', fontSize: 12}}>마감됨</Text></View> : <View style={[styles.statusBadge, {backgroundColor: theme.primary + '22'}]}><Text style={{color: theme.primary, fontWeight:'bold', fontSize: 12}}>진행 중</Text></View>}
-              {vote.deadline && !isClosed && <Text style={{color: theme.error, fontSize: 12, marginLeft: 10}}>마감: {formatDateFull(vote.deadline)}</Text>}
+          <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
+            <View style={{flexDirection:'row', alignItems:'center', marginBottom: 12}}>
+              {isClosed ? <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>마감됨</Text></View> : <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>진행 중</Text></View>}
+              {vote.deadline && !isClosed && <Text style={{color: theme.error, fontSize: 12, marginLeft: 10, fontWeight: '600'}}>마감: {formatDateFull(vote.deadline)}</Text>}
             </View>
             <Text style={[styles.voteQuestion, { color: theme.text }]}>{vote.question}</Text>
             
-            {vote.options.map((opt: any) => {
-              const votersForThisOpt = Object.entries(vote.responses).filter(([_, optIds]: any) => optIds.includes(opt.id)).map(([uId]) => uId);
-              const isSelected = (vote.responses[currentUser?.id || ''] || []).includes(opt.id);
-              return (
-                <TouchableOpacity key={opt.id} disabled={isClosed} style={[styles.optItem, { backgroundColor: theme.card, borderColor: isSelected ? theme.primary : theme.border }]} onPress={() => {
-                  const currentRes = vote.responses[currentUser?.id || ''] || [];
-                  respondToVote(vote.id, isSelected ? currentRes.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...currentRes, opt.id] : [opt.id]));
-                }}>
-                  <View style={{flex: 1}}><Text style={{color: theme.text, fontWeight: isSelected ? 'bold' : 'normal'}}>{opt.text}</Text></View>
-                  <TouchableOpacity style={styles.voterCountBadge} onPress={() => {
-                    if (vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.');
-                    setVotersToDisplay(votersForThisOpt); setVoterModalTitle(`'${opt.text}' 투표자`); setShowVoterModal(true);
-                  }}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{votersForThisOpt.length}명</Text></TouchableOpacity>
-                </TouchableOpacity>
-              );
-            })}
-
-            <View style={styles.voterSummaryDetail}>
-              <View style={styles.voterRow}><Text style={[styles.voterLabel, { color: theme.textSecondary }]}>참여({participants.length})</Text><View style={styles.voterNamesRow}>{participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}</View></View>
-              <View style={[styles.voterRow, { marginTop: 10 }]}><Text style={[styles.voterLabel, { color: theme.error }]}>미참여({nonParticipants.length})</Text><View style={styles.voterNamesRow}>{nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.error }]}>{getUserById(vId)?.name} </Text>)}</View></View>
+            <View style={styles.optionsSection}>
+              {vote.options.map((opt: any) => {
+                const votersForThisOpt = Object.entries(vote.responses).filter(([_, optIds]: any) => optIds.includes(opt.id)).map(([uId]) => uId);
+                const isSelected = (vote.responses[currentUser?.id || ''] || []).includes(opt.id);
+                return (
+                  <TouchableOpacity 
+                    key={opt.id} 
+                    disabled={isClosed} 
+                    style={[
+                      styles.optItem, 
+                      { backgroundColor: theme.card, shadowColor: theme.text },
+                      isSelected && { borderColor: theme.primary, borderWidth: 2 }
+                    ]} 
+                    onPress={() => {
+                      const currentRes = vote.responses[currentUser?.id || ''] || [];
+                      respondToVote(vote.id, isSelected ? currentRes.filter((id: string) => id !== opt.id) : (vote.allowMultiple ? [...currentRes, opt.id] : [opt.id]));
+                    }}
+                  >
+                    <View style={{flex: 1}}><Text style={{color: theme.text, fontSize: 16, fontWeight: isSelected ? '700' : '500'}}>{opt.text}</Text></View>
+                    <TouchableOpacity style={[styles.voterCountBadge, { backgroundColor: theme.primary + '15' }]} onPress={() => {
+                      if (vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.');
+                      setVotersToDisplay(votersForThisOpt); setVoterModalTitle(`'${opt.text}' 투표자`); setShowVoterModal(true);
+                    }}>
+                      <Text style={{color: theme.primary, fontWeight: '800'}}>{votersForThisOpt.length}명</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            {/* Ranking: Positioned below participant lists */}
-            <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.rankingHeader, { color: theme.primary }]}>투표 순위</Text>
+            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+              <View style={styles.voterRow}>
+                <View style={[styles.voterLabelContainer, { backgroundColor: theme.success + '15' }]}>
+                  <Text style={[styles.voterLabel, { color: theme.success }]}>참여 {participants.length}</Text>
+                </View>
+                <View style={styles.voterNamesRow}>
+                  {participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}
+                  {participants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>아직 참여자가 없습니다.</Text>}
+                </View>
+              </View>
+              <View style={[styles.voterRow, { marginTop: 15 }]}>
+                <View style={[styles.voterLabelContainer, { backgroundColor: theme.error + '15' }]}>
+                  <Text style={[styles.voterLabel, { color: theme.error }]}>미참여 {nonParticipants.length}</Text>
+                </View>
+                <View style={styles.voterNamesRow}>
+                  {nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}
+                  {nonParticipants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>모두 참여했습니다!</Text>}
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.rankingBox, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+              <View style={{flexDirection:'row', alignItems:'center', marginBottom: 20}}>
+                <View style={[styles.iconCircleSmall, { backgroundColor: theme.accent + '15', marginRight: 10 }]}>
+                  <Ionicons name="trophy" size={16} color={theme.accent} />
+                </View>
+                <Text style={[styles.rankingHeader, { color: theme.text }]}>투표 순위 TOP 3</Text>
+              </View>
+              
               {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
-                <TouchableOpacity key={idx} style={styles.rankingItem} onPress={() => { if(vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.'); setVotersToDisplay(r.voters); setVoterModalTitle(`'${r.text}' 투표자`); setShowVoterModal(true); }}>
-                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx + 1}위</Text>
-                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.text}</Text>
-                  <View style={{flexDirection:'row', alignItems:'center'}}>
-                    <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 5 }]}>{r.votes}표</Text>
-                    <Ionicons name="people" size={14} color={theme.primary} />
+                <TouchableOpacity 
+                  key={idx} 
+                  style={[styles.rankingItem, idx < 2 && { borderBottomWidth: 1, borderBottomColor: theme.border }]} 
+                  onPress={() => { if(vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.'); setVotersToDisplay(r.voters); setVoterModalTitle(`'${r.text}' 투표자`); setShowVoterModal(true); }}
+                >
+                  <View style={[styles.rankingBadge, { backgroundColor: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : '#CD7F32' }]}>
+                    <Text style={styles.rankingBadgeText}>{idx + 1}</Text>
+                  </View>
+                  <Text style={[styles.rankingText, { color: theme.text }]} numberOfLines={1}>{r.text}</Text>
+                  <View style={styles.rankingCountRow}>
+                    <Text style={[styles.rankingCount, { color: theme.primary }]}>{r.votes}표</Text>
+                    <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
                   </View>
                 </TouchableOpacity>
               ))}
-              {ranked.filter(r => r.votes > 0).length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>아직 투표가 없습니다.</Text>}
+              {ranked.filter(r => r.votes > 0).length === 0 && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: theme.textSecondary }}>아직 투표 데이터가 없습니다.</Text>
+                </View>
+              )}
             </View>
 
             {isClosed && ranked[0].votes > 0 && (
-              <View style={[styles.resultBanner, {backgroundColor: theme.primary + '11', borderColor: theme.primary}]}>
-                <Text style={{color: theme.primary, fontWeight:'bold'}}>최다 선택 결과: {ranked[0].text} ({ranked[0].votes}표)</Text>
+              <View style={[styles.resultBanner, {backgroundColor: theme.primary, shadowColor: theme.primary}]}>
+                <Ionicons name="checkmark-circle" size={20} color={theme.background} style={{ marginRight: 8 }} />
+                <Text style={{color: theme.background, fontWeight:'800', fontSize: 15}}>최종 선택: {ranked[0].text}</Text>
               </View>
             )}
 
             {isOwner && !isClosed && (
-              <TouchableOpacity style={[styles.manualCloseBtn, {borderColor: theme.error}]} onPress={() => handleCloseVoteManual(vote.id)}><Ionicons name="stop-circle-outline" size={20} color={theme.error} /><Text style={{color: theme.error, fontWeight: 'bold', marginLeft: 8}}>지금 투표 종료하기</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.manualCloseBtn, {borderColor: theme.error}]} onPress={() => handleCloseVoteManual(vote.id)}>
+                <Ionicons name="stop-circle-outline" size={20} color={theme.error} />
+                <Text style={{color: theme.error, fontWeight: '800', marginLeft: 8}}>투표 마감하기</Text>
+              </TouchableOpacity>
             )}
+            <View style={{ height: 40 }} />
           </ScrollView>
         </View>
       </Modal>
@@ -192,13 +250,13 @@ export default function VoteScreen() {
     const hours = Array.from({length: 24}).map((_, i) => i);
     const minutes = [0, 10, 20, 30, 40, 50, 59];
     return (
-      <View style={[styles.compactPicker, {borderColor: theme.border}]}>
+      <View style={[styles.compactPicker, {borderColor: theme.border, backgroundColor: theme.background}]}>
         <View style={styles.pickerHeader}>
-          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 2}]} onPress={() => setShow('date')}><Text style={{color: theme.text}}>{date.toLocaleDateString()}</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 2}]} onPress={() => setShow('time')}><Text style={{color: theme.text}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>{date.toLocaleDateString()}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text></TouchableOpacity>
         </View>
-        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 10}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontWeight: 'bold', color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
-        {show === 'time' && <View style={{flexDirection:'row', height: 100}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.background : theme.text}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.background : theme.text}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
+        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary, fontWeight: '600'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontWeight: '800', fontSize: 16, color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: date.getHours() === h ? '800' : '500'}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: date.getMinutes() === m ? '800' : '500'}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
@@ -207,99 +265,205 @@ export default function VoteScreen() {
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
       <View style={styles.header}>
         <View><Text style={[styles.headerTitle, { color: theme.text }]}>연습 투표</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>중요한 결정을 함께 내려요!</Text></View>
-        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={24} color={theme.background} /></TouchableOpacity>
+        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color={theme.background} /></TouchableOpacity>
       </View>
 
-      <FlatList data={roomVotes} keyExtractor={item => item.id} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} renderItem={renderVoteListItem} ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 투표가 없습니다.</Text>} />
+      <FlatList 
+        data={roomVotes} 
+        keyExtractor={item => item.id} 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} 
+        renderItem={renderVoteListItem} 
+        ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="clipboard-outline" size={60} color={theme.border} /><Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 투표가 없습니다.</Text></View>} 
+      />
 
       {renderDetail()}
 
       <Modal visible={showVoterModal} transparent animationType="fade">
-        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 16 }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={20} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><Ionicons name="person-circle" size={24} color={theme.primary} style={{ marginRight: 10 }} /><Text style={{ color: theme.text }}>{getUserById(vId)?.name || '알 수 없음'}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>투표자가 없습니다.</Text>}</View></View></View>
+        <TouchableOpacity activeOpacity={1} style={styles.modalOverlayCenter} onPress={() => setShowVoterModal(false)}>
+          <View style={[styles.voterModalContent, { backgroundColor: theme.card, shadowColor: theme.text }]} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text, fontSize: 18 }]}>{voterModalTitle}</Text>
+              <TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
+            </View>
+            <ScrollView style={styles.voterList} showsVerticalScrollIndicator={false}>
+              {votersToDisplay.map(vId => (
+                <View key={vId} style={styles.voterListItem}>
+                  <View style={[styles.iconCircleSmall, { backgroundColor: theme.primary + '15', marginRight: 12 }]}>
+                    <Ionicons name="person" size={14} color={theme.primary} />
+                  </View>
+                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>{getUserById(vId)?.name || '알 수 없음'}</Text>
+                </View>
+              ))}
+              {votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginVertical: 20 }}>투표자가 없습니다.</Text>}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Add/Edit Modal */}
       <Modal visible={showAddModal || showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card }]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '투표 수정' : '새 투표 만들기'}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><ScrollView showsVerticalScrollIndicator={false}>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>질문</Text>
-          <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="무엇을 투표할까요?" placeholderTextColor="#888" value={question} onChangeText={setQuestion} />
-          
-          {!showEditModal && options.map((opt, idx) => (
-            <View key={idx} style={styles.optInputRow}>
-              <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.border }]} placeholder={`선택지 ${idx + 1}`} placeholderTextColor="#888" value={opt} onChangeText={(val) => { const newOpts = [...options]; newOpts[idx] = val; setOptions(newOpts); }} />
-              {options.length > 2 && <TouchableOpacity onPress={() => setOptions(options.filter((_, i) => i !== idx))} style={{marginLeft: 10}}><Ionicons name="remove-circle-outline" size={24} color={theme.error} /></TouchableOpacity>}
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '투표 수정' : '새 투표 만들기'}</Text>
+              <TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
             </View>
-          ))}
-          {!showEditModal && <TouchableOpacity onPress={() => setOptions([...options, ''])} style={[styles.addOptBtn, { borderColor: theme.border }]}><Text style={{ color: theme.textSecondary }}>+ 선택지 추가</Text></TouchableOpacity>}
-          
-          <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} /></View>
-          <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} /></View>
-          
-          <View style={[styles.settingRow, {borderTopWidth: 0.5, borderTopColor: '#eee2', paddingTop: 15}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} /></View>
-          {hasDeadline && <View style={{marginBottom: 20}}><TouchableOpacity style={[styles.compactRow, {borderColor: theme.border}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}><Ionicons name="calendar-outline" size={18} color={theme.primary} /><Text style={{color: theme.text, marginLeft: 10}}>{formatDateFull(deadline.getTime())}</Text></TouchableOpacity>{showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}</View>}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>질문</Text>
+              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]} placeholder="무엇을 투표할까요?" placeholderTextColor="#888" value={question} onChangeText={setQuestion} />
+              
+              {!showEditModal && (
+                <>
+                  <Text style={[styles.label, { color: theme.textSecondary }]}>선택지</Text>
+                  {options.map((opt, idx) => (
+                    <View key={idx} style={styles.optInputRow}>
+                      <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.border, backgroundColor: theme.background, marginBottom: 0 }]} placeholder={`선택지 ${idx + 1}`} placeholderTextColor="#888" value={opt} onChangeText={(val) => { const newOpts = [...options]; newOpts[idx] = val; setOptions(newOpts); }} />
+                      {options.length > 2 && <TouchableOpacity onPress={() => setOptions(options.filter((_, i) => i !== idx))} style={styles.removeOptBtn}><Ionicons name="remove-circle" size={24} color={theme.error} /></TouchableOpacity>}
+                    </View>
+                  ))}
+                  <TouchableOpacity onPress={() => setOptions([...options, ''])} style={[styles.addOptBtn, { borderColor: theme.primary, backgroundColor: theme.primary + '08' }]}><Text style={{ color: theme.primary, fontWeight: '700' }}>+ 선택지 추가</Text></TouchableOpacity>
+                </>
+              )}
+              
+              <View style={[styles.settingCard, { backgroundColor: theme.background }]}>
+                <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary, false: '#ddd' }} thumbColor={Platform.OS === 'android' ? (isAnonymous ? theme.primary : '#f4f3f4') : ''} /></View>
+                <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: theme.border, marginTop: 10, paddingTop: 10 }]}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary, false: '#ddd' }} thumbColor={Platform.OS === 'android' ? (allowMultiple ? theme.primary : '#f4f3f4') : ''} /></View>
+              </View>
+              
+              <View style={[styles.settingCard, { backgroundColor: theme.background, marginTop: 15 }]}>
+                <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary, false: '#ddd' }} thumbColor={Platform.OS === 'android' ? (hasDeadline ? theme.primary : '#f4f3f4') : ''} /></View>
+                {hasDeadline && (
+                  <View style={{marginTop: 15}}>
+                    <TouchableOpacity style={[styles.compactRow, {borderColor: theme.border, backgroundColor: theme.card}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
+                      <Ionicons name="calendar" size={20} color={theme.primary} />
+                      <Text style={{color: theme.text, marginLeft: 10, fontWeight: '600'}}>{formatDateFull(deadline.getTime())}</Text>
+                    </TouchableOpacity>
+                    {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
+                  </View>
+                )}
+              </View>
 
-          <TouchableOpacity onPress={showEditModal ? handleUpdateVote : handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>{showEditModal ? '수정 완료' : '등록하기'}</Text>}</TouchableOpacity>
-        </ScrollView></View></View>
+              <TouchableOpacity onPress={showEditModal ? handleUpdateVote : handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary, shadowColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>{showEditModal ? '수정 완료' : '등록하기'}</Text>}</TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  headerTitle: { fontSize: 26, fontWeight: 'bold' },
-  headerSub: { fontSize: 13, marginTop: 4 },
-  addButton: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', elevation: 5 },
-  voteListCard: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 20, marginBottom: 12, borderWidth: 1 },
+  container: { flex: 1, paddingHorizontal: 24 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
+  headerTitle: { fontSize: 30, fontWeight: '800' },
+  headerSub: { fontSize: 14, marginTop: 4, opacity: 0.8 },
+  addButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  voteListCard: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 24, 
+    borderRadius: 28, 
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.06, 
+    shadowRadius: 12, 
+    elevation: 3 
+  },
   voteListInfo: { flex: 1 },
-  voteListTitle: { fontSize: 17, fontWeight: 'bold' },
-  voteListMeta: { fontSize: 12 },
-  closedBadge: { marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  voteListTitle: { fontSize: 18, fontWeight: '800' },
+  voteListMeta: { fontSize: 13, fontWeight: '500', marginTop: 2 },
+  closedBadge: { marginLeft: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  iconCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  iconCircleSmall: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   detailContainer: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee2' },
-  detailHeaderTitle: { fontSize: 18, fontWeight: 'bold' },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee2' },
+  detailHeaderTitle: { fontSize: 20, fontWeight: '800' },
   closeBtn: { padding: 5 },
   detailDeleteBtn: { padding: 5 },
-  detailScroll: { padding: 20 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
-  voteQuestion: { fontSize: 22, fontWeight: 'bold', marginBottom: 25 },
-  optItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 12, borderWidth: 1 },
-  voterCountBadge: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.05)' },
-  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 10, marginTop: 10 },
-  voterRow: { flexDirection: 'row' },
-  voterLabel: { fontSize: 13, fontWeight: 'bold', width: 70 },
+  detailScroll: { padding: 24 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, alignSelf: 'flex-start' },
+  voteQuestion: { fontSize: 26, fontWeight: '800', marginBottom: 30, lineHeight: 34 },
+  optionsSection: { marginBottom: 25 },
+  optItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 20, 
+    borderRadius: 24, 
+    marginBottom: 14,
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 10, 
+    elevation: 2 
+  },
+  voterCountBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  voterSummaryCard: { 
+    padding: 24, 
+    borderRadius: 28, 
+    marginBottom: 20,
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 10, 
+    elevation: 2 
+  },
+  voterRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  voterLabelContainer: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, width: 85, alignItems: 'center', marginRight: 12 },
+  voterLabel: { fontSize: 12, fontWeight: '800' },
   voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-  voterName: { fontSize: 13 },
-  rankingBox: { padding: 20, borderRadius: 20, borderWidth: 1, marginVertical: 20 },
-  rankingHeader: { fontSize: 15, fontWeight: 'bold', marginBottom: 15 },
-  rankingItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  rankingIdx: { width: 30, fontSize: 13, fontWeight: 'bold' },
-  rankingText: { flex: 1, fontSize: 14 },
-  rankingCount: { fontSize: 14, fontWeight: 'bold' },
-  resultBanner: { padding: 15, borderRadius: 15, borderWidth: 1, alignItems: 'center', marginBottom: 20 },
-  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, borderRadius: 15, borderWidth: 1, marginTop: 10, borderStyle: 'dashed' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '90%' },
-  voterModalContent: { padding: 20, borderRadius: 25, width: '80%' },
+  voterName: { fontSize: 14, fontWeight: '500', marginRight: 6, marginBottom: 4 },
+  rankingBox: { 
+    padding: 24, 
+    borderRadius: 32, 
+    marginBottom: 25,
+    shadowOffset: { width: 0, height: 6 }, 
+    shadowOpacity: 0.07, 
+    shadowRadius: 15, 
+    elevation: 4 
+  },
+  rankingHeader: { fontSize: 17, fontWeight: '800' },
+  rankingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
+  rankingBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  rankingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  rankingText: { flex: 1, fontSize: 15, fontWeight: '600' },
+  rankingCountRow: { flexDirection: 'row', alignItems: 'center' },
+  rankingCount: { fontSize: 15, fontWeight: '800', marginRight: 4 },
+  resultBanner: { 
+    flexDirection: 'row',
+    padding: 20, 
+    borderRadius: 24, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 20,
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.15, 
+    shadowRadius: 10, 
+    elevation: 5
+  },
+  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 24, borderWidth: 2, marginTop: 10, borderStyle: 'dashed' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { padding: 25, borderTopLeftRadius: 40, borderTopRightRadius: 40, maxHeight: '92%', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 10 },
+  voterModalContent: { padding: 25, borderRadius: 32, width: '85%', maxHeight: '70%' },
   voterList: { marginTop: 10 },
-  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 22, fontWeight: 'bold' },
-  label: { fontSize: 13, fontWeight: '700', marginTop: 15, marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 15, padding: 15, fontSize: 16, marginBottom: 10 },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 15 },
-  settingLabel: { fontSize: 16, fontWeight: '500' },
-  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderWidth: 1, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.03)' },
-  compactPicker: { borderWidth: 1, borderRadius: 12, marginTop: 10, overflow: 'hidden' },
+  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  modalTitle: { fontSize: 24, fontWeight: '800' },
+  label: { fontSize: 14, fontWeight: '800', marginTop: 20, marginBottom: 10, marginLeft: 4 },
+  input: { borderWidth: 1.5, borderRadius: 20, padding: 18, fontSize: 16, marginBottom: 12 },
+  settingCard: { padding: 18, borderRadius: 24, borderWidth: 1, borderColor: '#eee2' },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingLabel: { fontSize: 16, fontWeight: '700' },
+  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderWidth: 1.5, borderRadius: 20 },
+  compactPicker: { borderRadius: 24, marginTop: 12, overflow: 'hidden', borderWidth: 1 },
   pickerHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee2' },
-  pickerTab: { flex: 1, padding: 10, alignItems: 'center' },
-  smallDateBtn: { width: 45, height: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, marginRight: 8 },
-  smallTimeBtn: { padding: 15, alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#eee1' },
-  optInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  addOptBtn: { padding: 15, borderRadius: 15, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', marginTop: 5, marginBottom: 20 },
-  saveBtn: { padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  saveBtnText: { fontSize: 17, fontWeight: 'bold' },
-  emptyText: { textAlign: 'center', marginTop: 100, fontSize: 16 }
+  pickerTab: { flex: 1, padding: 15, alignItems: 'center' },
+  smallDateBtn: { width: 50, height: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
+  smallTimeBtn: { padding: 18, alignItems: 'center' },
+  optInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  removeOptBtn: { marginLeft: 12 },
+  addOptBtn: { padding: 18, borderRadius: 20, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', marginTop: 5, marginBottom: 20 },
+  saveBtn: { padding: 20, borderRadius: 24, alignItems: 'center', marginTop: 25, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
+  saveBtnText: { fontSize: 18, fontWeight: '800' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
+  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 16, fontWeight: '500' }
 });
