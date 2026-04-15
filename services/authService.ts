@@ -10,13 +10,13 @@ WebBrowser.maybeCompleteAuthSession();
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
     try {
-      // 💡 1. Redirect URI 생성 (Expo Go와 네이티브 환경 모두 대응)
+      // 💡 Redirect URI 생성 (scheme 명시)
       const redirectTo = AuthSession.makeRedirectUri({
+        scheme: 'laondancefeedback',
         path: 'auth/callback',
       });
       
-      console.log(`[Auth] Starting ${provider} login...`);
-      console.log(`[Auth] Redirect URI: ${redirectTo}`);
+      console.log(`[Auth] Starting ${provider} login with redirect: ${redirectTo}`);
 
       const options: any = {
         redirectTo,
@@ -24,65 +24,35 @@ export const authService = {
       };
 
       if (provider === 'kakao') {
+        // 카카오 추가 권한 요청
         options.queryParams = {
           scope: 'profile_nickname,account_email',
         };
       }
 
-      // 💡 2. Supabase에 로그인 요청
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options,
       });
 
-      if (error) {
-        console.error(`[Auth] Supabase Error:`, error.status, error.message, error.code);
-        throw error;
-      }
-      
-      if (!data?.url) throw new Error('인증 URL을 생성할 수 없습니다.');
+      if (error) throw error;
+      if (!data?.url) throw new Error('인증 URL 생성 실패');
 
-      // 💡 3. 브라우저 인증 실행
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        console.log(`[Auth] Browser returned URL:`, res.url);
-        
-        // URL에서 code 파라미터가 있는지 확인 (PKCE)
-        const parsedUrl = new URL(res.url.replace('#', '?')); // fragment 대응
-        const code = parsedUrl.searchParams.get('code');
-        const error_description = parsedUrl.searchParams.get('error_description');
-
-        if (error_description) {
-          throw new Error(`인증 오류: ${error_description}`);
-        }
-
-        if (!code) {
-          // code가 없는데 access_token이 있다면 Implicit flow로 처리 시도
-          const accessToken = parsedUrl.searchParams.get('access_token');
-          if (accessToken) {
-            console.log('[Auth] Using implicit flow fallback');
-            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: parsedUrl.searchParams.get('refresh_token') || '',
-            });
-            
-            if (sessionError) throw sessionError;
-            
-            // 세션 설정 후 앱 메인으로 이동하도록 유도
-            return { data: sessionData, error: null };
-          }
-          throw new Error('인증 코드를 찾을 수 없습니다. (PKCE code missing)');
-        }
-        
-        // 💡 4. 세션 교환
+        // 💡 PKCE Flow: URL에서 code 추출 후 세션 교환
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
         
         if (sessionError) {
-          console.error('[Auth] Session exchange error:', sessionError.message);
-          // 이미 세션이 있는지 마지막 확인
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) return { data: { session }, error: null };
+          // Fallback: URL 파싱 시도 (Implicit flow 대비)
+          const urlObj = new URL(res.url.replace('#', '?'));
+          const access_token = urlObj.searchParams.get('access_token');
+          const refresh_token = urlObj.searchParams.get('refresh_token');
+          
+          if (access_token) {
+            return await supabase.auth.setSession({ access_token, refresh_token: refresh_token || '' });
+          }
           throw sessionError;
         }
         
@@ -91,7 +61,7 @@ export const authService = {
 
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Error Detail:`, err);
+      console.error(`[Auth] ${provider} Detail Error:`, err);
       return { data: null, error: err };
     }
   },

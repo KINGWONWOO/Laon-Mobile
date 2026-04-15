@@ -37,9 +37,12 @@ export default function LoginScreen() {
   const handleSocialLogin = async (provider: 'google' | 'kakao') => {
     setSocialLoading(provider);
     try {
-      await authService.signInWithProvider(provider);
+      const { data, error } = await authService.signInWithSocial(provider);
+      if (error) throw error;
+      if (data?.session) router.replace('/rooms');
     } catch (err: any) {
-      Alert.alert('알림', `${provider} 로그인 중 오류가 발생했습니다.`);
+      console.error(`[SocialAuth] Error:`, err);
+      Alert.alert('알림', `${provider} 로그인 중 오류가 발생했습니다.\n${err.message || ''}`);
     } finally {
       setSocialLoading(null);
     }
