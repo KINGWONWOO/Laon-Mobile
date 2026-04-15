@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch, ActivityIndicator } from 'react-native';
 import { useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -28,10 +28,14 @@ export default function ScheduleScreen() {
   const [endTime, setEndTime] = useState(18);   // 6 PM
   const [useNotification, setUseNotification] = useState(true);
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
+  const [deadlineHour, setDeadlineHour] = useState(23);
+  const [deadlineMinute, setDeadlineMinute] = useState(59);
 
   // Edit states
   const [editTitle, setEditTitle] = useState('');
   const [editDeadline, setEditDeadline] = useState<Date | null>(null);
+  const [editDeadlineHour, setEditDeadlineHour] = useState(23);
+  const [editDeadlineMinute, setEditDeadlineMinute] = useState(59);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const roomSchedules = useMemo(() => schedules.filter(s => s.roomId === id), [schedules, id]);
@@ -72,6 +76,8 @@ export default function ScheduleScreen() {
       setSelectedDates([]);
       setUseNotification(true);
       setDeadlineDate(null);
+      setDeadlineHour(23);
+      setDeadlineMinute(59);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
@@ -89,7 +95,15 @@ export default function ScheduleScreen() {
     Alert.alert('일정 설정', '어떤 작업을 하시겠습니까?', [
       { text: '제목/기한 수정', onPress: () => {
         setEditTitle(sch.title);
-        setEditDeadline(sch.deadline ? new Date(sch.deadline) : null);
+        const d = sch.deadline ? new Date(sch.deadline) : null;
+        setEditDeadline(d);
+        if (d) {
+          setEditDeadlineHour(d.getHours());
+          setEditDeadlineMinute(d.getMinutes());
+        } else {
+          setEditDeadlineHour(23);
+          setEditDeadlineMinute(59);
+        }
         setShowEditModal(true);
       }},
       { text: '삭제', style: 'destructive', onPress: () => handleDeleteSchedule(sch.id) },
@@ -394,7 +408,15 @@ export default function ScheduleScreen() {
                         <TouchableOpacity 
                           key={day} 
                           style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
-                          onPress={() => setDeadlineDate(isSelected ? null : d)}
+                          onPress={() => {
+                            if (isSelected) {
+                              setDeadlineDate(null);
+                            } else {
+                              const newD = new Date(d);
+                              newD.setHours(deadlineHour, deadlineMinute, 0, 0);
+                              setDeadlineDate(newD);
+                            }
+                          }}
                         >
                           <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
                           <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
@@ -402,6 +424,52 @@ export default function ScheduleScreen() {
                       );
                     })}
                   </ScrollView>
+
+                  <Text style={[styles.label, { color: theme.textSecondary }]}>마감 시간</Text>
+                  <View style={styles.timeSelectRow}>
+                    <View style={styles.timeCol}>
+                      <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>시</Text>
+                      <ScrollView style={[styles.timeScroll, { borderColor: theme.border }]}>
+                        {Array.from({length: 24}).map((_, h) => (
+                          <TouchableOpacity 
+                            key={h} 
+                            style={[styles.timeItem, deadlineHour === h && { backgroundColor: theme.primary + '33' }]}
+                            onPress={() => {
+                              setDeadlineHour(h);
+                              if (deadlineDate) {
+                                const newD = new Date(deadlineDate);
+                                newD.setHours(h);
+                                setDeadlineDate(newD);
+                              }
+                            }}
+                          >
+                            <Text style={{ color: deadlineHour === h ? theme.primary : theme.text }}>{h}시</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                    <View style={styles.timeCol}>
+                      <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>분</Text>
+                      <ScrollView style={[styles.timeScroll, { borderColor: theme.border }]}>
+                        {[0, 10, 20, 30, 40, 50, 59].map((m) => (
+                          <TouchableOpacity 
+                            key={m} 
+                            style={[styles.timeItem, deadlineMinute === m && { backgroundColor: theme.primary + '33' }]}
+                            onPress={() => {
+                              setDeadlineMinute(m);
+                              if (deadlineDate) {
+                                const newD = new Date(deadlineDate);
+                                newD.setMinutes(m);
+                                setDeadlineDate(newD);
+                              }
+                            }}
+                          >
+                            <Text style={{ color: deadlineMinute === m ? theme.primary : theme.text }}>{m}분</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
                 </>
               )}
 
@@ -461,7 +529,15 @@ export default function ScheduleScreen() {
                   <TouchableOpacity 
                     key={day} 
                     style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
-                    onPress={() => setEditDeadline(isSelected ? null : d)}
+                    onPress={() => {
+                      if (isSelected) {
+                        setEditDeadline(null);
+                      } else {
+                        const newD = new Date(d);
+                        newD.setHours(editDeadlineHour, editDeadlineMinute, 0, 0);
+                        setEditDeadline(newD);
+                      }
+                    }}
                   >
                     <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
                     <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
@@ -469,6 +545,52 @@ export default function ScheduleScreen() {
                 );
               })}
             </ScrollView>
+
+            <Text style={[styles.label, { color: theme.textSecondary, marginTop: 10 }]}>마감 시간 수정</Text>
+            <View style={styles.timeSelectRow}>
+              <View style={styles.timeCol}>
+                <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>시</Text>
+                <ScrollView style={[styles.timeScroll, { borderColor: theme.border }]}>
+                  {Array.from({length: 24}).map((_, h) => (
+                    <TouchableOpacity 
+                      key={h} 
+                      style={[styles.timeItem, editDeadlineHour === h && { backgroundColor: theme.primary + '33' }]}
+                      onPress={() => {
+                        setEditDeadlineHour(h);
+                        if (editDeadline) {
+                          const newD = new Date(editDeadline);
+                          newD.setHours(h);
+                          setEditDeadline(newD);
+                        }
+                      }}
+                    >
+                      <Text style={{ color: editDeadlineHour === h ? theme.primary : theme.text }}>{h}시</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timeCol}>
+                <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>분</Text>
+                <ScrollView style={[styles.timeScroll, { borderColor: theme.border }]}>
+                  {[0, 10, 20, 30, 40, 50, 59].map((m) => (
+                    <TouchableOpacity 
+                      key={m} 
+                      style={[styles.timeItem, editDeadlineMinute === m && { backgroundColor: theme.primary + '33' }]}
+                      onPress={() => {
+                        setEditDeadlineMinute(m);
+                        if (editDeadline) {
+                          const newD = new Date(editDeadline);
+                          newD.setMinutes(m);
+                          setEditDeadline(newD);
+                        }
+                      }}
+                    >
+                      <Text style={{ color: editDeadlineMinute === m ? theme.primary : theme.text }}>{m}분</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
 
             <TouchableOpacity onPress={handleUpdateSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>
               {isUpdating ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>수정 완료</Text>}
