@@ -85,7 +85,6 @@ export default function RoomMainScreen() {
   const manageActions = [
     { title: '일정 조율', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B' },
     { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#A06CD5' },
-    { title: '멤버 목록', icon: 'people', path: `/room/${id}/members`, color: '#8E8E93' },
   ];
 
   return (
@@ -94,7 +93,7 @@ export default function RoomMainScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        {/* New Designer Header */}
+        {/* Designer Header */}
         <View style={styles.headerHero}>
           <Image source={{ uri: room.imageUri || 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=1000' }} style={styles.heroBg} blurRadius={Platform.OS === 'ios' ? 40 : 20} />
           <LinearGradient colors={['transparent', theme.background]} style={styles.heroOverlay} />
@@ -102,7 +101,13 @@ export default function RoomMainScreen() {
           <View style={[styles.heroContent, { paddingTop: insets.top + 20 }]}>
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
-              <TouchableOpacity style={styles.shareCircle} onPress={handleInvite}><Ionicons name="share-social" size={20} color="#fff" /></TouchableOpacity>
+              <View style={{flexDirection: 'row'}}>
+                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary}]} onPress={() => router.push(`/room/${id}/members`)}>
+                  <Ionicons name="people" size={16} color="#fff" />
+                  <Text style={styles.smallMemberText}>멤버</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.shareCircle, {marginLeft: 8}]} onPress={handleInvite}><Ionicons name="share-social" size={20} color="#fff" /></TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.roomBrand}>
@@ -113,40 +118,23 @@ export default function RoomMainScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.roomHeroName} numberOfLines={1}>{room.name}</Text>
-              <TouchableOpacity activeOpacity={0.7} style={styles.idBadgeRow} onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사 완료', 'ID가 복사되었습니다.'); }}>
-                <Text style={styles.idBadgeText}>ID: {room.id.slice(0,8)}</Text>
-                <Ionicons name="copy-outline" size={10} color="#fff" style={{marginLeft: 4, opacity: 0.8}} />
-              </TouchableOpacity>
+              
+              <View style={styles.secureInfoRow}>
+                <TouchableOpacity activeOpacity={0.7} style={styles.idBadgeRow} onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사 완료', 'ID가 복사되었습니다.'); }}>
+                  <Text style={styles.idBadgeText}>ID: {room.id.slice(0,8)}</Text>
+                  <Ionicons name="copy-outline" size={10} color="#fff" style={{marginLeft: 4, opacity: 0.8}} />
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.7} style={[styles.idBadgeRow, {marginLeft: 8}]} onPress={() => setShowPasscode(!showPasscode)}>
+                  <Text style={styles.idBadgeText}>Pass: {showPasscode ? room.passcode : '••••••'}</Text>
+                  <Ionicons name={showPasscode ? "eye-off" : "eye"} size={10} color="#fff" style={{marginLeft: 4, opacity: 0.8}} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
 
         <View style={styles.mainContent}>
-          {/* Action List with unique design */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionLabel, { color: theme.primary }]}>MAIN WORK</Text>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>핵심 기능</Text>
-          </View>
-          
-          {coreActions.map((item, idx) => (
-            <RoomActionBtn key={idx} item={item} theme={theme} onPress={() => router.push(item.path as any)} />
-          ))}
-
-          {/* Manage Grid - 2 per row */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionLabel, { color: theme.primary }]}>MANAGEMENT</Text>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>관리 및 멤버</Text>
-          </View>
-          <View style={styles.gridContainer}>
-            {manageActions.map((item, idx) => (
-              <TouchableOpacity key={idx} activeOpacity={0.8} style={[styles.gridCard, { backgroundColor: theme.card }]} onPress={() => router.push(item.path as any)}>
-                <View style={[styles.gridIconCircle, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={22} color={item.color} /></View>
-                <Text style={[styles.gridCardTitle, { color: theme.text }]}>{item.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Notices Section */}
+          {/* 1. Notices Section (Moved to TOP) */}
           <View style={styles.noticeHeaderRow}>
             <View>
               <Text style={[styles.sectionLabel, { color: theme.primary }]}>ANNOUNCEMENTS</Text>
@@ -170,6 +158,30 @@ export default function RoomMainScreen() {
             </TouchableOpacity>
           )}
 
+          {/* 2. Action List */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionLabel, { color: theme.primary }]}>MAIN WORK</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>핵심 기능</Text>
+          </View>
+          
+          {coreActions.map((item, idx) => (
+            <RoomActionBtn key={idx} item={item} theme={theme} onPress={() => router.push(item.path as any)} />
+          ))}
+
+          {/* 3. Manage Grid */}
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionLabel, { color: theme.primary }]}>MANAGEMENT</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>관리</Text>
+          </View>
+          <View style={styles.gridContainer}>
+            {manageActions.map((item, idx) => (
+              <TouchableOpacity key={idx} activeOpacity={0.8} style={[styles.gridCard, { backgroundColor: theme.card }]} onPress={() => router.push(item.path as any)}>
+                <View style={[styles.gridIconCircle, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={22} color={item.color} /></View>
+                <Text style={[styles.gridCardTitle, { color: theme.text }]}>{item.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {isLeader && (
             <TouchableOpacity style={styles.roomDeleteLink} onPress={() => Alert.alert('방 삭제', '정말 삭제하시겠습니까?', [{ text: '취소' }, { text: '삭제', style: 'destructive', onPress: () => { deleteRoom(id as string); router.replace('/rooms'); } }])}>
               <Text style={styles.roomDeleteText}>크루룸 삭제하기</Text>
@@ -178,7 +190,7 @@ export default function RoomMainScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Notice Modal - Redesigned */}
+      {/* Add Notice Modal */}
       <Modal visible={showAddNotice} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
@@ -212,7 +224,7 @@ export default function RoomMainScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Profile Modal - Redesigned */}
+      {/* Profile Modal */}
       <Modal visible={showProfileModal} animationType="fade" transparent>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
@@ -243,14 +255,17 @@ const styles = StyleSheet.create({
   heroContent: { flex: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 20 },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   backCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
+  smallMemberBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, ...Shadows.soft },
+  smallMemberText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 4 },
   shareCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
   roomBrand: { alignItems: 'center' },
-  roomImageWrapper: { position: 'relative', marginBottom: 16 },
-  mainRoomImg: { width: 100, height: 100, borderRadius: 40, borderWidth: 4, borderColor: '#fff' },
-  roomSettingsBtn: { position: 'absolute', bottom: -2, right: -2, width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
-  roomHeroName: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -1, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: {width: 0, height: 2}, textShadowRadius: 4 },
-  idBadgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 8 },
-  idBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  roomImageWrapper: { position: 'relative', marginBottom: 12 },
+  mainRoomImg: { width: 90, height: 90, borderRadius: 36, borderWidth: 3, borderColor: '#fff' },
+  roomSettingsBtn: { position: 'absolute', bottom: -2, right: -2, width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
+  roomHeroName: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -1, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: {width: 0, height: 2}, textShadowRadius: 4 },
+  secureInfoRow: { flexDirection: 'row', marginTop: 10 },
+  idBadgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15 },
+  idBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
 
   mainContent: { paddingHorizontal: 24, marginTop: -10 },
   sectionHeader: { marginTop: 32, marginBottom: 16 },

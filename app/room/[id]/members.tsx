@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, TouchableOpacity, Platform } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { Shadows } from '../../../constants/theme';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -19,7 +20,7 @@ export default function MembersScreen() {
       if (!id) return;
       try {
         const room = await getRoomByIdRemote(id);
-        if (room) setLeaderId(room.leader_id);
+        if (room) setLeaderId(room.leaderId || (room as any).leader_id);
 
         const { data, error } = await supabase
           .from('room_members')
@@ -49,7 +50,7 @@ export default function MembersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
@@ -60,6 +61,7 @@ export default function MembersScreen() {
       <FlatList
         data={roomMembers}
         keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
         renderItem={({ item }) => {
           const isLeader = item.id === leaderId;
           const roomProfile = getRoomUserProfile(id as string, item.id);
@@ -67,11 +69,11 @@ export default function MembersScreen() {
           const displayImage = roomProfile?.profileImage || item.profileImage;
 
           return (
-            <View style={[styles.memberCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.memberCard, { backgroundColor: theme.card }, Shadows.soft]}>
               {displayImage ? (
                 <Image source={{ uri: displayImage }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, { backgroundColor: theme.primary + '22' }]}>
+                <View style={[styles.avatar, { backgroundColor: theme.primary + '15' }]}>
                   <Text style={[styles.avatarText, { color: theme.primary }]}>{displayName[0]?.toUpperCase()}</Text>
                 </View>
               )}
@@ -79,13 +81,18 @@ export default function MembersScreen() {
                 <View style={styles.nameRow}>
                   <Text style={[styles.name, { color: theme.text }]}>{displayName}</Text>
                   {isLeader && (
-                    <View style={[styles.leaderBadge, { backgroundColor: theme.primary }]}>
-                      <Text style={styles.leaderText}>방장</Text>
+                    <View style={[styles.leaderBadge, { backgroundColor: theme.primary + '15' }]}>
+                      <Text style={[styles.leaderText, { color: theme.primary }]}>LEADER</Text>
                     </View>
                   )}
                 </View>
-                {roomProfile?.name && <Text style={{ color: theme.textSecondary, fontSize: 11 }}>원래 이름: {item.name}</Text>}
+                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.6 }}>본명: {item.name}</Text>
               </View>
+              {item.id === (supabase.auth.getUser() as any)?.id && (
+                <View style={[styles.meBadge, { backgroundColor: theme.textSecondary + '10' }]}>
+                  <Text style={{ fontSize: 10, color: theme.textSecondary, fontWeight: 'bold' }}>나</Text>
+                </View>
+              )}
             </View>
           );
         }}
@@ -96,16 +103,18 @@ export default function MembersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 25 },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 15, paddingTop: 60, borderBottomWidth: 0.5 },
   backBtn: { padding: 5 },
-  title: { fontSize: 22, fontWeight: 'bold' },
-  memberCard: { flexDirection: 'row', padding: 15, borderRadius: 18, marginBottom: 12, borderWidth: 1, alignItems: 'center' },
-  avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  avatarText: { fontSize: 20, fontWeight: 'bold' },
+  title: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
+  listContent: { padding: 24 },
+  memberCard: { flexDirection: 'row', padding: 18, borderRadius: 28, marginBottom: 16, alignItems: 'center' },
+  avatar: { width: 56, height: 56, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 18 },
+  avatarText: { fontSize: 22, fontWeight: '900' },
   info: { flex: 1, justifyContent: 'center' },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
-  name: { fontSize: 17, fontWeight: 'bold', marginRight: 8 },
-  leaderBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  leaderText: { fontSize: 11, fontWeight: 'bold', color: '#000' }
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  name: { fontSize: 17, fontWeight: '800', marginRight: 10, letterSpacing: -0.5 },
+  leaderBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  leaderText: { fontSize: 9, fontWeight: '900' },
+  meBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 }
 });
