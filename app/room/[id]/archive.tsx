@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -7,10 +7,12 @@ import { Shadows } from '../../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull } from '../../../components/ui/RoomComponents';
+import { Image as ExpoImage } from 'expo-image';
 
 const { width } = Dimensions.get('window');
-const COLUMN_COUNT = 3;
-const ITEM_SIZE = width / COLUMN_COUNT;
+const COLUMN_COUNT = 2; // Two columns for a more "designer" high-end feel
+const SPACING = 20;
+const ITEM_SIZE = (width - (SPACING * (COLUMN_COUNT + 1))) / COLUMN_COUNT;
 
 export default function ArchiveScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -102,16 +104,16 @@ export default function ArchiveScreen() {
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
-      style={styles.gridItem} 
+      style={[styles.gridItem, { backgroundColor: theme.card }]} 
       onPress={() => { setSelectedPhoto(item); markItemAsAccessed('photo', item.id); }}
     >
-      <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
+      <ExpoImage source={{ uri: item.photoUrl }} style={styles.gridImage} contentFit="cover" transition={300} />
     </TouchableOpacity>
   );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
         <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
@@ -122,67 +124,82 @@ export default function ArchiveScreen() {
         renderItem={renderItem}
         keyExtractor={item => item.id}
         numColumns={COLUMN_COUNT}
+        columnWrapperStyle={{ paddingHorizontal: SPACING, justifyContent: 'space-between' }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
       />
 
       {/* Photo Detail Modal */}
-      <Modal visible={!!selectedPhoto} animationType="fade" transparent>
+      <Modal visible={!!selectedPhoto} animationType="slide" transparent>
         <View style={styles.detailOverlay}>
-          <View style={[styles.detailContent, { backgroundColor: theme.background }]}>
+          <View style={[styles.detailContent, { backgroundColor: theme.background, marginTop: insets.top + 20, borderTopLeftRadius: 40, borderTopRightRadius: 40 }]}>
             <View style={styles.detailHeader}>
-              <TouchableOpacity onPress={() => setSelectedPhoto(null)}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
-              <View style={{flex: 1}} />
-              {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
-                <View style={{flexDirection: 'row'}}>
-                  <TouchableOpacity onPress={() => { setEditDesc(selectedPhoto.description || ''); setIsEditingPhoto(true); }} style={{marginRight: 15}}>
-                    <Ionicons name="pencil" size={22} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeletePhoto(selectedPhoto)}>
-                    <Ionicons name="trash" size={22} color={theme.error} />
-                  </TouchableOpacity>
+              <View style={styles.detailAuthor}>
+                <ExpoImage source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.authorImg} />
+                <View>
+                  <Text style={[styles.authorName, { color: theme.text }]}>{getUserById(selectedPhoto?.userId)?.name}</Text>
+                  <Text style={[styles.dateText, { color: theme.textSecondary }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
                 </View>
-              )}
+              </View>
+              <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.closeBtn}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
             </View>
+            
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="contain" />
-              <View style={styles.detailInfo}>
-                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 10}}>
-                  <Image source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.authorImg} />
-                  <View>
-                    <Text style={{color: theme.text, fontWeight: '800', letterSpacing: -0.5}}>{getUserById(selectedPhoto?.userId)?.name}</Text>
-                    <Text style={{color: theme.textSecondary, fontSize: 11, fontWeight: '500', opacity: 0.7}}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
+              <ExpoImage source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} contentFit="cover" />
+              
+              <View style={styles.detailActions}>
+                {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
+                  <View style={{flexDirection: 'row'}}>
+                    <TouchableOpacity onPress={() => { setEditDesc(selectedPhoto.description || ''); setIsEditingPhoto(true); }} style={styles.actionIcon}>
+                      <Ionicons name="pencil" size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeletePhoto(selectedPhoto)} style={styles.actionIcon}>
+                      <Ionicons name="trash" size={20} color={theme.error} />
+                    </TouchableOpacity>
                   </View>
-                </View>
-                <Text style={{color: theme.text, fontSize: 15, lineHeight: 22, marginBottom: 20}}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
+                )}
+              </View>
+
+              <View style={styles.detailInfo}>
+                <Text style={[styles.description, { color: theme.text }]}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
                 
                 <View style={styles.commentSection}>
-                  <Text style={{color: theme.text, fontWeight: '800', marginBottom: 15, letterSpacing: -0.5}}>댓글 {selectedPhoto?.comments?.length || 0}</Text>
-                  {selectedPhoto?.comments?.map((c: any) => (
-                    <View key={c.id} style={styles.cItem}>
-                      <Image source={{ uri: getUserById(c.userId)?.profileImage }} style={styles.cAuthorImg} />
-                      <View style={{flex: 1}}>
-                        <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-                          <Text style={{color: theme.text, fontWeight: '800', fontSize: 13, letterSpacing: -0.5}}>{getUserById(c.userId)?.name}</Text>
-                          {c.userId === currentUser?.id && (
-                            <View style={{flexDirection: 'row'}}>
-                              <TouchableOpacity onPress={() => { setEditingComment(c); setEditCommentText(c.text); }}><Ionicons name="pencil" size={12} color={theme.textSecondary} style={{marginRight: 8}} /></TouchableOpacity>
-                              <TouchableOpacity onPress={() => handleDeleteComment(c.id)}><Ionicons name="trash" size={12} color={theme.error} /></TouchableOpacity>
-                            </View>
-                          )}
+                  <Text style={[styles.commentTitle, { color: theme.text }]}>댓글 {selectedPhoto?.comments?.length || 0}개</Text>
+                  {selectedPhoto?.comments?.map((c: any) => {
+                    const author = getUserById(c.userId);
+                    return (
+                      <View key={c.id} style={styles.cItem}>
+                        <ExpoImage source={{ uri: author?.profileImage }} style={styles.cAuthorImg} />
+                        <View style={{flex: 1}}>
+                          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                            <Text style={[styles.cUserName, { color: theme.text }]}>{author?.name}</Text>
+                            {c.userId === currentUser?.id && (
+                              <View style={{flexDirection: 'row'}}>
+                                <TouchableOpacity onPress={() => { setEditingComment(c); setEditCommentText(c.text); }} style={{padding: 4}}><Ionicons name="pencil" size={12} color={theme.textSecondary} /></TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleDeleteComment(c.id)} style={{padding: 4}}><Ionicons name="trash" size={12} color={theme.error} /></TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.cText, { color: theme.text }]}>{c.text}</Text>
+                          <Text style={[styles.cDate, { color: theme.textSecondary }]}>{formatDateFull(c.createdAt)}</Text>
                         </View>
-                        <Text style={{color: theme.text, fontSize: 14, marginTop: 2}}>{c.text}</Text>
-                        <Text style={{color: theme.textSecondary, fontSize: 10, marginTop: 4, fontWeight: '500', opacity: 0.7}}>{formatDateFull(c.createdAt)}</Text>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </View>
             </ScrollView>
+            
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <View style={[styles.commentInputRow, { paddingBottom: insets.bottom + 10 }]}>
-                <TextInput style={[styles.cInput, { color: theme.text, backgroundColor: theme.card }]} placeholder="댓글 달기..." placeholderTextColor={theme.textSecondary} value={newComment} onChangeText={setNewComment} />
-                <TouchableOpacity onPress={handleAddComment} style={[styles.sendBtn, { backgroundColor: theme.primary }]}><Ionicons name="send" size={18} color={theme.background} /></TouchableOpacity>
+              <View style={[styles.commentInputRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                <TextInput 
+                  style={[styles.cInput, { color: theme.text, backgroundColor: theme.card }]} 
+                  placeholder="댓글 남기기..." 
+                  placeholderTextColor={theme.textSecondary} 
+                  value={newComment} 
+                  onChangeText={setNewComment} 
+                />
+                <TouchableOpacity onPress={handleAddComment} style={[styles.sendBtn, { backgroundColor: theme.primary }]}><Ionicons name="arrow-up" size={20} color="#fff" /></TouchableOpacity>
               </View>
             </KeyboardAvoidingView>
           </View>
@@ -193,11 +210,11 @@ export default function ArchiveScreen() {
       <Modal visible={isEditingPhoto} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>설명 수정</Text>
+            <Text style={{color: theme.text, fontSize: 24, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5}}>설명 수정</Text>
             <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} value={editDesc} onChangeText={setEditDesc} multiline />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-              <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdatePhoto}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdatePhoto}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -207,11 +224,11 @@ export default function ArchiveScreen() {
       <Modal visible={!!editingComment} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>댓글 수정</Text>
+            <Text style={{color: theme.text, fontSize: 24, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5}}>댓글 수정</Text>
             <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-              <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary, fontWeight: '500', opacity: 0.7}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'800'}}>수정</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -221,10 +238,10 @@ export default function ArchiveScreen() {
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>사진 업로드</Text>
+            <Text style={{color: theme.text, fontSize: 24, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5}}>사진 업로드</Text>
             <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background }]} placeholder="사진 설명 (선택)" placeholderTextColor={theme.textSecondary} value={description} onChangeText={setDescription} multiline />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickImage} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: '800', color: theme.background, letterSpacing: -0.5}}>갤러리에서 선택</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '500', opacity: 0.7}}>취소</Text></TouchableOpacity>
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickImage} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: '900', color: '#fff', letterSpacing: -0.5}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '600'}}>취소</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -234,28 +251,39 @@ export default function ArchiveScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 15 },
   backBtn: { padding: 5 },
-  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
-  gridItem: { width: ITEM_SIZE, height: ITEM_SIZE, padding: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.2, marginBottom: SPACING, borderRadius: 32, ...Shadows.card, overflow: 'hidden' },
   gridImage: { width: '100%', height: '100%' },
-  detailOverlay: { flex: 1, backgroundColor: '#000' },
-  detailContent: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', padding: 15 },
-  detailImage: { width: '100%', height: width * 1.2 },
+  detailOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)' },
+  detailContent: { flex: 1, overflow: 'hidden' },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  detailAuthor: { flexDirection: 'row', alignItems: 'center' },
+  authorImg: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
+  authorName: { fontSize: 16, fontWeight: '900', letterSpacing: -0.5 },
+  dateText: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  closeBtn: { padding: 8, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 20 },
+  detailImage: { width: '100%', aspectRatio: 1, backgroundColor: '#f0f0f0' },
+  detailActions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 15 },
+  actionIcon: { marginLeft: 20, padding: 5 },
   detailInfo: { padding: 20 },
-  authorImg: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
-  commentSection: { marginTop: 20, paddingTop: 20 },
+  description: { fontSize: 16, lineHeight: 24, fontWeight: '500' },
+  commentSection: { marginTop: 30, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 20 },
+  commentTitle: { fontSize: 18, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5 },
   cItem: { flexDirection: 'row', marginBottom: 20 },
-  cAuthorImg: { width: 30, height: 30, borderRadius: 15, marginRight: 10 },
-  commentInputRow: { flexDirection: 'row', alignItems: 'center', padding: 15 },
-  cInput: { flex: 1, height: 44, borderRadius: 20, paddingHorizontal: 15, marginRight: 10, ...Shadows.soft },
-  sendBtn: { width: 44, height: 44, borderRadius: 999, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 25, borderRadius: 28, ...Shadows.card },
-  input: { borderRadius: 20, padding: 15, marginBottom: 20, minHeight: 80, ...Shadows.soft },
+  cAuthorImg: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
+  cUserName: { fontSize: 14, fontWeight: '900' },
+  cText: { fontSize: 15, marginTop: 4, lineHeight: 20, fontWeight: '500' },
+  cDate: { fontSize: 11, marginTop: 6, fontWeight: '600' },
+  commentInputRow: { flexDirection: 'row', alignItems: 'center', padding: 20, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
+  cInput: { flex: 1, height: 50, borderRadius: 25, paddingHorizontal: 20, marginRight: 12, fontWeight: '500' },
+  sendBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
+  modalContent: { padding: 30, borderRadius: 32, ...Shadows.card },
+  input: { borderRadius: 24, padding: 20, marginBottom: 20, minHeight: 120, fontWeight: '500' },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContentUpload: { padding: 30, borderTopLeftRadius: 32, borderTopRightRadius: 32, ...Shadows.card },
-  titleInput: { borderRadius: 20, padding: 15, marginBottom: 20, minHeight: 100, ...Shadows.soft },
-  pickBtn: { padding: 15, borderRadius: 28, alignItems: 'center', ...Shadows.soft }
+  modalContentUpload: { padding: 40, borderTopLeftRadius: 40, borderTopRightRadius: 40, ...Shadows.card },
+  titleInput: { borderRadius: 24, padding: 20, marginBottom: 20, minHeight: 120, fontWeight: '500' },
+  pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center', ...Shadows.soft }
 });

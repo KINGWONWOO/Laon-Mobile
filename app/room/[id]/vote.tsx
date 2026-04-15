@@ -173,62 +173,104 @@ export default function VoteScreen() {
               })}
             </View>
 
-            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }]}>
+            <View style={styles.voterSummaryCard}>
               <View style={styles.voterRow}>
-                <View style={[styles.voterLabelContainer, { backgroundColor: theme.success + '15' }]}>
-                  <Text style={[styles.voterLabel, { color: theme.success }]}>참여 {participants.length}</Text>
+                <View style={[styles.voterLabelContainer, { backgroundColor: theme.primary + '10' }]}>
+                  <Text style={[styles.voterLabel, { color: theme.primary }]}>참여자 {participants.length}</Text>
                 </View>
-                <View style={styles.voterNamesRow}>
-                  {participants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}
-                  {participants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>아직 참여자가 없습니다.</Text>}
-                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarScroll}>
+                  {participants.map(vId => (
+                    <View key={vId} style={styles.avatarItem}>
+                      <View style={[styles.avatarCircle, { backgroundColor: theme.primary + '15' }]}>
+                        <Text style={[styles.avatarText, { color: theme.primary }]}>{getUserById(vId)?.name?.charAt(0) || '?'}</Text>
+                      </View>
+                      <Text style={[styles.avatarName, { color: theme.textSecondary }]} numberOfLines={1}>{getUserById(vId)?.name}</Text>
+                    </View>
+                  ))}
+                  {participants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13, marginLeft: 10 }}>아직 참여자가 없습니다.</Text>}
+                </ScrollView>
               </View>
-              <View style={[styles.voterRow, { marginTop: 15 }]}>
-                <View style={[styles.voterLabelContainer, { backgroundColor: theme.error + '15' }]}>
-                  <Text style={[styles.voterLabel, { color: theme.error }]}>미참여 {nonParticipants.length}</Text>
+              <View style={[styles.voterRow, { marginTop: 20 }]}>
+                <View style={[styles.voterLabelContainer, { backgroundColor: theme.textSecondary + '10' }]}>
+                  <Text style={[styles.voterLabel, { color: theme.textSecondary }]}>미참여 {nonParticipants.length}</Text>
                 </View>
-                <View style={styles.voterNamesRow}>
-                  {nonParticipants.map(vId => <Text key={vId} style={[styles.voterName, { color: theme.textSecondary }]}>{getUserById(vId)?.name} </Text>)}
-                  {nonParticipants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>모두 참여했습니다!</Text>}
-                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarScroll}>
+                  {nonParticipants.map(vId => (
+                    <View key={vId} style={[styles.avatarItem, { opacity: 0.5 }]}>
+                      <View style={[styles.avatarCircle, { backgroundColor: theme.textSecondary + '10' }]}>
+                        <Text style={[styles.avatarText, { color: theme.textSecondary }]}>{getUserById(vId)?.name?.charAt(0) || '?'}</Text>
+                      </View>
+                      <Text style={[styles.avatarName, { color: theme.textSecondary }]} numberOfLines={1}>{getUserById(vId)?.name}</Text>
+                    </View>
+                  ))}
+                  {nonParticipants.length === 0 && <Text style={{ color: theme.success, fontSize: 13, marginLeft: 10, fontWeight: '600' }}>모두 참여했습니다!</Text>}
+                </ScrollView>
               </View>
             </View>
 
             <View style={[styles.rankingBox, { backgroundColor: theme.card }]}>
-              <View style={{flexDirection:'row', alignItems:'center', marginBottom: 20}}>
-                <View style={[styles.iconCircleSmall, { backgroundColor: theme.accent + '15', marginRight: 10 }]}>
-                  <Ionicons name="trophy" size={16} color={theme.accent} />
-                </View>
-                <Text style={[styles.rankingHeader, { color: theme.text }]}>투표 순위 TOP 3</Text>
+              <View style={{flexDirection:'row', alignItems:'center', justifyContent: 'center', marginBottom: 25}}>
+                <Ionicons name="trophy-outline" size={20} color={theme.primary} style={{marginRight: 8}} />
+                <Text style={[styles.rankingHeader, { color: theme.text }]}>투표 순위</Text>
               </View>
               
-              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
-                <TouchableOpacity 
-                  key={idx} 
-                  style={styles.rankingItem} 
-                  onPress={() => { if(vote.isAnonymous) return Alert.alert('알림', '익명 투표입니다.'); setVotersToDisplay(r.voters); setVoterModalTitle(`'${r.text}' 투표자`); setShowVoterModal(true); }}
-                >
-                  <View style={[styles.rankingBadge, { backgroundColor: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : '#CD7F32' }]}>
-                    <Text style={styles.rankingBadgeText}>{idx + 1}</Text>
-                  </View>
-                  <Text style={[styles.rankingText, { color: theme.text }]} numberOfLines={1}>{r.text}</Text>
-                  <View style={styles.rankingCountRow}>
-                    <Text style={[styles.rankingCount, { color: theme.primary }]}>{r.votes}표</Text>
-                    <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {ranked.filter(r => r.votes > 0).length === 0 && (
+              {ranked.filter(r => r.votes > 0).length > 0 ? (
+                <View style={styles.podiumContainer}>
+                  {/* 2nd Place */}
+                  {ranked[1] && ranked[1].votes > 0 && (
+                    <View style={styles.podiumColumn}>
+                      <Text style={[styles.podiumVotes, { color: theme.textSecondary }]}>{ranked[1].votes}표</Text>
+                      <View style={[styles.podiumBar, { height: 60, backgroundColor: '#C0C0C0' }]}>
+                        <Text style={styles.podiumRankText}>2</Text>
+                      </View>
+                      <Text style={[styles.podiumName, { color: theme.text }]} numberOfLines={2}>{ranked[1].text}</Text>
+                    </View>
+                  )}
+                  
+                  {/* 1st Place */}
+                  {ranked[0] && ranked[0].votes > 0 && (
+                    <View style={styles.podiumColumn}>
+                      <Ionicons name="star" size={24} color="#FFD700" style={{marginBottom: 4}} />
+                      <Text style={[styles.podiumVotes, { color: theme.primary, fontWeight: '800' }]}>{ranked[0].votes}표</Text>
+                      <View style={[styles.podiumBar, { height: 90, backgroundColor: '#FFD700', shadowColor: '#FFD700', shadowOpacity: 0.3, shadowRadius: 10 }]}>
+                        <Text style={styles.podiumRankText}>1</Text>
+                      </View>
+                      <Text style={[styles.podiumName, { color: theme.text, fontWeight: '800', fontSize: 15 }]} numberOfLines={2}>{ranked[0].text}</Text>
+                    </View>
+                  )}
+
+                  {/* 3rd Place */}
+                  {ranked[2] && ranked[2].votes > 0 && (
+                    <View style={styles.podiumColumn}>
+                      <Text style={[styles.podiumVotes, { color: theme.textSecondary }]}>{ranked[2].votes}표</Text>
+                      <View style={[styles.podiumBar, { height: 40, backgroundColor: '#CD7F32' }]}>
+                        <Text style={styles.podiumRankText}>3</Text>
+                      </View>
+                      <Text style={[styles.podiumName, { color: theme.text }]} numberOfLines={2}>{ranked[2].text}</Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
                 <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={{ color: theme.textSecondary }}>아직 투표 데이터가 없습니다.</Text>
                 </View>
               )}
             </View>
 
-            {isClosed && ranked[0].votes > 0 && (
-              <View style={[styles.resultBanner, {backgroundColor: theme.primary}]}>
-                <Ionicons name="checkmark-circle" size={20} color={theme.background} style={{ marginRight: 8 }} />
-                <Text style={{color: theme.background, fontWeight:'800', fontSize: 15}}>최종 선택: {ranked[0].text}</Text>
+            {isClosed && ranked[0]?.votes > 0 && (
+              <View style={[styles.winnerCard, { backgroundColor: theme.primary }]}>
+                <View style={styles.winnerDecoration}>
+                  <Ionicons name="ribbon" size={40} color="rgba(255,255,255,0.3)" />
+                </View>
+                <View style={styles.winnerContent}>
+                  <Text style={styles.winnerLabel}>FINAL WINNER</Text>
+                  <Text style={styles.winnerText}>{ranked[0].text}</Text>
+                  <View style={styles.winnerStats}>
+                    <Ionicons name="people" size={16} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.winnerStatsText}>{ranked[0].votes}표 획득</Text>
+                  </View>
+                </View>
+                <Ionicons name="sparkles" size={30} color="rgba(255,255,255,0.5)" />
               </View>
             )}
 
@@ -250,13 +292,55 @@ export default function VoteScreen() {
     const hours = Array.from({length: 24}).map((_, i) => i);
     const minutes = [0, 10, 20, 30, 40, 50, 59];
     return (
-      <View style={[styles.compactPicker, {borderColor: theme.border, backgroundColor: theme.background}]}>
+      <View style={[styles.compactPicker, { backgroundColor: theme.card }]}>
         <View style={styles.pickerHeader}>
-          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>{date.toLocaleDateString()}</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text></TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.pickerTab, show === 'date' && { backgroundColor: theme.primary + '10' }]} 
+            onPress={() => setShow('date')}
+          >
+            <Text style={{color: show === 'date' ? theme.primary : theme.text, fontWeight: '800'}}>{date.toLocaleDateString()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.pickerTab, show === 'time' && { backgroundColor: theme.primary + '10' }]} 
+            onPress={() => setShow('time')}
+          >
+            <Text style={{color: show === 'time' ? theme.primary : theme.text, fontWeight: '800'}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text>
+          </TouchableOpacity>
         </View>
-        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary, fontWeight: '600'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontWeight: '800', fontSize: 16, color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
-        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: date.getHours() === h ? '800' : '500'}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: date.getMinutes() === m ? '800' : '500'}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
+        <View style={{ padding: 10 }}>
+          {show === 'date' && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingBottom: 5}}>
+              {days.map((d, i) => (
+                <TouchableOpacity 
+                  key={i} 
+                  style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary, ...Shadows.glow}]} 
+                  onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}
+                >
+                  <Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary, fontWeight: '600'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                  <Text style={{fontWeight: '800', fontSize: 16, color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {show === 'time' && (
+            <View style={{flexDirection:'row', height: 160}}>
+              <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
+                {hours.map(h => (
+                  <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}>
+                    <Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: date.getHours() === h ? '900' : '500', fontSize: 16}}>{h}시</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
+                {minutes.map(m => (
+                  <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}>
+                    <Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: date.getMinutes() === m ? '900' : '500', fontSize: 16}}>{m}분</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -392,40 +476,50 @@ const styles = StyleSheet.create({
   },
   voterCountBadge: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999 },
   voterSummaryCard: { 
-    padding: 24, 
+    padding: 20, 
     borderRadius: 28, 
     marginBottom: 20,
-    ...Shadows.card
   },
-  voterRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  voterLabelContainer: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, width: 90, alignItems: 'center', marginRight: 12 },
-  voterLabel: { fontSize: 12, fontWeight: '800' },
-  voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-  voterName: { fontSize: 14, fontWeight: '500', marginRight: 6, marginBottom: 4, opacity: 0.8 },
+  voterRow: { flexDirection: 'row', alignItems: 'center' },
+  voterLabelContainer: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, width: 75, alignItems: 'center', marginRight: 15 },
+  voterLabel: { fontSize: 11, fontWeight: '800' },
+  avatarScroll: { paddingRight: 20 },
+  avatarItem: { alignItems: 'center', marginRight: 12, width: 45 },
+  avatarCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  avatarText: { fontSize: 14, fontWeight: '800' },
+  avatarName: { fontSize: 10, fontWeight: '500', textAlign: 'center' },
   rankingBox: { 
     padding: 24, 
     borderRadius: 32, 
     marginBottom: 25,
     ...Shadows.card
   },
-  rankingHeader: { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
-  rankingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
-  rankingBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
-  rankingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  rankingText: { flex: 1, fontSize: 15, fontWeight: '800', letterSpacing: -0.3 },
-  rankingCountRow: { flexDirection: 'row', alignItems: 'center' },
-  rankingCount: { fontSize: 15, fontWeight: '800', marginRight: 4 },
-  resultBanner: { 
-    flexDirection: 'row',
-    padding: 20, 
-    borderRadius: 28, 
+  rankingHeader: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  podiumContainer: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', height: 180, marginTop: 10 },
+  podiumColumn: { alignItems: 'center', width: (width - 100) / 3, marginHorizontal: 5 },
+  podiumBar: { width: '100%', borderTopLeftRadius: 12, borderTopRightRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  podiumRankText: { color: '#fff', fontSize: 20, fontWeight: '900', opacity: 0.9 },
+  podiumVotes: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  podiumName: { fontSize: 13, textAlign: 'center', marginTop: 12, letterSpacing: -0.3 },
+  winnerCard: { 
+    flexDirection: 'row', 
+    padding: 24, 
+    borderRadius: 32, 
     alignItems: 'center', 
-    justifyContent: 'center', 
-    marginBottom: 20,
-    ...Shadows.glow
+    marginBottom: 25,
+    ...Shadows.card,
+    shadowColor: '#5E5CE6',
+    shadowOpacity: 0.3,
+    overflow: 'hidden'
   },
+  winnerDecoration: { position: 'absolute', left: -10, top: -10 },
+  winnerContent: { flex: 1, marginLeft: 15 },
+  winnerLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  winnerText: { color: '#fff', fontSize: 22, fontWeight: '900', marginVertical: 4, letterSpacing: -0.5 },
+  winnerStats: { flexDirection: 'row', alignItems: 'center' },
+  winnerStatsText: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600', marginLeft: 6 },
   manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 28, marginTop: 10, backgroundColor: '#8E8E9310' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { padding: 25, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%', ...Shadows.card },
   voterModalContent: { padding: 25, borderRadius: 32, width: '85%', maxHeight: '70%', ...Shadows.card },

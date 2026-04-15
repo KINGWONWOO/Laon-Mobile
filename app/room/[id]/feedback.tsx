@@ -13,6 +13,10 @@ import { Shadows } from '../../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull } from '../../../components/ui/RoomComponents';
+import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+
+type FilterType = 'all' | 'my' | 'formation';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -25,6 +29,7 @@ export default function FeedbackScreen() {
   const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
   const [isCaching, setIsCaching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('all');
 
   const [newComment, setNewComment] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
@@ -68,7 +73,15 @@ export default function FeedbackScreen() {
     return () => { if (formationTimerRef.current) clearInterval(formationTimerRef.current); };
   }, [isFormation, isFormationPlaying, formationDuration]);
   
-  const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
+  const roomVideos = useMemo(() => {
+    let filtered = videos.filter(v => v.roomId === id);
+    if (filter === 'my') {
+      filtered = filtered.filter(v => v.userId === currentUser?.id);
+    } else if (filter === 'formation') {
+      filtered = filtered.filter(v => v.videoUrl.startsWith('formation://'));
+    }
+    return filtered;
+  }, [videos, id, filter, currentUser]);
 
   const sortedComments = useMemo(() => {
     if (!selectedVideo) return [];
@@ -199,8 +212,8 @@ export default function FeedbackScreen() {
   if (selectedVideo) {
     const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
     return (
-      <Modal visible={true} animationType="slide" transparent={false}>
-        <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
+      <Modal visible={true} animationType="fade" transparent={false}>
+        <View style={[styles.fullView, { backgroundColor: '#000', paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
             <View style={[styles.videoSection, isFullScreen && styles.landscapeVideo, { backgroundColor: '#000' }]}>
               {isFormation ? (
@@ -211,56 +224,67 @@ export default function FeedbackScreen() {
                       <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
                     </TouchableOpacity>
                   </View>
-                ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
+                ) : <View style={styles.errorContainer}><Text style={{color: '#8E8E93'}}>동선 정보를 불러올 수 없습니다.</Text></View>
               ) : (
                 isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} />
               )}
               <View style={styles.vControls}>
-                <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
+                <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }} style={styles.vControlBtn}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
                 </TouchableOpacity>
                 <View style={{flex: 1}} />
                 {isFullScreen && (
-                  <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
+                  <TouchableOpacity style={[styles.vControlBtn, {marginRight: 20}]} onPress={() => setShowSidebar(!showSidebar)}>
                     <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity onPress={() => setIsFullScreen(!isFullScreen)}>
+                <TouchableOpacity onPress={() => setIsFullScreen(!isFullScreen)} style={styles.vControlBtn}>
                   <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
             </View>
 
             {(!isFullScreen || showSidebar) && (
-              <View style={[styles.sidebar, isFullScreen && styles.landscapeSidebar, { backgroundColor: theme.background, borderLeftColor: theme.border }]}>
-                <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
-                  <Text style={[styles.sidebarTitle, { color: theme.text }]}>피드백 {videoObj.comments.length}</Text>
-                  <TouchableOpacity onPress={() => setShowCommentInput(true)}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity>
+              <View style={[styles.sidebar, isFullScreen && styles.landscapeSidebar, { backgroundColor: '#000', borderLeftColor: '#333' }]}>
+                <View style={[styles.sidebarHeader, { borderBottomColor: '#333' }]}>
+                  <Text style={[styles.sidebarTitle, { color: '#fff' }]}>피드백 {videoObj.comments.length}</Text>
+                  <TouchableOpacity onPress={() => setShowCommentInput(true)} style={[styles.addCommentBtn, {backgroundColor: theme.primary}]}>
+                    <Ionicons name="add" size={20} color="#fff" />
+                  </TouchableOpacity>
                 </View>
                 <FlatList
                   data={videoObj.comments.sort((a,b)=>a.timestampMillis - b.timestampMillis)}
                   keyExtractor={item => item.id}
-                  renderItem={({ item }) => (
-                    <View style={[styles.cItem, { borderBottomColor: theme.border }]}>
-                      <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={{flex: 1}}>
-                        <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
-                          <Text style={[styles.cTime, { color: theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
-                          <Text style={[styles.cUser, { color: theme.textSecondary }]}>{getUserById(item.userId)?.name}</Text>
-                        </View>
-                        <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
-                      </TouchableOpacity>
-                      {item.userId === currentUser?.id && (
-                        <View style={styles.commentActions}>
-                          <TouchableOpacity onPress={() => { setEditingComment(item); setEditCommentText(item.text); }} style={{marginRight: 10}}>
-                            <Ionicons name="pencil" size={14} color={theme.textSecondary} />
+                  contentContainerStyle={{ padding: 15 }}
+                  renderItem={({ item }) => {
+                    const isMyComment = item.userId === currentUser?.id;
+                    const author = getUserById(item.userId);
+                    return (
+                      <View style={[styles.chatBubbleContainer, isMyComment ? styles.myChatBubble : styles.otherChatBubble]}>
+                        {!isMyComment && <ExpoImage source={{uri: author?.profileImage}} style={styles.chatAvatar} />}
+                        <View style={{flex: 1}}>
+                          {!isMyComment && <Text style={styles.chatUserName}>{author?.name}</Text>}
+                          <TouchableOpacity 
+                            onPress={() => seekTo(item.timestampMillis)} 
+                            style={[styles.chatBubble, { backgroundColor: isMyComment ? theme.primary : '#1C1C1E' }]}
+                          >
+                            <Text style={[styles.chatTime, { color: isMyComment ? '#E0E0E0' : theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
+                            <Text style={[styles.chatText, { color: '#fff' }]}>{item.text}</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
-                            <Ionicons name="trash" size={14} color={theme.error} />
-                          </TouchableOpacity>
+                          {isMyComment && (
+                            <View style={styles.chatActions}>
+                              <TouchableOpacity onPress={() => { setEditingComment(item); setEditCommentText(item.text); }} style={styles.chatActionBtn}>
+                                <Ionicons name="pencil" size={12} color="#8E8E93" />
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleDeleteComment(item.id)} style={styles.chatActionBtn}>
+                                <Ionicons name="trash" size={12} color={theme.error} />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                         </View>
-                      )}
-                    </View>
-                  )}
+                      </View>
+                    );
+                  }}
                 />
               </View>
             )}
@@ -268,12 +292,12 @@ export default function FeedbackScreen() {
 
           <Modal visible={showCommentInput} transparent animationType="fade">
             <View style={styles.modalOverlay}>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : undefined} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
+              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : undefined} style={[styles.modalContent, { backgroundColor: '#1C1C1E' }]}>
+                <Text style={{color: '#fff', marginBottom: 15, fontWeight: '800'}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
+                <TextInput style={[styles.input, { backgroundColor: '#2C2C2E', color: '#fff' }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor="#8E8E93" autoFocus />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleAddComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>등록</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color: '#8E8E93', fontWeight: '600'}}>취소</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleAddComment}><Text style={{color: theme.primary, fontWeight:'900'}}>등록</Text></TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
             </View>
@@ -281,12 +305,12 @@ export default function FeedbackScreen() {
 
           <Modal visible={!!editingComment} transparent animationType="fade">
             <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15}}>댓글 수정</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
+              <View style={[styles.modalContent, { backgroundColor: '#1C1C1E' }]}>
+                <Text style={{color: '#fff', marginBottom: 15, fontWeight: '800'}}>댓글 수정</Text>
+                <TextInput style={[styles.input, { backgroundColor: '#2C2C2E', color: '#fff' }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: '#8E8E93', fontWeight: '600'}}>취소</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -298,46 +322,73 @@ export default function FeedbackScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
-        <View style={{ width: 28 }} />
+        <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
+      </View>
+
+      <View style={styles.filterBar}>
+        {(['all', 'my', 'formation'] as FilterType[]).map((f) => (
+          <TouchableOpacity 
+            key={f} 
+            onPress={() => setFilter(f)} 
+            style={[styles.filterChip, filter === f && { backgroundColor: theme.primary }]}
+          >
+            <Text style={[styles.filterText, { color: filter === f ? '#fff' : theme.textSecondary }]}>
+              {f === 'all' ? '전체' : f === 'my' ? '내 영상' : '동선'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
       
       <FlatList
         data={roomVideos}
         keyExtractor={item => item.id}
-        ListHeaderComponent={
-          <TouchableOpacity style={[styles.uploadButton, { backgroundColor: theme.primary }]} onPress={() => setShowAddModal(true)}>
-            <Ionicons name="videocam" size={20} color={theme.background} />
-            <Text style={[styles.uploadButtonText, { color: theme.background }]}>연습 영상 올리기</Text>
-          </TouchableOpacity>
-        }
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => setSelectedVideo(item)}>
-            <Ionicons name={item.videoUrl.startsWith('formation://') ? "layers" : "play-circle"} size={24} color={theme.primary} />
-            <View style={{marginLeft: 15, flex: 1}}>
-              <Text style={{color: theme.text, fontWeight: 'bold'}}>{item.title}</Text>
-              <Text style={{color: theme.textSecondary, fontSize: 11}}>{getUserById(item.userId)?.name} • {formatDateFull(item.createdAt)}</Text>
-            </View>
-            {item.userId === currentUser?.id && (
-              <View style={{flexDirection: 'row'}}>
-                <TouchableOpacity onPress={() => { setEditingVideo(item); setEditTitle(item.title); }} style={{padding: 5}}><Ionicons name="pencil" size={18} color={theme.textSecondary} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteVideo(item)} style={{padding: 5}}><Ionicons name="trash" size={18} color={theme.error} /></TouchableOpacity>
+        renderItem={({ item }) => {
+          const author = getUserById(item.userId);
+          const isFm = item.videoUrl.startsWith('formation://');
+          return (
+            <TouchableOpacity style={[styles.videoCard, { backgroundColor: theme.card }]} onPress={() => setSelectedVideo(item)}>
+              <View style={styles.videoThumbnailContainer}>
+                {isFm ? (
+                  <View style={[styles.formationThumb, { backgroundColor: theme.primary + '20' }]}>
+                    <Ionicons name="layers" size={32} color={theme.primary} />
+                  </View>
+                ) : (
+                  <ExpoImage source={{ uri: item.videoUrl }} style={styles.videoThumbnail} contentFit="cover" />
+                )}
+                <View style={styles.playOverlay}>
+                  <Ionicons name="play" size={24} color="#fff" />
+                </View>
               </View>
-            )}
-          </TouchableOpacity>
-        )}
+              <View style={styles.videoInfo}>
+                <Text style={[styles.videoTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+                <View style={styles.authorRow}>
+                  <ExpoImage source={{ uri: author?.profileImage }} style={styles.authorSmallAvatar} />
+                  <Text style={[styles.authorName, { color: theme.textSecondary }]}>{author?.name} • {formatDateFull(item.createdAt)}</Text>
+                </View>
+              </View>
+              {item.userId === currentUser?.id && (
+                <View style={styles.videoCardActions}>
+                  <TouchableOpacity onPress={() => { setEditingVideo(item); setEditTitle(item.title); }} style={styles.videoActionBtn}><Ionicons name="pencil" size={18} color={theme.textSecondary} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDeleteVideo(item)} style={styles.videoActionBtn}><Ionicons name="trash" size={18} color={theme.error} /></TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        }}
       />
 
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>영상 업로드</Text>
-            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, ...Shadows.soft }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold', color: theme.background}}>갤러리에서 선택</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center'}}>취소</Text></TouchableOpacity>
+            <Text style={{color: theme.text, fontSize: 24, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5}}>영상 업로드</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: '900', color: '#fff'}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '600'}}>취소</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -345,11 +396,11 @@ export default function FeedbackScreen() {
       <Modal visible={!!editingVideo} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>제목 수정</Text>
-            <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={editTitle} onChangeText={setEditTitle} />
+            <Text style={{color: theme.text, fontSize: 24, fontWeight: '900', marginBottom: 20, letterSpacing: -0.5}}>제목 수정</Text>
+            <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text }]} value={editTitle} onChangeText={setEditTitle} />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-              <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdateVideo}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateVideo}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -360,35 +411,56 @@ export default function FeedbackScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 15 },
   backBtn: { padding: 5 },
-  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  headerTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  filterBar: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 20 },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
+  filterText: { fontWeight: '800', fontSize: 13 },
   fullView: { flex: 1 },
   mainLayout: { flex: 1 },
   landscapeLayout: { flexDirection: 'row' },
   videoSection: { width: '100%', aspectRatio: 16/9, justifyContent: 'center' },
   landscapeVideo: { flex: 1, aspectRatio: undefined },
   vPlayer: { flex: 1 },
-  vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
+  vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', zIndex: 100 },
+  vControlBtn: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, padding: 8 },
   sidebar: { flex: 1 },
-  landscapeSidebar: { width: 300 },
-  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15 },
-  sidebarTitle: { fontWeight: '800', letterSpacing: -0.5 },
-  cItem: { padding: 15, flexDirection: 'row', alignItems: 'center' },
-  commentActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
-  cTime: { fontWeight: '800', fontSize: 12, marginRight: 10, letterSpacing: -0.5 },
-  cUser: { fontSize: 11, fontWeight: '500', opacity: 0.7 },
-  cText: { fontSize: 13 },
+  landscapeSidebar: { width: 350 },
+  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
+  sidebarTitle: { fontWeight: '900', fontSize: 18, letterSpacing: -0.5 },
+  addCommentBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  chatBubbleContainer: { flexDirection: 'row', marginBottom: 15, alignItems: 'flex-end' },
+  myChatBubble: { justifyContent: 'flex-end' },
+  otherChatBubble: { justifyContent: 'flex-start' },
+  chatAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 8 },
+  chatUserName: { fontSize: 11, fontWeight: '800', color: '#8E8E93', marginBottom: 4, marginLeft: 4 },
+  chatBubble: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, maxWidth: '80%', ...Shadows.soft },
+  chatTime: { fontSize: 10, fontWeight: '900', marginBottom: 2 },
+  chatText: { fontSize: 14, fontWeight: '500' },
+  chatActions: { flexDirection: 'row', marginTop: 4, justifyContent: 'flex-end' },
+  chatActionBtn: { marginLeft: 10, padding: 4 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 25, borderRadius: 28, ...Shadows.card },
-  input: { padding: 15, borderRadius: 20, marginBottom: 20 },
+  modalContent: { padding: 30, borderRadius: 32, ...Shadows.card },
+  input: { padding: 18, borderRadius: 24, marginBottom: 20, fontWeight: '500' },
   uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 28, ...Shadows.soft },
   uploadButtonText: { fontWeight: '800', marginLeft: 8, letterSpacing: -0.5 },
-  videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 12, borderRadius: 28, ...Shadows.card },
+  videoCard: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 16, borderRadius: 28, ...Shadows.card },
+  videoThumbnailContainer: { width: 80, height: 80, borderRadius: 24, overflow: 'hidden', position: 'relative' },
+  videoThumbnail: { width: '100%', height: '100%' },
+  formationThumb: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  playOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  videoInfo: { flex: 1, marginLeft: 15 },
+  videoTitle: { fontSize: 17, fontWeight: '900', marginBottom: 6, letterSpacing: -0.5 },
+  authorRow: { flexDirection: 'row', alignItems: 'center' },
+  authorSmallAvatar: { width: 18, height: 18, borderRadius: 9, marginRight: 6 },
+  authorName: { fontSize: 12, fontWeight: '600' },
+  videoCardActions: { flexDirection: 'row' },
+  videoActionBtn: { padding: 8 },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContentUpload: { padding: 30, borderTopLeftRadius: 32, borderTopRightRadius: 32, ...Shadows.card },
-  titleInput: { borderRadius: 20, padding: 15, marginBottom: 20 },
-  pickBtn: { padding: 15, borderRadius: 28, alignItems: 'center', ...Shadows.soft },
+  modalContentUpload: { padding: 40, borderTopLeftRadius: 40, borderTopRightRadius: 40, ...Shadows.card },
+  titleInput: { borderRadius: 24, padding: 18, marginBottom: 20, fontWeight: '500' },
+  pickBtn: { padding: 18, borderRadius: 24, alignItems: 'center', ...Shadows.soft },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }
 });
