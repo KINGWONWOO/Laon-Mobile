@@ -5,10 +5,8 @@ import { supabase } from '../lib/supabase';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
-// 푸시 알림 모듈 로드
 let Notifications: any = null;
 
-// Expo SDK 53+ 부터는 Expo Go에서 알림 모듈 로드 시 크래시가 발생함
 if (!isExpoGo) {
   try {
     Notifications = require('expo-notifications');
@@ -24,8 +22,8 @@ if (!isExpoGo) {
         }),
       });
     }
-  } catch (err) {
-    console.warn('Failed to load expo-notifications module:', err);
+  } catch {
+    // Development build이지만 모듈 로드 실패 시 무시
   }
 }
 
@@ -33,17 +31,8 @@ if (!isExpoGo) {
  * 푸시 알림을 등록하고 유저의 DB 프로필에 토큰을 저장합니다.
  */
 export async function registerForPushNotificationsAsync() {
-  if (!Notifications || isExpoGo) {
-    if (isExpoGo) {
-      console.warn('Push notifications are not supported in Expo Go (SDK 53+). Please use a development build.');
-    }
-    return null;
-  }
-  
-  if (!Device.isDevice) {
-    console.warn('Must use physical device for push notifications');
-    return null;
-  }
+  if (!Notifications || isExpoGo) return null;
+  if (!Device.isDevice) return null;
 
   // 1. Android 전용 채널 설정
   if (Platform.OS === 'android') {
@@ -75,10 +64,7 @@ export async function registerForPushNotificationsAsync() {
     const projectId =
       Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
 
-    if (!projectId) {
-      console.warn('Project ID not found in config. Check app.json');
-      return null;
-    }
+    if (!projectId) return null;
 
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;

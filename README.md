@@ -80,10 +80,6 @@ This command will move the starter code to the **app-example** directory and cre
 ### 2. CORS 정책 제한
 *   `Access-Control-Allow-Origin`을 모든 도메인(`*`)에서 실제 서비스 도메인으로 축소하세요.
 
-### 3. 푸시 알림 제한 (Expo Go Restriction)
-*   **현재**: 개발 편의를 위해 `NotificationService.ts`에서 Expo Go 제한을 풀어둔 상태입니다.
-*   **조치**: 실제 앱 배포 시에는 토큰 체계 혼선을 방지하기 위해 `registerForPushNotificationsAsync` 함수에서 `isExpoGo`일 경우 실행을 중단하도록 다시 제한을 거는 것을 권장합니다.
-
 ### 4. 환경 변수(Secrets) 보안 강화
 *   R2 Access Key 등은 반드시 Supabase Vault나 `supabase secrets set`을 통해 관리하세요.
 
