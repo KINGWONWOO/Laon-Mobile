@@ -17,6 +17,7 @@ export type NoticeComment = {
   id: string;
   userId: string;
   text: string;
+  parentId?: string;
   createdAt: number;
 };
 
@@ -27,6 +28,7 @@ export type Notice = {
   title: string;
   content: string;
   isPinned: boolean;
+  useNotification?: boolean;
   imageUrls?: string[]; // Array of image URIs
   viewedBy: string[]; // User IDs who viewed the notice
   comments?: NoticeComment[];
@@ -38,6 +40,7 @@ export type Comment = {
   userId: string;
   text: string;
   timestampMillis: number; // Video timestamp in ms
+  parentId?: string;
   createdAt: number;
 };
 
@@ -47,6 +50,7 @@ export type VideoFeedback = {
   userId: string; // ID of the user who uploaded the video
   videoUrl: string; // uri or remote url
   title: string;
+  useNotification?: boolean;
   comments: Comment[];
   createdAt: number;
 };
@@ -55,6 +59,7 @@ export type PhotoComment = {
   id: string;
   userId: string;
   text: string;
+  parentId?: string;
   createdAt: number;
 };
 
@@ -64,6 +69,7 @@ export type Photo = {
   userId: string; // ID of the user who uploaded the photo
   photoUrl: string;
   description?: string; // 💡 SNS형 텍스트
+  useNotification?: boolean;
   comments?: PhotoComment[]; // 💡 사진 댓글
   createdAt: number;
 };
@@ -83,7 +89,8 @@ export type Schedule = {
   viewedBy: string[]; // User IDs who viewed the schedule
   startDate?: string;
   endDate?: string;
-  sendNotification?: boolean;
+  useNotification?: boolean;
+  deadline?: number; // Timestamp
   createdAt: number;
 };
 
@@ -101,7 +108,7 @@ export type Vote = {
   responses: { [userId: string]: string[] }; // userId to array of optionIds
   isAnonymous: boolean;
   allowMultiple: boolean;
-  sendNotification: boolean;
+  useNotification?: boolean;
   notificationMinutes?: number; // Minutes before deadline to notify
   deadline?: number; // Timestamp
   viewedBy: string[]; // User IDs who viewed the vote

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch } from 'react-native';
 import { useGlobalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -24,6 +24,8 @@ export default function ScheduleScreen() {
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [startTime, setStartTime] = useState(14); // 2 PM
   const [endTime, setEndTime] = useState(18);   // 6 PM
+  const [useNotification, setUseNotification] = useState(true);
+  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
 
   const roomSchedules = useMemo(() => schedules.filter(s => s.roomId === id), [schedules, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
@@ -57,10 +59,12 @@ export default function ScheduleScreen() {
     });
 
     try {
-      await addSchedule(id || '', title, opts);
+      await addSchedule(id || '', title, opts, useNotification, deadlineDate?.getTime());
       setShowAddModal(false);
       setTitle('');
       setSelectedDates([]);
+      setUseNotification(true);
+      setDeadlineDate(null);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
@@ -332,6 +336,38 @@ export default function ScheduleScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>제목</Text>
               <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="예: 정기 연습" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
+              
+              <View style={styles.settingRow}>
+                <Text style={[styles.settingLabel, { color: theme.text }]}>30분 전 리마인드 알림</Text>
+                <Switch 
+                  value={useNotification} 
+                  onValueChange={setUseNotification} 
+                  trackColor={{ true: theme.primary }} 
+                />
+              </View>
+
+              {useNotification && (
+                <>
+                  <Text style={[styles.label, { color: theme.textSecondary }]}>마감 기한 (알림 발송일)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
+                    {Array.from({length: 31}).map((_, day) => {
+                      const d = new Date(); d.setDate(d.getDate() + day);
+                      const isSelected = deadlineDate?.toDateString() === d.toDateString();
+                      return (
+                        <TouchableOpacity 
+                          key={day} 
+                          style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
+                          onPress={() => setDeadlineDate(isSelected ? null : d)}
+                        >
+                          <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                          <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
+
               <Text style={[styles.label, { color: theme.textSecondary }]}>날짜 선택 (복수 가능)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
                 {Array.from({length: 31}).map((_, day) => {
@@ -437,5 +473,7 @@ const styles = StyleSheet.create({
   timeScroll: { height: 120, width: '100%', borderWidth: 1, borderColor: '#eee', borderRadius: 15 },
   timeItem: { padding: 10, alignItems: 'center' },
   saveBtn: { padding: 20, borderRadius: 20, alignItems: 'center', marginTop: 30, elevation: 3 },
-  saveBtnText: { fontSize: 18, fontWeight: 'bold' }
+  saveBtnText: { fontSize: 18, fontWeight: 'bold' },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 5 },
+  settingLabel: { fontSize: 15, fontWeight: '600' },
 });

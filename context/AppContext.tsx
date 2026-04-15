@@ -26,23 +26,23 @@ type AppContextType = {
   deleteRoom: (roomId: string) => Promise<void>;
   
   notices: Notice[];
-  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[]) => Promise<void>;
+  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[], useNotification?: boolean) => Promise<void>;
   deleteNotice: (noticeId: string) => Promise<void>;
-  addNoticeComment: (noticeId: string, text: string) => Promise<void>;
+  addNoticeComment: (noticeId: string, text: string, parentId?: string) => Promise<void>;
   deleteNoticeComment: (commentId: string) => Promise<void>;
   
   videos: VideoFeedback[];
-  addVideo: (roomId: string, videoUrl: string, title: string) => Promise<void>;
+  addVideo: (roomId: string, videoUrl: string, title: string, useNotification?: boolean) => Promise<void>;
   addComment: (videoId: string, text: string, timestampMillis: number, parentId?: string) => Promise<void>;
   
   photos: Photo[];
-  addPhoto: (roomId: string, photoUrl: string, description?: string) => Promise<void>;
+  addPhoto: (roomId: string, photoUrl: string, description?: string, useNotification?: boolean) => Promise<void>;
   deletePhoto: (photoId: string, photoUrl: string) => Promise<void>;
   addPhotoComment: (photoId: string, text: string, parentId?: string) => Promise<void>;
   markItemAsAccessed: (type: 'video' | 'photo', id: string) => Promise<void>;
 
   schedules: Schedule[];
-  addSchedule: (roomId: string, title: string, options: string[]) => Promise<void>;
+  addSchedule: (roomId: string, title: string, options: string[], useNotification?: boolean, deadline?: number) => Promise<void>;
   respondToSchedule: (scheduleId: string, optionIds: string[]) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<void>;
 
@@ -93,6 +93,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const theme = getThemeColors(themeType);
 
+  const sendPushNotification = async (userIds: string[], title: string, body: string, data?: any) => {
+    if (!userIds || userIds.length === 0) return;
+    try {
+      await supabase.functions.invoke('push-notification', {
+        body: { user_ids: userIds, title, body, data }
+      });
+    } catch (err) {
+      console.warn('Failed to send push notification:', err);
+    }
+  };
+
   const fetchMyProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data) {
@@ -138,8 +149,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
     queryKey: ['rooms', currentUser?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('room_members').select('rooms (*)').eq('user_id', currentUser?.id);
-      return (data?.map(item => item.rooms).filter(Boolean) || []) as Room[];
+      const { data: membership } = await supabase.from('room_members').select('room_id').eq('user_id', currentUser?.id);
+      const rIds = membership?.map(m => m.room_id) || [];
+      if (rIds.length === 0) return [];
+      
+      const { data: rooms } = await supabase.from('rooms').select('*, room_members(user_id)').in('id', rIds);
+      return (rooms || []).map(r => ({
+        ...r,
+        leaderId: r.leader_id,
+        imageUri: r.image_uri,
+        members: (r.room_members || []).map((rm: any) => rm.user_id)
+      })) as Room[];
     },
     enabled: !!currentUser,
   });
@@ -296,45 +316,80 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const deleteRoom = async (id: string) => { await supabase.from('rooms').delete().eq('id', id); refreshAllData(); };
   
-  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = []) => {
+  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNotification = true) => {
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
-    const { error } = await supabase.from('notices').insert([{ room_id: rid, user_id: currentUser.id, title: t, content: c, is_pinned: p, image_urls: imgs }]);
+    const { error } = await supabase.from('notices').insert([{ room_id: rid, user_id: currentUser.id, title: t, content: c, is_pinned: p, image_urls: imgs, use_notification: useNotification }]);
     if (error) throw error;
+    
+    if (useNotification) {
+      const room = roomsData.find(r => r.id === rid);
+      const targets = (room?.members || []).filter(id => id !== currentUser?.id);
+      sendPushNotification(targets, '새로운 공지사항', t);
+    }
     refreshAllData();
   };
   const deleteNotice = async (nid: string) => { await supabase.from('notices').delete().eq('id', nid); refreshAllData(); };
-  const addNoticeComment = async (nid: string, t: string) => {
+  const addNoticeComment = async (nid: string, t: string, pid?: string) => {
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
-    const { error } = await supabase.from('notice_comments').insert([{ notice_id: nid, user_id: currentUser.id, text: t }]);
+    const { error } = await supabase.from('notice_comments').insert([{ notice_id: nid, user_id: currentUser.id, text: t, parent_id: pid }]);
     if (error) throw error;
+
+    const notice = noticesMapped.find(n => n.id === nid);
+    if (notice && notice.userId !== currentUser.id) {
+      sendPushNotification([notice.userId], '공지에 새로운 댓글', t);
+    }
     refreshAllData();
   };
   const deleteNoticeComment = async (cid: string) => { await supabase.from('notice_comments').delete().eq('id', cid); refreshAllData(); };
 
-  const addVideo = async (rid: string, url: string, t: string) => { 
+  const addVideo = async (rid: string, url: string, t: string, useNotification = true) => { 
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
-    const { error } = await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser.id, title: t, storage_path: url, youtube_id: 'R2_UPLOAD' }]); 
+    const { error } = await supabase.from('videos').insert([{ room_id: rid, user_id: currentUser.id, title: t, storage_path: url, youtube_id: 'R2_UPLOAD', use_notification: useNotification }]); 
     if (error) throw error;
+
+    if (useNotification) {
+      const room = roomsData.find(r => r.id === rid);
+      const targets = (room?.members || []).filter(id => id !== currentUser?.id);
+      sendPushNotification(targets, '새로운 피드백 영상', t);
+    }
     refreshAllData(); 
   };
   const addComment = async (vid: string, t: string, ts: number, pid?: string) => { 
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
     const { error } = await supabase.from('video_comments').insert([{ video_id: vid, user_id: currentUser.id, text: t, timestamp_millis: ts, parent_id: pid }]); 
     if (error) throw error;
+
+    const video = videosMapped.find(v => v.id === vid);
+    if (video && video.userId !== currentUser.id) {
+      sendPushNotification([video.userId], '영상에 새로운 피드백', t);
+    }
     refreshAllData(); 
   };
-  const addPhoto = async (rid: string, url: string, d?: string) => { 
+  const addPhoto = async (rid: string, url: string, d?: string, useNotification = true) => { 
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('사용자 정보를 불러올 수 없습니다. 로그인을 확인해주세요.');
+    // storageService 내부에서 insert를 수행하므로 use_notification 처리가 필요할 수 있음
+    // 일단 여기서는 알림만 발송
     await storageService.uploadToGallery(rid, currentUser.id, url, d); 
+    
+    if (useNotification) {
+      const room = roomsData.find(r => r.id === rid);
+      const targets = (room?.members || []).filter(id => id !== currentUser?.id);
+      sendPushNotification(targets, '새로운 아카이브', d || '새로운 사진이 업로드되었습니다.');
+    }
     refreshAllData(); 
   };
   const deletePhoto = async (id: string) => { await supabase.from('gallery_items').delete().eq('id', id); refreshAllData(); };
   const addPhotoComment = async (phid: string, t: string, pid?: string) => { 
     if (!currentUser?.id) throw new Error('로그인이 필요합니다.');
     await supabase.from('gallery_comments').insert([{ gallery_item_id: phid, user_id: currentUser.id, text: t, parent_id: pid }]); 
+    
+    const photo = photosMapped.find(p => p.id === phid);
+    if (photo && photo.userId !== currentUser.id) {
+      sendPushNotification([photo.userId], '아카이브에 새로운 댓글', t);
+    }
     refreshAllData();
   };
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
@@ -342,18 +397,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('로그인 정보를 확인할 수 없습니다.');
-    const { data: v, error } = await supabase.from('votes').insert([{ room_id: rid, user_id: currentUser.id, question: q, is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple }]).select().single();
+    const { data: v, error } = await supabase.from('votes').insert([{ 
+      room_id: rid, user_id: currentUser.id, question: q, 
+      is_anonymous: s.isAnonymous, allow_multiple: s.allowMultiple,
+      use_notification: s.useNotification ?? true,
+      deadline: s.deadline ? new Date(s.deadline).toISOString() : null
+    }]).select().single();
     if (error) throw error;
     if (v) await supabase.from('vote_options').insert(opts.map(o => ({ vote_id: v.id, text: o })));
+    
+    if (s.useNotification !== false) {
+      const room = roomsData.find(r => r.id === rid);
+      const targets = (room?.members || []).filter(id => id !== currentUser?.id);
+      sendPushNotification(targets, '새로운 투표', q);
+    }
     refreshAllData();
   };
 
-  const addSchedule = async (rid: string, t: string, opts: string[]) => {
+  const addSchedule = async (rid: string, t: string, opts: string[], useNotification = true, deadline?: number) => {
     if (!rid) throw new Error('방 ID 정보가 없습니다.');
     if (!currentUser?.id) throw new Error('로그인 정보를 확인할 수 없습니다.');
-    const { data: s, error } = await supabase.from('schedules').insert([{ room_id: rid, user_id: currentUser.id, title: t }]).select().single();
+    const { data: s, error } = await supabase.from('schedules').insert([{ 
+      room_id: rid, user_id: currentUser.id, title: t,
+      use_notification: useNotification,
+      deadline: deadline ? new Date(deadline).toISOString() : null
+    }]).select().single();
     if (error) throw error;
     if (s) await supabase.from('schedule_options').insert(opts.map(o => ({ schedule_id: s.id, date_time: o })));
+
+    if (useNotification) {
+      const room = roomsData.find(r => r.id === rid);
+      const targets = (room?.members || []).filter(id => id !== currentUser?.id);
+      sendPushNotification(targets, '새로운 일정 투표', t);
+    }
     refreshAllData();
   };
   const deleteSchedule = async (sid: string) => { await supabase.from('schedules').delete().eq('id', sid); refreshAllData(); };

@@ -16,6 +16,8 @@ export default function VoteScreen() {
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultiple, setAllowMultiple] = useState(false);
+  const [useNotification, setUseNotification] = useState(true);
+  const [deadline, setDeadline] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const roomVotes = useMemo(() => votes.filter(v => v.roomId === id), [votes, id]);
@@ -34,10 +36,17 @@ export default function VoteScreen() {
       return;
     }
     try {
-      await addVote(id || '', question, options, { isAnonymous, allowMultiple });
+      await addVote(id || '', question, options, { 
+        isAnonymous, 
+        allowMultiple, 
+        useNotification, 
+        deadline: deadline?.getTime() 
+      });
       setShowAddModal(false);
       setQuestion('');
       setOptions(['', '']);
+      setUseNotification(true);
+      setDeadline(null);
     } catch (e: any) { Alert.alert('오류', e.message); }
   };
 
@@ -238,6 +247,37 @@ export default function VoteScreen() {
             <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} /></View>
             <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} /></View>
             
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingLabel, { color: theme.text }]}>30분 전 리마인드 알림</Text>
+              <Switch 
+                value={useNotification} 
+                onValueChange={setUseNotification} 
+                trackColor={{ true: theme.primary }} 
+              />
+            </View>
+
+            {useNotification && (
+              <>
+                <Text style={[styles.label, { color: theme.textSecondary, marginTop: 10 }]}>마감 기한 (알림 발송일)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
+                  {Array.from({length: 31}).map((_, day) => {
+                    const d = new Date(); d.setDate(d.getDate() + day);
+                    const isSelected = deadline?.toDateString() === d.toDateString();
+                    return (
+                      <TouchableOpacity 
+                        key={day} 
+                        style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : 'transparent', borderColor: theme.border }]} 
+                        onPress={() => setDeadline(isSelected ? null : d)}
+                      >
+                        <Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                        <Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )}
+
             <TouchableOpacity onPress={handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }]}><Text style={[styles.saveBtnText, { color: theme.background }]}>투표 시작하기</Text></TouchableOpacity>
           </ScrollView>
         </View>
@@ -307,5 +347,10 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   settingLabel: { fontSize: 16, fontWeight: '500' },
   saveBtn: { padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-  saveBtnText: { fontSize: 17, fontWeight: 'bold' }
+  saveBtnText: { fontSize: 17, fontWeight: 'bold' },
+  label: { fontSize: 13, fontWeight: '700', marginTop: 15, marginBottom: 8 },
+  datePicker: { flexDirection: 'row', marginBottom: 10 },
+  dateItem: { width: 55, height: 70, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  dateWeek: { fontSize: 11, fontWeight: '600' },
+  dateDay: { fontSize: 18, fontWeight: 'bold', marginTop: 2 },
 });
