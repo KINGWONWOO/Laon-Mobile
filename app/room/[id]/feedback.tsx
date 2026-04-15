@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
+import { Shadows } from '../../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull } from '../../../components/ui/RoomComponents';
@@ -269,7 +270,7 @@ export default function FeedbackScreen() {
             <View style={styles.modalOverlay}>
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : undefined} style={[styles.modalContent, { backgroundColor: theme.card }]}>
                 <Text style={{color: theme.text, marginBottom: 15}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
+                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
                   <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
                   <TouchableOpacity onPress={handleAddComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>등록</Text></TouchableOpacity>
@@ -282,7 +283,7 @@ export default function FeedbackScreen() {
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
                 <Text style={{color: theme.text, marginBottom: 15}}>댓글 수정</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
+                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
                   <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
                   <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
@@ -297,7 +298,7 @@ export default function FeedbackScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
         <View style={{ width: 28 }} />
@@ -333,8 +334,8 @@ export default function FeedbackScreen() {
       <Modal visible={showAddModal} transparent animationType="slide">
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>영상 업로드</Text>
-            <TextInput style={[styles.titleInput, { color: theme.text, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
+            <Text style={{color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>영상 업로드</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, ...Shadows.soft }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
             {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}]}><Text style={{fontWeight: 'bold', color: theme.background}}>갤러리에서 선택</Text></TouchableOpacity>}
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 20}}><Text style={{color: theme.textSecondary, textAlign: 'center'}}>취소</Text></TouchableOpacity>
           </View>
@@ -344,8 +345,8 @@ export default function FeedbackScreen() {
       <Modal visible={!!editingVideo} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: 'bold', marginBottom: 20}}>제목 수정</Text>
-            <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editTitle} onChangeText={setEditTitle} />
+            <Text style={{color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 20, letterSpacing: -0.5}}>제목 수정</Text>
+            <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, ...Shadows.soft }]} value={editTitle} onChangeText={setEditTitle} />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
               <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
               <TouchableOpacity onPress={handleUpdateVideo}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
@@ -359,9 +360,9 @@ export default function FeedbackScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15 },
   backBtn: { padding: 5 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   fullView: { flex: 1 },
   mainLayout: { flex: 1 },
   landscapeLayout: { flexDirection: 'row' },
@@ -370,24 +371,24 @@ const styles = StyleSheet.create({
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1 },
-  landscapeSidebar: { width: 300, borderLeftWidth: 1 },
-  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
-  sidebarTitle: { fontWeight: 'bold' },
-  cItem: { padding: 15, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
+  landscapeSidebar: { width: 300 },
+  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15 },
+  sidebarTitle: { fontWeight: '800', letterSpacing: -0.5 },
+  cItem: { padding: 15, flexDirection: 'row', alignItems: 'center' },
   commentActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
-  cTime: { fontWeight: 'bold', fontSize: 12, marginRight: 10 },
-  cUser: { fontSize: 11 },
+  cTime: { fontWeight: '800', fontSize: 12, marginRight: 10, letterSpacing: -0.5 },
+  cUser: { fontSize: 11, fontWeight: '500', opacity: 0.7 },
   cText: { fontSize: 13 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 25, borderRadius: 20 },
-  input: { padding: 15, borderRadius: 12, marginBottom: 20 },
-  uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 12 },
-  uploadButtonText: { fontWeight: 'bold', marginLeft: 8 },
-  videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 10, borderRadius: 15 },
+  modalContent: { padding: 25, borderRadius: 28, ...Shadows.card },
+  input: { padding: 15, borderRadius: 20, marginBottom: 20 },
+  uploadButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, margin: 15, borderRadius: 28, ...Shadows.soft },
+  uploadButtonText: { fontWeight: '800', marginLeft: 8, letterSpacing: -0.5 },
+  videoCard: { flexDirection: 'row', alignItems: 'center', padding: 20, marginHorizontal: 15, marginBottom: 12, borderRadius: 28, ...Shadows.card },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  modalContentUpload: { padding: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  titleInput: { borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
-  pickBtn: { padding: 15, borderRadius: 12, alignItems: 'center' },
+  modalContentUpload: { padding: 30, borderTopLeftRadius: 32, borderTopRightRadius: 32, ...Shadows.card },
+  titleInput: { borderRadius: 20, padding: 15, marginBottom: 20 },
+  pickBtn: { padding: 15, borderRadius: 28, alignItems: 'center', ...Shadows.soft },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }
 });

@@ -2,50 +2,55 @@ import { Platform } from 'react-native';
 
 export const themeColors = {
   light: {
-    primary: '#FF8E9E', // 코랄 핑크
-    secondary: '#FFB4C2',
-    background: '#FFFFFF',
-    card: '#F9F9F9',
-    text: '#2D2D2D',
-    textSecondary: '#8E8E8E',
-    border: '#F0F0F0',
-    accent: '#A06CD5',
-    error: '#FF5A5F',
-    success: '#4ECDC4'
+    primary: '#FF6B8B',     // 세련된 포인트 코랄-핑크
+    secondary: '#FFC4D0',
+    background: '#F8F9FA',  // 차가운 흰색이 아닌 아주 미세한 웜톤 밝은 회색
+    card: '#FFFFFF',        // 순백색 카드 (배경과 대비되어 떠보이게)
+    text: '#1C1C1E',        // 완전한 검은색이 아닌 세련된 다크 그레이
+    textSecondary: '#8E8E93', // 애플 스타일의 세컨더리 텍스트
+    border: '#E5E5EA',      // 아주 연한 구분선
+    accent: '#8A2BE2',      // 고급스러운 딥 라벤더
+    error: '#FF3B30',
+    success: '#34C759'
   },
   dark: {
-    primary: '#FF8E9E',
-    secondary: '#3D3D3D',
-    background: '#1A1A1B',
-    card: '#262626',
+    primary: '#FF6B8B',
+    secondary: '#5C5C5E',
+    background: '#000000',
+    card: '#1C1C1E',
     text: '#FFFFFF',
-    textSecondary: '#A0A0A0',
-    border: '#333333',
-    accent: '#B085F5',
-    error: '#FF5A5F',
-    success: '#4ECDC4'
+    textSecondary: '#EBEBF5',
+    border: '#38383A',
+    accent: '#BF5AF2',
+    error: '#FF453A',
+    success: '#32D74B'
   }
 };
 
-// 하위 호환성을 위해 Colors 객체 정의 (Light 모드 기준)
 export const Colors = themeColors.light;
 
 export const Shadows = {
   soft: {
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8 },
-      android: { elevation: 2 }
+      ios: { shadowColor: '#8E8E93', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 16 },
+      android: { elevation: 3 }
     })
   },
-  medium: {
+  glow: {
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 16 },
-      android: { elevation: 6 }
+      ios: { shadowColor: '#FF6B8B', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
+      android: { elevation: 8 }
+    })
+  },
+  card: {
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.04, shadowRadius: 24 },
+      android: { elevation: 2 }
     })
   }
 };
 
-export type ThemeType = 'light' | 'dark' | 'pink' | 'shiba';
+export type ThemeType = 'light' | 'dark';
 
 export const getThemeColors = (type: ThemeType) => {
   if (type === 'dark') return themeColors.dark;

@@ -6,6 +6,7 @@ import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull } from '../../../../components/ui/RoomComponents';
 import { Modal } from 'react-native';
+import { Shadows } from '../../../../constants/theme';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
@@ -129,7 +130,7 @@ export default function NoticeDetailScreen() {
       style={[styles.container, { backgroundColor: theme.background }]}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
@@ -150,19 +151,19 @@ export default function NoticeDetailScreen() {
               {author?.profileImage ? (
                 <Image source={{ uri: author.profileImage }} style={styles.authorAvatar} />
               ) : (
-                <View style={[styles.authorAvatar, { backgroundColor: theme.primary + '22' }]}>
-                  <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{author?.name?.[0]}</Text>
+                <View style={[styles.authorAvatar, { backgroundColor: theme.primary + '15' }]}>
+                  <Text style={{ color: theme.primary, fontWeight: '800' }}>{author?.name?.[0]}</Text>
                 </View>
               )}
               <View>
-                <Text style={[styles.authorName, { color: theme.text }]}>{author?.name || '알 수 없음'}</Text>
-                <Text style={[styles.dateText, { color: theme.textSecondary }]}>{formatDateFull(notice.createdAt)}</Text>
+                <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{author?.name || '알 수 없음'}</Text>
+                <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(notice.createdAt)}</Text>
               </View>
             </View>
 
             <View style={styles.titleRow}>
               {notice.isPinned && <Ionicons name="pin" size={16} color={theme.primary} style={{ marginRight: 6 }} />}
-              <Text style={[styles.title, { color: theme.text, flex: 1 }]}>{notice.title}</Text>
+              <Text style={[styles.title, { color: theme.text, flex: 1, letterSpacing: -0.5, fontWeight: '800' }]}>{notice.title}</Text>
             </View>
             <Text style={[styles.content, { color: theme.text }]}>{notice.content}</Text>
 
@@ -174,8 +175,8 @@ export default function NoticeDetailScreen() {
               </ScrollView>
             )}
 
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <Text style={[styles.commentCount, { color: theme.textSecondary }]}>댓글 {notice.comments?.length || 0}</Text>
+            <View style={[styles.divider, { backgroundColor: theme.border, opacity: 0.5 }]} />
+            <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>댓글 {notice.comments?.length || 0}</Text>
           </View>
         }
         renderItem={({ item: comment }) => {
@@ -183,10 +184,10 @@ export default function NoticeDetailScreen() {
           const isEditing = editingCommentId === comment.id;
 
           return (
-            <View style={[styles.commentItem, { borderBottomColor: theme.border + '44' }]}>
+            <View style={styles.commentItem}>
               <View style={styles.commentHeader}>
-                <Text style={[styles.commentAuthor, { color: theme.text }]}>{cAuthor?.name || '...'}</Text>
-                <Text style={[styles.commentDate, { color: theme.textSecondary }]}>{formatDateFull(comment.createdAt)}</Text>
+                <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
+                <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
                 {comment.userId === currentUser?.id && !isEditing && (
                   <TouchableOpacity onPress={() => handleCommentOptions(comment)}>
                     <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
@@ -196,16 +197,16 @@ export default function NoticeDetailScreen() {
               {isEditing ? (
                 <View style={styles.commentEditBox}>
                   <TextInput
-                    style={[styles.commentEditInput, { color: theme.text, borderColor: theme.primary, backgroundColor: theme.background }]}
+                    style={[styles.commentEditInput, { color: theme.text, backgroundColor: theme.background }]}
                     value={editCommentText}
                     onChangeText={setEditCommentText}
                     multiline
                     autoFocus
                   />
                   <View style={styles.commentEditBtns}>
-                    <TouchableOpacity onPress={() => setEditingCommentId(null)}><Text style={{ color: theme.textSecondary, marginRight: 15 }}>취소</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={() => setEditingCommentId(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>취소</Text></TouchableOpacity>
                     <TouchableOpacity onPress={handleUpdateComment} disabled={isUpdatingComment}>
-                      {isUpdatingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>저장</Text>}
+                      {isUpdatingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: '800' }}>저장</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -222,12 +223,12 @@ export default function NoticeDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>공지 수정</Text>
+              <Text style={[styles.modalTitle, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>공지 수정</Text>
               <TouchableOpacity onPress={() => setShowEditNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
-              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, borderColor: theme.border, borderWidth: 1 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
+              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, marginBottom: 15 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
+              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, backgroundColor: theme.background, marginBottom: 20 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
               <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateNotice} disabled={isUpdatingNotice}>
                 {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>수정 완료</Text>}
               </TouchableOpacity>
@@ -236,9 +237,9 @@ export default function NoticeDetailScreen() {
         </View>
       </Modal>
 
-      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card, borderTopColor: theme.border }]}>
+      <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
         <TextInput
-          style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+          style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
           placeholder="댓글을 입력하세요..."
           placeholderTextColor="#888"
           value={commentText}
@@ -259,37 +260,37 @@ export default function NoticeDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15 },
   backBtn: { padding: 5 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', flex: 1, textAlign: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '800', flex: 1, textAlign: 'center', letterSpacing: -0.5 },
   deleteBtn: { padding: 5 },
   contentSection: { padding: 20 },
   authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  authorAvatar: { width: 40, height: 40, borderRadius: 15, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
-  authorName: { fontSize: 15, fontWeight: 'bold' },
-  dateText: { fontSize: 12, marginTop: 2 },
+  authorAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
+  authorName: { fontSize: 15, fontWeight: '800', letterSpacing: -0.5 },
+  dateText: { fontSize: 12, marginTop: 2, fontWeight: '500', opacity: 0.7 },
   titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  title: { fontSize: 22, fontWeight: 'bold' },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   content: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
   imageScroll: { marginBottom: 20 },
-  noticeImage: { width: 200, height: 200, borderRadius: 15, marginRight: 10 },
+  noticeImage: { width: 200, height: 200, borderRadius: 28, marginRight: 12, ...Shadows.soft },
   divider: { height: 1, width: '100%', marginBottom: 15 },
-  commentCount: { fontSize: 14, fontWeight: 'bold', marginBottom: 10 },
-  commentItem: { paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1 },
+  commentCount: { fontSize: 14, fontWeight: '800', marginBottom: 15, letterSpacing: -0.5 },
+  commentItem: { paddingVertical: 15, paddingHorizontal: 20 },
   commentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  commentAuthor: { fontSize: 14, fontWeight: 'bold', marginRight: 10 },
-  commentDate: { fontSize: 11, flex: 1 },
+  commentAuthor: { fontSize: 14, fontWeight: '800', marginRight: 10, letterSpacing: -0.5 },
+  commentDate: { fontSize: 11, flex: 1, fontWeight: '500', opacity: 0.7 },
   commentText: { fontSize: 14, lineHeight: 20 },
   commentEditBox: { marginTop: 5 },
-  commentEditInput: { borderWidth: 1, borderRadius: 10, padding: 8, fontSize: 14, minHeight: 60, textAlignVertical: 'top' },
+  commentEditInput: { borderRadius: 20, padding: 12, fontSize: 14, minHeight: 60, textAlignVertical: 'top', ...Shadows.soft },
   commentEditBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, alignItems: 'center' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 15, borderTopWidth: 1 },
-  input: { flex: 1, borderWidth: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: 8, maxHeight: 100, marginRight: 10 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 15 },
+  input: { flex: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, maxHeight: 100, marginRight: 10, ...Shadows.soft },
+  sendBtn: { width: 44, height: 44, borderRadius: 999, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%' },
+  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%', ...Shadows.card },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold' },
-  submitBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
-  submitBtnText: { fontWeight: 'bold' },
+  modalTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  submitBtn: { padding: 15, borderRadius: 28, alignItems: 'center', marginTop: 10, ...Shadows.soft },
+  submitBtnText: { fontWeight: '800', letterSpacing: -0.5 },
 });

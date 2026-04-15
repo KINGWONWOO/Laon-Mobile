@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull } from '../../../components/ui/RoomComponents';
+import { Shadows } from '../../../constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -104,8 +105,7 @@ export default function ScheduleScreen() {
       <TouchableOpacity 
         style={[
           styles.listCard, 
-          { backgroundColor: theme.card, shadowColor: theme.text },
-          !isClosed && { borderColor: theme.primary + '33', borderWidth: 1 }
+          { backgroundColor: theme.card }
         ]} 
         onPress={() => setSelectedScheduleId(schedule.id)}
       >
@@ -165,7 +165,7 @@ export default function ScheduleScreen() {
             </View>
             <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
             
-            <View style={[styles.matrixCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <View style={[styles.matrixCard, { backgroundColor: theme.card }]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
                 <View>
                   <View style={styles.matrixRow}>
@@ -196,8 +196,7 @@ export default function ScheduleScreen() {
                             activeOpacity={0.7} 
                             style={[
                               styles.gridCell, 
-                              { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: isSelected ? theme.primary : theme.border + '33' },
-                              isSelected && { borderWidth: 2 }
+                              { backgroundColor: getHeatmapColor(votersForThisOpt.length) }
                             ]} 
                             onPress={() => {
                               const currentRes = schedule.responses[currentUser?.id || ''] || [];
@@ -209,7 +208,7 @@ export default function ScheduleScreen() {
                               setShowVoterModal(true);
                             }}
                           >
-                            {isSelected && <Ionicons name="checkmark" size={14} color={theme.background} />}
+                            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
                           </TouchableOpacity>
                         );
                       })}
@@ -220,7 +219,7 @@ export default function ScheduleScreen() {
               <Text style={{ textAlign: 'center', fontSize: 11, color: theme.textSecondary, marginTop: 15, fontWeight: '500' }}>💡 칸을 길게 누르면 참여자 명단을 볼 수 있어요</Text>
             </View>
 
-            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }]}>
               <View style={styles.voterRow}>
                 <View style={[styles.voterLabelContainer, { backgroundColor: theme.success + '15' }]}>
                   <Text style={[styles.voterLabel, { color: theme.success }]}>참여 {participants.length}</Text>
@@ -241,7 +240,7 @@ export default function ScheduleScreen() {
               </View>
             </View>
 
-            <View style={[styles.rankingBox, { backgroundColor: theme.card, shadowColor: theme.text }]}>
+            <View style={[styles.rankingBox, { backgroundColor: theme.card }]}>
               <View style={{flexDirection:'row', alignItems:'center', marginBottom: 20}}>
                 <View style={[styles.iconCircleSmall, { backgroundColor: theme.accent + '15', marginRight: 10 }]}>
                   <Ionicons name="time" size={16} color={theme.accent} />
@@ -252,7 +251,7 @@ export default function ScheduleScreen() {
               {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
                 <TouchableOpacity 
                   key={idx} 
-                  style={[styles.rankingItem, idx < 2 && { borderBottomWidth: 1, borderBottomColor: theme.border }]} 
+                  style={styles.rankingItem} 
                   onPress={() => { setVotersToDisplay(r.voters); setVoterModalTitle(`${r.dateTime.slice(5)} 투표자`); setShowVoterModal(true); }}
                 >
                   <View style={[styles.rankingBadge, { backgroundColor: idx === 0 ? theme.primary : idx === 1 ? theme.accent : theme.success }]}>
@@ -273,14 +272,14 @@ export default function ScheduleScreen() {
             </View>
 
             {isClosed && ranked[0].votes > 0 && (
-              <View style={[styles.resultBanner, {backgroundColor: theme.primary, shadowColor: theme.primary}]}>
+              <View style={[styles.resultBanner, {backgroundColor: theme.primary}]}>
                 <Ionicons name="calendar-check" size={20} color={theme.background} style={{ marginRight: 8 }} />
                 <Text style={{color: theme.background, fontWeight:'800', fontSize: 15}}>추천 시간: {ranked[0].dateTime.slice(5)}시</Text>
               </View>
             )}
 
             {isOwner && !isClosed && (
-              <TouchableOpacity style={[styles.manualCloseBtn, {borderColor: theme.error}]} onPress={() => handleCloseScheduleManual(schedule.id)}>
+              <TouchableOpacity style={styles.manualCloseBtn} onPress={() => handleCloseScheduleManual(schedule.id)}>
                 <Ionicons name="stop-circle-outline" size={20} color={theme.error} />
                 <Text style={{color: theme.error, fontWeight: '800', marginLeft: 8}}>일정 투표 마감하기</Text>
               </TouchableOpacity>
@@ -312,7 +311,7 @@ export default function ScheduleScreen() {
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
       <View style={styles.header}>
         <View><Text style={[styles.headerTitle, { color: theme.text }]}>일정 투표</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>가장 많이 모이는 시간을 찾아드려요!</Text></View>
-        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color={theme.background} /></TouchableOpacity>
+        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color={theme.background} /></TouchableOpacity>
       </View>
 
       <FlatList 
@@ -358,10 +357,10 @@ export default function ScheduleScreen() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>제목</Text>
-              <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]} placeholder="예: 정기 연습" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
+              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 정기 연습" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
               
               <Text style={[styles.label, { color: theme.textSecondary, marginTop: 15 }]}>날짜 선택 (복수 가능)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20, paddingVertical: 5}}>{Array.from({length: 31}).map((_, day) => { const d = new Date(); d.setDate(d.getDate() + day); const isSelected = !!selectedDates.find(sd => sd.toDateString() === d.toDateString()); return (<TouchableOpacity key={day} style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : theme.background, borderColor: isSelected ? theme.primary : theme.border }]} onPress={() => toggleDate(d)}><Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text></TouchableOpacity>); })}</ScrollView>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20, paddingVertical: 5}}>{Array.from({length: 31}).map((_, day) => { const d = new Date(); d.setDate(d.getDate() + day); const isSelected = !!selectedDates.find(sd => sd.toDateString() === d.toDateString()); return (<TouchableOpacity key={day} style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : theme.card }]} onPress={() => toggleDate(d)}><Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text></TouchableOpacity>); })}</ScrollView>
               
               <Text style={[styles.label, { color: theme.textSecondary }]}>시간 범위 ({startTime}:00 ~ {endTime}:00)</Text>
               <View style={styles.timeSelectCard}>
@@ -371,11 +370,11 @@ export default function ScheduleScreen() {
                 </View>
               </View>
 
-              <View style={[styles.settingCard, { backgroundColor: theme.background, marginTop: 20 }]}>
+              <View style={[styles.settingCard, { marginTop: 20 }]}>
                 <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary, false: '#ddd' }} thumbColor={Platform.OS === 'android' ? (hasDeadline ? theme.primary : '#f4f3f4') : ''} /></View>
                 {hasDeadline && (
                   <View style={{marginTop: 15}}>
-                    <TouchableOpacity style={[styles.compactRow, {borderColor: theme.border, backgroundColor: theme.card}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
+                    <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.card}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
                       <Ionicons name="calendar" size={20} color={theme.primary} />
                       <Text style={{color: theme.text, marginLeft: 10, fontWeight: '600'}}>{formatDateFull(deadline.getTime())}</Text>
                     </TouchableOpacity>
@@ -384,7 +383,7 @@ export default function ScheduleScreen() {
                 )}
               </View>
 
-              <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary, shadowColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>{showEditModal ? '수정 완료' : '등록하기'}</Text>}</TouchableOpacity>
+              <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>{showEditModal ? '수정 완료' : '등록하기'}</Text>}</TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -396,126 +395,111 @@ export default function ScheduleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
-  headerTitle: { fontSize: 30, fontWeight: '800' },
-  headerSub: { fontSize: 14, marginTop: 4, opacity: 0.8 },
-  addButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  headerTitle: { fontSize: 30, fontWeight: '800', letterSpacing: -1 },
+  headerSub: { fontSize: 14, marginTop: 4, fontWeight: '500', opacity: 0.7 },
+  addButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...Shadows.glow },
   listCard: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     padding: 24, 
     borderRadius: 28, 
     marginBottom: 16,
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.06, 
-    shadowRadius: 12, 
-    elevation: 3 
+    ...Shadows.card
   },
   listInfo: { flex: 1 },
-  listTitle: { fontSize: 18, fontWeight: '800' },
-  listMeta: { fontSize: 13, fontWeight: '500', marginTop: 2 },
-  closedBadge: { marginLeft: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  listTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  listMeta: { fontSize: 13, fontWeight: '500', marginTop: 2, opacity: 0.7 },
+  closedBadge: { marginLeft: 10, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   iconCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   iconCircleSmall: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   detailContainer: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee2' },
-  detailHeaderTitle: { fontSize: 20, fontWeight: '800' },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15 },
+  detailHeaderTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.8 },
   closeBtn: { padding: 5 },
   detailDeleteBtn: { padding: 5 },
   detailScroll: { padding: 24 },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, alignSelf: 'flex-start' },
-  detailTitle: { fontSize: 26, fontWeight: '800', marginBottom: 25, lineHeight: 34 },
+  statusBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, alignSelf: 'flex-start' },
+  detailTitle: { fontSize: 26, fontWeight: '800', marginBottom: 25, lineHeight: 34, letterSpacing: -1 },
   matrixCard: { 
     padding: 20, 
     borderRadius: 32, 
     marginBottom: 25,
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.07, 
-    shadowRadius: 15, 
-    elevation: 4 
+    ...Shadows.card
   },
   matrixContainer: { marginTop: 5 },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
   timeLabelCell: { width: 55, alignItems: 'center', justifyContent: 'center', height: 45 },
-  timeLabelText: { fontSize: 12, fontWeight: '700' },
+  timeLabelText: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
   dateHeaderCell: { width: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  dateHeaderText: { fontSize: 12, fontWeight: '700' },
-  dateHeaderDay: { fontSize: 18, fontWeight: '900', marginTop: 2 },
-  gridCell: { width: 50, height: 45, borderWidth: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8, margin: 1 },
+  dateHeaderText: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
+  dateHeaderDay: { fontSize: 18, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
+  gridCell: { width: 50, height: 45, alignItems: 'center', justifyContent: 'center', borderRadius: 12, margin: 1 },
   gridCellEmpty: { width: 50, height: 45, margin: 1 },
   voterSummaryCard: { 
     padding: 24, 
     borderRadius: 28, 
     marginBottom: 25,
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.05, 
-    shadowRadius: 10, 
-    elevation: 2 
+    ...Shadows.card
   },
   voterRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  voterLabelContainer: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, width: 85, alignItems: 'center', marginRight: 12 },
+  voterLabelContainer: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, width: 90, alignItems: 'center', marginRight: 12 },
   voterLabel: { fontSize: 12, fontWeight: '800' },
   voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-  voterName: { fontSize: 14, fontWeight: '500', marginRight: 6, marginBottom: 4 },
+  voterName: { fontSize: 14, fontWeight: '500', marginRight: 6, marginBottom: 4, opacity: 0.8 },
   rankingBox: { 
     padding: 24, 
     borderRadius: 32, 
     marginBottom: 25,
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.07, 
-    shadowRadius: 15, 
-    elevation: 4 
+    ...Shadows.card
   },
-  rankingHeader: { fontSize: 17, fontWeight: '800' },
+  rankingHeader: { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
   rankingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
   rankingBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   rankingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  rankingText: { flex: 1, fontSize: 16, fontWeight: '700' },
+  rankingText: { flex: 1, fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
   rankingCountRow: { flexDirection: 'row', alignItems: 'center' },
   rankingCount: { fontSize: 16, fontWeight: '800', marginRight: 4 },
   resultBanner: { 
     flexDirection: 'row',
     padding: 20, 
-    borderRadius: 24, 
+    borderRadius: 28, 
     alignItems: 'center', 
     justifyContent: 'center', 
     marginBottom: 20,
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.15, 
-    shadowRadius: 10, 
-    elevation: 5
+    ...Shadows.glow
   },
-  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 24, borderWidth: 2, marginTop: 10, borderStyle: 'dashed' },
+  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 28, marginTop: 10, backgroundColor: '#8E8E9310' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { padding: 25, borderTopLeftRadius: 40, borderTopRightRadius: 40, maxHeight: '92%', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 10 },
-  voterModalContent: { padding: 25, borderRadius: 32, width: '85%', maxHeight: '70%' },
+  modalContent: { padding: 25, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%', ...Shadows.card },
+  voterModalContent: { padding: 25, borderRadius: 32, width: '85%', maxHeight: '70%', ...Shadows.card },
   voterList: { marginTop: 10 },
   voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  modalTitle: { fontSize: 24, fontWeight: '800' },
-  label: { fontSize: 14, fontWeight: '800', marginTop: 20, marginBottom: 10, marginLeft: 4 },
-  input: { borderWidth: 1.5, borderRadius: 20, padding: 18, fontSize: 16, marginBottom: 12 },
-  settingCard: { padding: 18, borderRadius: 24, borderWidth: 1, borderColor: '#eee2' },
+  modalTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -1 },
+  label: { fontSize: 14, fontWeight: '800', marginTop: 20, marginBottom: 10, marginLeft: 4, letterSpacing: -0.5 },
+  input: { borderRadius: 20, padding: 18, fontSize: 16, marginBottom: 12, ...Shadows.soft },
+  settingCard: { padding: 20, borderRadius: 28, backgroundColor: '#8E8E9308' },
   settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingLabel: { fontSize: 16, fontWeight: '700' },
-  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderWidth: 1.5, borderRadius: 20 },
-  compactPicker: { borderRadius: 24, marginTop: 12, overflow: 'hidden', borderWidth: 1 },
-  pickerHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee2' },
+  settingLabel: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
+  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20, ...Shadows.soft },
+  compactPicker: { borderRadius: 28, marginTop: 12, overflow: 'hidden', ...Shadows.soft },
+  pickerHeader: { flexDirection: 'row' },
   pickerTab: { flex: 1, padding: 15, alignItems: 'center' },
   smallDateBtn: { width: 50, height: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
   smallTimeBtn: { padding: 18, alignItems: 'center' },
-  dateItem: { width: 60, height: 75, borderRadius: 20, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  dateWeek: { fontSize: 12, fontWeight: '700' },
-  dateDay: { fontSize: 20, fontWeight: '900', marginTop: 2 },
-  timeSelectCard: { padding: 20, borderRadius: 28, backgroundColor: 'rgba(0,0,0,0.02)', borderWidth: 1, borderColor: '#eee2' },
+  dateItem: { width: 60, height: 75, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12, ...Shadows.soft },
+  dateWeek: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
+  dateDay: { fontSize: 20, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
+  timeSelectCard: { padding: 20, borderRadius: 28, backgroundColor: '#8E8E9308' },
   timeSelectRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
   timeCol: { width: '42%', alignItems: 'center' },
-  timeLabel: { fontSize: 13, marginBottom: 10, fontWeight: '700' },
-  timeScroll: { height: 150, width: '100%', borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.5)' },
+  timeLabel: { fontSize: 13, marginBottom: 10, fontWeight: '800', letterSpacing: -0.3 },
+  timeScroll: { height: 150, width: '100%', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.5)' },
   timeItem: { padding: 12, alignItems: 'center', borderRadius: 12 },
-  saveBtn: { padding: 20, borderRadius: 24, alignItems: 'center', marginTop: 25, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
-  saveBtnText: { fontSize: 18, fontWeight: '800' },
+  saveBtn: { padding: 20, borderRadius: 28, alignItems: 'center', marginTop: 25, ...Shadows.glow },
+  saveBtnText: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 16, fontWeight: '500' }
+  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 16, fontWeight: '600', opacity: 0.7 }
 });
 

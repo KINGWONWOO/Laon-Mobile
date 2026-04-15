@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storageService } from '../../../services/storageService';
 import { RoomActionBtn, NoticeItem } from '../../../components/ui/RoomComponents';
+import { Shadows } from '../../../constants/theme';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -244,63 +245,63 @@ export default function RoomMainScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingHorizontal: 20 },
-  headerCard: { padding: 24, borderRadius: 32, marginTop: 10, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 16 }, android: { elevation: 6 } }) },
+  headerCard: { padding: 24, borderRadius: 32, marginTop: 10, ...Shadows.card },
   roomHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  roomImageLarge: { width: 72, height: 72, borderRadius: 24 },
-  roomInitialCircle: { width: 72, height: 72, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  roomInitialText: { fontSize: 32, fontWeight: '800' },
+  roomImageLarge: { width: 72, height: 72, borderRadius: 28 },
+  roomInitialCircle: { width: 72, height: 72, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  roomInitialText: { fontSize: 32, fontWeight: '800', letterSpacing: -1 },
   roomInfoMain: { flex: 1, marginLeft: 18 },
-  roomName: { fontSize: 24, fontWeight: '800', marginBottom: 8, letterSpacing: -0.5 },
+  roomName: { fontSize: 24, fontWeight: '800', marginBottom: 8, letterSpacing: -1 },
   idPassRow: { flexDirection: 'row' },
-  idBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-  idBadgeText: { fontSize: 11, fontWeight: '700' },
+  idBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  idBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: -0.2 },
   shareBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   
-  myProfileRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 20 },
-  myProfileImg: { width: 40, height: 40, borderRadius: 16, marginRight: 14 },
-  myProfileLabel: { fontSize: 10, fontWeight: '700', marginBottom: 2, opacity: 0.6 },
-  myProfileName: { fontSize: 15, fontWeight: '700' },
+  myProfileRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 28 },
+  myProfileImg: { width: 44, height: 44, borderRadius: 22, marginRight: 14 },
+  myProfileLabel: { fontSize: 10, fontWeight: '500', marginBottom: 2, opacity: 0.7 },
+  myProfileName: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
   editIconCircle: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
 
   sectionHeader: { marginTop: 32, marginBottom: 16, paddingHorizontal: 4 },
   sectionHeaderWithAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 32, marginBottom: 16, paddingHorizontal: 4 },
-  sectionTitle: { fontSize: 19, fontWeight: '800', letterSpacing: -0.5 },
+  sectionTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.8 },
   
   actionList: { marginTop: 4 },
   manageGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  gridItem: { width: '31%', padding: 20, borderRadius: 28, alignItems: 'center', marginBottom: 14, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 8 }, android: { elevation: 2 } }) },
-  gridIconCircle: { width: 48, height: 48, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  gridItemTitle: { fontSize: 13, fontWeight: '700', letterSpacing: -0.3 },
+  gridItem: { width: '31%', padding: 20, borderRadius: 28, alignItems: 'center', marginBottom: 14, ...Shadows.card },
+  gridIconCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  gridItemTitle: { fontSize: 13, fontWeight: '800', letterSpacing: -0.5 },
 
   noticeSection: { marginTop: 10 },
-  writeNoticeBtn: { backgroundColor: '#FF8E9E15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
-  emptyNotice: { padding: 40, borderRadius: 24, alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#eee' },
-  emptyText: { marginTop: 12, fontSize: 14, fontWeight: '500' },
+  writeNoticeBtn: { backgroundColor: '#FF8E9E15', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  emptyNotice: { padding: 40, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...Shadows.soft },
+  emptyText: { marginTop: 12, fontSize: 14, fontWeight: '600', opacity: 0.7 },
   moreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
 
   deleteRoomBtn: { marginTop: 40, alignItems: 'center', padding: 20 },
-  deleteRoomText: { color: '#ff4444', fontSize: 13, textDecorationLine: 'underline', opacity: 0.6 },
+  deleteRoomText: { color: '#ff4444', fontSize: 13, fontWeight: '500', textDecorationLine: 'underline', opacity: 0.7 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '85%', padding: 28, borderRadius: 36, alignItems: 'center' },
-  modalTitle: { fontSize: 22, fontWeight: '800', marginBottom: 8 },
+  modalContent: { width: '85%', padding: 28, borderRadius: 32, alignItems: 'center' },
+  modalTitle: { fontSize: 22, fontWeight: '800', marginBottom: 8, letterSpacing: -1 },
   modalImgPicker: { position: 'relative', marginBottom: 24, marginTop: 10 },
-  modalProfileImg: { width: 110, height: 110, borderRadius: 40 },
+  modalProfileImg: { width: 110, height: 110, borderRadius: 32 },
   cameraBadge: { position: 'absolute', bottom: -4, right: -4, width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#fff' },
-  input: { width: '100%', borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 20, fontSize: 16 },
+  input: { width: '100%', borderRadius: 20, padding: 16, marginBottom: 20, fontSize: 16, ...Shadows.soft },
   modalButtons: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
-  modalBtn: { flex: 0.48, padding: 16, borderRadius: 18, alignItems: 'center' },
+  modalBtn: { flex: 0.48, padding: 16, borderRadius: 28, alignItems: 'center' },
 
-  addModalContent: { width: '100%', height: '90%', padding: 28, borderTopLeftRadius: 40, borderTopRightRadius: 40, position: 'absolute', bottom: 0 },
+  addModalContent: { width: '100%', height: '90%', padding: 28, borderTopLeftRadius: 32, borderTopRightRadius: 32, position: 'absolute', bottom: 0 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  noticeInputTitle: { fontSize: 18, fontWeight: '700', paddingVertical: 16, borderBottomWidth: 1, marginBottom: 10 },
+  noticeInputTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, paddingVertical: 16, marginBottom: 10 },
   noticeInputContent: { fontSize: 16, minHeight: 150, textAlignVertical: 'top', paddingVertical: 16 },
-  label: { fontSize: 14, fontWeight: '700', marginTop: 20, marginBottom: 12 },
+  label: { fontSize: 14, fontWeight: '800', marginTop: 20, marginBottom: 12, letterSpacing: -0.5 },
   imagePreviewRow: { flexDirection: 'row', marginBottom: 24 },
-  imageAddBtn: { width: 88, height: 88, borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  imageAddBtn: { width: 88, height: 88, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginRight: 12, backgroundColor: '#8E8E9315' },
   imagePreviewWrapper: { position: 'relative', marginRight: 12 },
-  imagePreview: { width: 88, height: 88, borderRadius: 24 },
+  imagePreview: { width: 88, height: 88, borderRadius: 28 },
   imageRemoveBtn: { position: 'absolute', top: -6, right: -6, backgroundColor: '#fff', borderRadius: 12, elevation: 2 },
-  saveBtn: { padding: 20, borderRadius: 22, alignItems: 'center', marginTop: 10 },
-  saveBtnText: { fontSize: 18, fontWeight: '800' }
+  saveBtn: { padding: 20, borderRadius: 28, alignItems: 'center', marginTop: 10 },
+  saveBtnText: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }
 });
