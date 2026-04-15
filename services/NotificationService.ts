@@ -8,29 +8,38 @@ const isExpoGo = Constants.appOwnership === 'expo';
 // 푸시 알림 모듈 로드
 let Notifications: any = null;
 
-try {
-  Notifications = require('expo-notifications');
+// Expo SDK 53+ 부터는 Expo Go에서 알림 모듈 로드 시 크래시가 발생함
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
 
-  if (Notifications?.setNotificationHandler) {
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
+    if (Notifications?.setNotificationHandler) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to load expo-notifications module:', err);
   }
-} catch (err) {
-  console.warn('Failed to load expo-notifications module:', err);
 }
 
 /**
  * 푸시 알림을 등록하고 유저의 DB 프로필에 토큰을 저장합니다.
  */
 export async function registerForPushNotificationsAsync() {
-  if (!Notifications) return null;
+  if (!Notifications || isExpoGo) {
+    if (isExpoGo) {
+      console.warn('Push notifications are not supported in Expo Go (SDK 53+). Please use a development build.');
+    }
+    return null;
+  }
+  
   if (!Device.isDevice) {
     console.warn('Must use physical device for push notifications');
     return null;
