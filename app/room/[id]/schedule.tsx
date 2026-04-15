@@ -17,6 +17,7 @@ export default function ScheduleScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   
   // Voter list modal
   const [showVoterModal, setShowVoterModal] = useState(false);
@@ -50,6 +51,7 @@ export default function ScheduleScreen() {
 
   const handleAddSchedule = async () => {
     if (!title.trim() || selectedDates.length === 0) return Alert.alert('오류', '제목과 날짜를 선택해주세요.');
+    setIsUpdating(true);
     const opts: string[] = [];
     selectedDates.forEach(date => {
       const dateStr = date.toISOString().split('T')[0];
@@ -60,6 +62,7 @@ export default function ScheduleScreen() {
       setShowAddModal(false);
       resetForm();
     } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsUpdating(false); }
   };
 
   const resetForm = () => {
@@ -71,7 +74,6 @@ export default function ScheduleScreen() {
     setTitle(selectedSchedule.title);
     setHasDeadline(!!selectedSchedule.deadline);
     if (selectedSchedule.deadline) setDeadline(new Date(selectedSchedule.deadline));
-    // 기존 날짜 복구
     const existingDates = Array.from(new Set(selectedSchedule.options.map((o:any) => o.dateTime.split(' ')[0]))).map(ds => new Date(ds));
     setSelectedDates(existingDates);
     setShowEditModal(true);
@@ -79,13 +81,12 @@ export default function ScheduleScreen() {
 
   const handleUpdateSchedule = async () => {
     if (!title.trim() || !selectedScheduleId) return;
+    setIsUpdating(true);
     try {
-      // 시간 범위/날짜 수정 시 기존 옵션들을 대체해야 함 (콘텐츠 서비스에서 처리하도록 요청)
-      // 현재는 간단하게 제목과 마감기한만 업데이트
       await updateSchedule(selectedScheduleId, { title: title.trim(), deadline: hasDeadline ? deadline.getTime() : undefined });
       setShowEditModal(false);
-      Alert.alert('성공', '수정되었습니다. (날짜/시간 범위 변경은 새로운 투표 생성을 권장합니다.)');
     } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsUpdating(false); }
   };
 
   const handleCloseScheduleManual = (sid: string) => {
@@ -157,7 +158,6 @@ export default function ScheduleScreen() {
             </View>
             <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
 
-            {/* TOP 3 Ranking */}
             <View style={[styles.rankingBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[styles.rankingHeader, { color: theme.primary }]}>가장 많이 모이는 시간</Text>
               {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (

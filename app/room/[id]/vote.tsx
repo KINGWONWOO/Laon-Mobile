@@ -15,10 +15,12 @@ export default function VoteScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   
+  // Voter list modal
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
 
+  // Form states
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -43,10 +45,12 @@ export default function VoteScreen() {
 
   const handleCreateVote = async () => {
     if (!question.trim() || options.some(opt => !opt.trim())) return Alert.alert('오류', '질문과 모든 선택지 내용을 입력해주세요.');
+    setIsUpdating(true);
     try {
       await addVote(id || '', question, options, { isAnonymous, allowMultiple, useNotification, deadline: hasDeadline ? deadline.getTime() : undefined });
       setShowAddModal(false); resetForm();
     } catch (e: any) { Alert.alert('오류', e.message); }
+    finally { setIsUpdating(false); }
   };
 
   const resetForm = () => {
@@ -67,6 +71,7 @@ export default function VoteScreen() {
     if (!question.trim() || !selectedVoteId) return;
     setIsUpdating(true);
     try {
+      // updateVote matches the required type updates
       await updateVote(selectedVoteId, { question: question.trim(), deadline: hasDeadline ? deadline.getTime() : undefined, isAnonymous, allowMultiple } as any);
       setShowEditModal(false);
     } catch (e: any) { Alert.alert('오류', e.message); }
