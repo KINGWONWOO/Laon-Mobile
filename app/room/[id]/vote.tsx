@@ -15,12 +15,10 @@ export default function VoteScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   
-  // Voter list modal
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
 
-  // Form states
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -230,7 +228,15 @@ export default function VoteScreen() {
 }
 
 const styles = StyleSheet.create({
-...
+  container: { flex: 1, paddingHorizontal: 20 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+  headerTitle: { fontSize: 26, fontWeight: 'bold' },
+  headerSub: { fontSize: 13, marginTop: 4 },
+  addButton: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', elevation: 5 },
+  voteListCard: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 20, marginBottom: 12, borderWidth: 1 },
+  voteListInfo: { flex: 1 },
+  voteListTitle: { fontSize: 17, fontWeight: 'bold' },
+  voteListMeta: { fontSize: 12 },
   closedBadge: { marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   detailContainer: { flex: 1 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee2' },
@@ -242,7 +248,7 @@ const styles = StyleSheet.create({
   voteQuestion: { fontSize: 22, fontWeight: 'bold', marginBottom: 25 },
   optItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 12, borderWidth: 1 },
   voterCountBadge: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.05)' },
-  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 20, marginTop: 20 },
+  voterSummaryDetail: { paddingHorizontal: 5, paddingBottom: 30, marginTop: 20 },
   voterRow: { flexDirection: 'row' },
   voterLabel: { fontSize: 13, fontWeight: 'bold', width: 70 },
   voterNamesRow: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
@@ -254,5 +260,22 @@ const styles = StyleSheet.create({
   modalContent: { padding: 25, borderTopLeftRadius: 35, borderTopRightRadius: 35, maxHeight: '90%' },
   voterModalContent: { padding: 20, borderRadius: 25, width: '80%' },
   voterList: { marginTop: 10 },
-...
+  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 22, fontWeight: 'bold' },
+  label: { fontSize: 13, fontWeight: '700', marginTop: 15, marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 15, padding: 15, fontSize: 16, marginBottom: 10 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 15 },
+  settingLabel: { fontSize: 16, fontWeight: '500' },
+  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderWidth: 1, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.03)' },
+  compactPicker: { borderWidth: 1, borderRadius: 12, marginTop: 10, overflow: 'hidden' },
+  pickerHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee2' },
+  pickerTab: { flex: 1, padding: 10, alignItems: 'center' },
+  smallDateBtn: { width: 45, height: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, marginRight: 8 },
+  smallTimeBtn: { padding: 15, alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: '#eee1' },
+  optInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  addOptBtn: { padding: 15, borderRadius: 15, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', marginTop: 5, marginBottom: 20 },
+  saveBtn: { padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 },
+  saveBtnText: { fontSize: 17, fontWeight: 'bold' },
+  emptyText: { textAlign: 'center', marginTop: 100, fontSize: 16 }
 });
