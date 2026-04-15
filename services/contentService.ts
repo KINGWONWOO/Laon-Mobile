@@ -91,5 +91,11 @@ export const contentService = {
   },
   respondToSchedule: async (sid: string, uid: string, oids: string[]) => {
     return await supabase.from('schedule_responses').upsert({ schedule_id: sid, user_id: uid, option_ids: oids }, { onConflict: 'schedule_id,user_id' });
+  },
+  closeVote: async (id: string) => {
+    return await supabase.from('votes').update({ deadline: new Date().toISOString() }).eq('id', id);
+  },
+  closeSchedule: async (id: string) => {
+    return await supabase.from('schedules').update({ deadline: new Date().toISOString() }).eq('id', id);
   }
 };

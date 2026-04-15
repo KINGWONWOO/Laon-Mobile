@@ -57,12 +57,14 @@ type AppContextType = {
   updateSchedule: (id: string, updates: Partial<Schedule>) => Promise<void>;
   respondToSchedule: (scheduleId: string, optionIds: string[]) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<void>;
+  closeSchedule: (id: string) => Promise<void>;
 
   votes: Vote[];
   addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
   updateVote: (id: string, updates: Partial<Vote>) => Promise<void>;
   respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
   deleteVote: (voteId: string) => Promise<void>;
+  closeVote: (id: string) => Promise<void>;
 
   formations: Formation[];
   addFormation: (roomId: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
@@ -251,11 +253,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const addVote = async (rid: string, q: string, opts: string[], s: any) => { const { data: v } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined); if (v) await contentService.addVoteOptions(v.id, opts); if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); refreshAllData(); };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined }); refreshAllData(); };
+  const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); refreshAllData(); };
   const respondToVote = async (vid: string, oids: string[]) => { await contentService.respondToVote(vid, currentUser!.id, oids); refreshAllData(); };
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); refreshAllData(); };
 
   const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number) => { const { data: s } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined); if (s) await contentService.addScheduleOptions(s.id, opts); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 투표', t); refreshAllData(); };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined }); refreshAllData(); };
+  const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 투표 종료', `"${sch.title}" 투표가 종료되었습니다.`); refreshAllData(); };
   const respondToSchedule = async (sid: string, oids: string[]) => { await contentService.respondToSchedule(sid, currentUser!.id, oids); refreshAllData(); };
   const deleteSchedule = async (id: string) => { await contentService.deleteSchedule(id); refreshAllData(); };
 
@@ -273,8 +277,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
       videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
       photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
-      schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule,
-      votes: votesMapped, addVote, updateVote, respondToVote, deleteVote,
+      schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule,
+      votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
       formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
       refreshAllData, themeType, setThemeType, theme,
       updateRoomUserProfile, getRoomUserProfile, roomProfiles
