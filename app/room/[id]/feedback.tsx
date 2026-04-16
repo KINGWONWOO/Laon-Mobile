@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -99,8 +100,9 @@ export default function FeedbackScreen() {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
-      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 2000;
-    });
+      // 1초 전 등장, 3초간 유지 (페이드인 1초, 대기 1초, 페이드아웃 1초)
+      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000;
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -283,17 +285,23 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Floating Comment Bubbles */}
+              {/* Floating Comment Bubbles with Stacking Animation */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
-                  {activeFloatingBubbles.map((c, idx) => (
-                    <View key={c.id} style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 4, marginTop: idx > 0 ? 8 : 0 }, Shadows.medium]}>
+                  {activeFloatingBubbles.map((c) => (
+                    <Animated.View 
+                      key={c.id} 
+                      entering={FadeIn.duration(1000)} 
+                      exiting={FadeOut.duration(1000)}
+                      layout={LinearTransition.springify()}
+                      style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary }, Shadows.medium]}
+                    >
                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
                         <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUserById(c.userId)?.name}</Text>
                         <Text style={[styles.bubbleTime, { color: theme.textSecondary }]}>{formatTime(c.timestampMillis)}</Text>
                       </View>
                       <Text style={[styles.bubbleText, { color: theme.text }]}>{c.text}</Text>
-                    </View>
+                    </Animated.View>
                   ))}
                 </View>
               )}
@@ -452,7 +460,7 @@ const styles = StyleSheet.create({
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1 },
-  landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
+  landscapeSidebar: { width: 300, borderLeftColor: theme.border, borderLeftWidth: 1, flex: undefined },
   sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, alignItems: 'center' },
   sidebarTitle: { fontWeight: '900', letterSpacing: -0.5 },
   cItem: { padding: 15, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
@@ -469,9 +477,9 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, top: 80, bottom: 20, width: 250, justifyContent: 'center', alignItems: 'flex-end', zIndex: 90 },
-  bubble: { padding: 12, borderRadius: 16, width: '100%', maxWidth: 240 },
-  bubbleUser: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
-  bubbleTime: { fontSize: 9, fontWeight: '600', marginLeft: 6 },
-  bubbleText: { fontSize: 13, fontWeight: '600' }
+  floatingContainer: { position: 'absolute', right: 20, bottom: 40, width: 220, justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
+  bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8, borderLeftWidth: 3 },
+  bubbleUser: { fontSize: 10, fontWeight: '800' },
+  bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
+  bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 }
 });
