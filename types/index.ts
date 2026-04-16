@@ -90,6 +90,7 @@ export type Schedule = {
   startDate?: string;
   endDate?: string;
   useNotification?: boolean;
+  reminderMinutes?: number; // Minutes before deadline to notify
   deadline?: number; // Timestamp
   createdAt: number;
 };
@@ -109,7 +110,7 @@ export type Vote = {
   isAnonymous: boolean;
   allowMultiple: boolean;
   useNotification?: boolean;
-  notificationMinutes?: number; // Minutes before deadline to notify
+  reminderMinutes?: number; // Minutes before deadline to notify
   deadline?: number; // Timestamp
   viewedBy: string[]; // User IDs who viewed the vote
   comments: Comment[];

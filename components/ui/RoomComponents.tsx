@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet, Platform, Modal, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../../constants/theme';
 
@@ -7,6 +7,35 @@ export const formatDateFull = (timestamp: number) => {
   const date = new Date(timestamp);
   return `${date.getMonth() + 1}월 ${date.getDate()}일 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
 };
+
+export const OptionModal = ({ visible, onClose, options, title, theme }: any) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <TouchableWithoutFeedback onPress={onClose}>
+      <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback>
+          <View style={[styles.optionContent, { backgroundColor: theme.card }]}>
+            {title && <Text style={[styles.optionTitle, { color: theme.textSecondary }]}>{title}</Text>}
+            <View style={styles.optionsList}>
+              {options.map((opt: any, idx: number) => (
+                <TouchableOpacity 
+                  key={idx} 
+                  style={[styles.optionItem, idx === options.length - 1 && { borderBottomWidth: 0 }]} 
+                  onPress={() => { opt.onPress(); onClose(); }}
+                >
+                  <Text style={[styles.optionText, { color: opt.destructive ? '#FF3B30' : theme.text }, opt.bold && { fontWeight: '800' }]}>{opt.label}</Text>
+                  {opt.icon && <Ionicons name={opt.icon} size={20} color={opt.destructive ? '#FF3B30' : theme.text} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.background }]} onPress={onClose}>
+              <Text style={[styles.cancelText, { color: theme.text }]}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
+);
 
 export const RoomActionBtn = ({ item, onPress, theme }: any) => (
   <TouchableOpacity 
@@ -88,5 +117,14 @@ const styles = StyleSheet.create({
   noticeTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.3 },
   noticeMeta: { fontSize: 11, fontWeight: '500', opacity: 0.8 },
   noticeImage: { width: 56, height: 56, borderRadius: 16 },
-  noticeIconBox: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' }
+  noticeIconBox: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', padding: 20, paddingBottom: 40 },
+  optionContent: { borderRadius: 32, padding: 8, overflow: 'hidden', ...Shadows.card },
+  optionTitle: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 16, marginBottom: 8, opacity: 0.6 },
+  optionsList: { marginBottom: 8 },
+  optionItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  optionText: { fontSize: 17, fontWeight: '600' },
+  cancelBtn: { padding: 18, borderRadius: 24, alignItems: 'center', marginTop: 8 },
+  cancelText: { fontSize: 17, fontWeight: '800' }
 });

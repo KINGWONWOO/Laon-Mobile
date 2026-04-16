@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDateFull } from '../../../components/ui/RoomComponents';
+import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -31,6 +31,11 @@ export default function ArchiveScreen() {
   const [editDesc, setEditDesc] = useState('');
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
+
+  // Option Modal states
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+  const [showCommentOptions, setShowCommentOptions] = useState(false);
+  const [selectedCommentForModal, setSelectedCommentForModal] = useState<any>(null);
 
   const roomPhotos = useMemo(() => photos.filter(p => p.roomId === id), [photos, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
@@ -99,17 +104,25 @@ export default function ArchiveScreen() {
     ]);
   };
 
-  const handlePhotoOptions = () => {
-    if (!selectedPhoto) return;
-    Alert.alert('아카이브 설정', '어떤 작업을 하시겠습니까?', [
-      { text: '설명 수정', onPress: () => {
-        setEditDesc(selectedPhoto.description || '');
-        setIsEditingPhoto(true);
-      }},
-      { text: '삭제', style: 'destructive', onPress: () => handleDeletePhoto(selectedPhoto) },
-      { text: '취소', style: 'cancel' }
-    ]);
-  };
+  const photoOptions = [
+    { label: '설명 수정', icon: 'create-outline', onPress: () => {
+      setEditDesc(selectedPhoto.description || '');
+      setIsEditingPhoto(true);
+    }},
+    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeletePhoto(selectedPhoto) }
+  ];
+
+  const commentOptions = [
+    { label: '수정', icon: 'create-outline', onPress: () => {
+      if (!selectedCommentForModal) return;
+      setEditingComment(selectedCommentForModal);
+      setEditCommentText(selectedCommentForModal.text);
+    }},
+    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
+      if (!selectedCommentForModal) return;
+      handleDeleteComment(selectedCommentForModal.id);
+    }}
+  ];
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
@@ -138,7 +151,7 @@ export default function ArchiveScreen() {
         contentContainerStyle={styles.listContent}
       />
 
-      <Modal visible={!!selectedPhoto} animationType="slide" transparent>
+      <Modal visible={!!selectedPhoto} animationType="slide" transparent onRequestClose={() => setSelectedPhoto(null)}>
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
           style={[styles.container, { backgroundColor: theme.background }]}
@@ -149,7 +162,7 @@ export default function ArchiveScreen() {
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>아카이브 상세</Text>
             {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) ? (
-              <TouchableOpacity onPress={handlePhotoOptions} style={styles.deleteBtn}>
+              <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>
                 <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
               </TouchableOpacity>
             ) : <View style={{ width: 40 }} />}
@@ -193,14 +206,8 @@ export default function ArchiveScreen() {
                     <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
                     {comment.userId === currentUser?.id && !isEditing && (
                       <TouchableOpacity onPress={() => {
-                        Alert.alert('댓글 설정', '어떤 작업을 하시겠습니까?', [
-                          { text: '수정', onPress: () => {
-                            setEditingComment(comment);
-                            setEditCommentText(comment.text);
-                          }},
-                          { text: '삭제', style: 'destructive', onPress: () => handleDeleteComment(comment.id) },
-                          { text: '취소', style: 'cancel' }
-                        ]);
+                        setSelectedCommentForModal(comment);
+                        setShowCommentOptions(true);
                       }}>
                         <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
                       </TouchableOpacity>
@@ -231,6 +238,22 @@ export default function ArchiveScreen() {
             contentContainerStyle={{ paddingBottom: 100 }}
           />
 
+          <OptionModal 
+            visible={showPhotoOptions} 
+            onClose={() => setShowPhotoOptions(false)} 
+            options={photoOptions} 
+            title="아카이브 설정" 
+            theme={theme} 
+          />
+
+          <OptionModal 
+            visible={showCommentOptions} 
+            onClose={() => { setShowCommentOptions(false); setSelectedCommentForModal(null); }} 
+            options={commentOptions} 
+            title="댓글 설정" 
+            theme={theme} 
+          />
+
           <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
             <TextInput
               style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
@@ -251,8 +274,8 @@ export default function ArchiveScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Edit & Add Modals remain consistent... */}
-      <Modal visible={isEditingPhoto} transparent animationType="fade">
+      {/* Edit & Add Modals */}
+      <Modal visible={isEditingPhoto} transparent animationType="fade" onRequestClose={() => setIsEditingPhoto(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }, Shadows.medium]}>
             <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>설명 수정</Text>
@@ -265,7 +288,7 @@ export default function ArchiveScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showAddModal} transparent animationType="slide">
+      <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
             <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>사진 업로드</Text>

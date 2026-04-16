@@ -11,7 +11,7 @@ import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
-import { formatDateFull } from '../../../components/ui/RoomComponents';
+import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 
 export default function FeedbackScreen() {
@@ -38,13 +38,17 @@ export default function FeedbackScreen() {
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
 
+  // Option Modal states
+  const [showVideoOptions, setShowVideoOptions] = useState(false);
+  const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
+  const [showCommentOptions, setShowCommentOptions] = useState(false);
+  const [selectedCommentForOptions, setSelectedCommentForOptions] = useState<any>(null);
+
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   
-  // 💡 Filter Types: 'all' | 'choreography' | 'formation'
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
-  // Formation specific state
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
   const [formationTime, setFormationTime] = useState(0);
   const [formationDuration, setFormationDuration] = useState(60);
@@ -73,24 +77,16 @@ export default function FeedbackScreen() {
   
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
-  // 💡 Refined Filter Logic
   const filteredVideos = useMemo(() => {
     switch (filterType) {
       case 'choreography':
-        // '안무': [동선]이 포함되지 않은 모든 영상
         return roomVideos.filter(v => !v.title.includes('[동선]') && !v.videoUrl.startsWith('formation://'));
       case 'formation':
-        // '동선': [동선]이 포함된 모든 영상
         return roomVideos.filter(v => v.title.includes('[동선]') || v.videoUrl.startsWith('formation://'));
       default:
         return roomVideos;
     }
   }, [roomVideos, filterType]);
-
-  const sortedComments = useMemo(() => {
-    if (!selectedVideo) return [];
-    return [...selectedVideo.comments].sort((a, b) => a.timestampMillis - b.timestampMillis);
-  }, [selectedVideo]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -194,6 +190,27 @@ export default function FeedbackScreen() {
     ]);
   };
 
+  const videoOptions = [
+    { label: '제목 수정', icon: 'create-outline', onPress: () => {
+      if (!selectedVideoForOptions) return;
+      setEditingVideo(selectedVideoForOptions);
+      setEditTitle(selectedVideoForOptions.title);
+    }},
+    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
+  ];
+
+  const commentOptions = [
+    { label: '수정', icon: 'create-outline', onPress: () => {
+      if (!selectedCommentForOptions) return;
+      setEditingComment(selectedCommentForOptions);
+      setEditCommentText(selectedCommentForOptions.text);
+    }},
+    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
+      if (!selectedCommentForOptions) return;
+      handleDeleteComment(selectedCommentForOptions.id);
+    }}
+  ];
+
   const seekTo = (ms: number) => { 
     if (isFormation) setFormationTime(ms);
     else if (player) player.currentTime = ms / 1000; 
@@ -207,7 +224,7 @@ export default function FeedbackScreen() {
   if (selectedVideo) {
     const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
     return (
-      <Modal visible={true} animationType="slide" transparent={false}>
+      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
             <View style={[styles.videoSection, isFullScreen && styles.landscapeVideo, { backgroundColor: '#000' }]}>
@@ -259,11 +276,8 @@ export default function FeedbackScreen() {
                       </TouchableOpacity>
                       {item.userId === currentUser?.id && (
                         <View style={styles.commentActions}>
-                          <TouchableOpacity onPress={() => { setEditingComment(item); setEditCommentText(item.text); }} style={{marginRight: 10}}>
-                            <Ionicons name="pencil" size={14} color={theme.textSecondary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
-                            <Ionicons name="trash" size={14} color={theme.error} />
+                          <TouchableOpacity onPress={() => { setSelectedCommentForOptions(item); setShowCommentOptions(true); }}>
+                            <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
                           </TouchableOpacity>
                         </View>
                       )}
@@ -274,27 +288,29 @@ export default function FeedbackScreen() {
             )}
           </View>
 
-          <Modal visible={showCommentInput} transparent animationType="fade">
+          <OptionModal visible={showCommentOptions} onClose={() => setShowCommentOptions(false)} options={commentOptions} title="댓글 설정" theme={theme} />
+
+          <Modal visible={showCommentInput} transparent animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
             <View style={styles.modalOverlay}>
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : undefined} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
+                <Text style={{color: theme.text, marginBottom: 15, fontWeight: '800'}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
                 <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleAddComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>등록</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleAddComment} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>등록</Text></TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
             </View>
           </Modal>
 
-          <Modal visible={!!editingComment} transparent animationType="fade">
+          <Modal visible={!!editingComment} transparent animationType="fade" onRequestClose={() => setEditingComment(null)}>
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15}}>댓글 수정</Text>
+                <Text style={{color: theme.text, marginBottom: 15, fontWeight: '900'}}>댓글 수정</Text>
                 <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20}}><Text style={{color: theme.textSecondary}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleUpdateComment}><Text style={{color: theme.primary, fontWeight:'bold'}}>수정</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleUpdateComment} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -313,24 +329,13 @@ export default function FeedbackScreen() {
       </View>
 
       <View style={styles.filterBar}>
-        <TouchableOpacity 
-          style={[styles.filterBtn, filterType === 'all' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
-          onPress={() => setFilterType('all')}
-        >
-          <Text style={[styles.filterText, {color: filterType === 'all' ? '#fff' : theme.textSecondary}]}>전체</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterBtn, filterType === 'choreography' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
-          onPress={() => setFilterType('choreography')}
-        >
-          <Text style={[styles.filterText, {color: filterType === 'choreography' ? '#fff' : theme.textSecondary}]}>안무</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterBtn, filterType === 'formation' ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} 
-          onPress={() => setFilterType('formation')}
-        >
-          <Text style={[styles.filterText, {color: filterType === 'formation' ? '#fff' : theme.textSecondary}]}>동선</Text>
-        </TouchableOpacity>
+        {['all', 'choreography', 'formation'].map((type) => (
+          <TouchableOpacity key={type} style={[styles.filterBtn, filterType === type ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} onPress={() => setFilterType(type as any)}>
+            <Text style={[styles.filterText, {color: filterType === type ? '#fff' : theme.textSecondary}]}>
+              {type === 'all' ? '전체' : type === 'choreography' ? '안무' : '동선'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
       
       <FlatList
@@ -348,16 +353,17 @@ export default function FeedbackScreen() {
               <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUserById(item.userId)?.name} • {formatDateFull(item.createdAt)}</Text>
             </View>
             {item.userId === currentUser?.id && (
-              <View style={{flexDirection: 'row'}}>
-                <TouchableOpacity onPress={() => { setEditingVideo(item); setEditTitle(item.title); }} style={{padding: 8}}><Ionicons name="pencil" size={18} color={theme.textSecondary} /></TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteVideo(item)} style={{padding: 8}}><Ionicons name="trash" size={18} color={theme.error} /></TouchableOpacity>
-              </View>
+              <TouchableOpacity onPress={() => { setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>
+                <Ionicons name="ellipsis-vertical" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
             )}
           </TouchableOpacity>
         )}
       />
 
-      <Modal visible={showAddModal} transparent animationType="slide">
+      <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={videoOptions} title="영상 설정" theme={theme} />
+
+      <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
             <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>영상 업로드</Text>
@@ -368,7 +374,7 @@ export default function FeedbackScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!editingVideo} transparent animationType="fade">
+      <Modal visible={!!editingVideo} transparent animationType="fade" onRequestClose={() => setEditingVideo(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }, Shadows.medium]}>
             <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>제목 수정</Text>
@@ -403,16 +409,16 @@ const styles = StyleSheet.create({
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1 },
   landscapeSidebar: { width: 300, borderLeftWidth: 1 },
-  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1 },
-  sidebarTitle: { fontWeight: 'bold' },
+  sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, alignItems: 'center' },
+  sidebarTitle: { fontWeight: '900', letterSpacing: -0.5 },
   cItem: { padding: 15, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
   commentActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
-  cTime: { fontWeight: 'bold', fontSize: 12, marginRight: 10 },
-  cUser: { fontSize: 11 },
-  cText: { fontSize: 13 },
+  cTime: { fontWeight: '900', fontSize: 12, marginRight: 10 },
+  cUser: { fontSize: 11, fontWeight: '600', opacity: 0.7 },
+  cText: { fontSize: 14, fontWeight: '500', marginTop: 2 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
   modalContent: { padding: 28, borderRadius: 32 },
-  input: { padding: 16, borderRadius: 18, marginBottom: 20 },
+  input: { padding: 16, borderRadius: 18, marginBottom: 20, fontWeight: '600' },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentUpload: { padding: 32, borderTopLeftRadius: 40, borderTopRightRadius: 40 },
   titleInput: { borderRadius: 20, padding: 18, marginBottom: 20, fontSize: 16, fontWeight: '600' },

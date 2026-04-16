@@ -61,10 +61,10 @@ export const contentService = {
   },
 
   // --- Votes & Schedules ---
-  addVote: async (rid: string, uid: string, q: string, isAnon: boolean, isMulti: boolean, useNoti: boolean, deadline?: string) => {
-    return await supabase.from('votes').insert([{ room_id: rid, user_id: uid, question: q, is_anonymous: isAnon, allow_multiple: isMulti, use_notification: useNoti, deadline }]).select().single();
+  addVote: async (rid: string, uid: string, q: string, isAnon: boolean, isMulti: boolean, useNoti: boolean, deadline?: string, reminderBefore?: number) => {
+    return await supabase.from('votes').insert([{ room_id: rid, user_id: uid, question: q, is_anonymous: isAnon, allow_multiple: isMulti, use_notification: useNoti, deadline, reminder_before: reminderBefore }]).select().single();
   },
-  updateVote: async (id: string, updates: { question?: string, deadline?: string }) => {
+  updateVote: async (id: string, updates: { question?: string, deadline?: string, use_notification?: boolean, reminder_before?: number }) => {
     return await supabase.from('votes').update(updates).eq('id', id);
   },
   deleteVote: async (id: string) => {
@@ -77,10 +77,10 @@ export const contentService = {
     return await supabase.from('vote_responses').upsert({ vote_id: vid, user_id: uid, option_ids: oids }, { onConflict: 'vote_id,user_id' });
   },
 
-  addSchedule: async (rid: string, uid: string, t: string, useNoti: boolean, deadline?: string) => {
-    return await supabase.from('schedules').insert([{ room_id: rid, user_id: uid, title: t, use_notification: useNoti, deadline }]).select().single();
+  addSchedule: async (rid: string, uid: string, t: string, useNoti: boolean, deadline?: string, reminderBefore?: number) => {
+    return await supabase.from('schedules').insert([{ room_id: rid, user_id: uid, title: t, use_notification: useNoti, deadline, reminder_before: reminderBefore }]).select().single();
   },
-  updateSchedule: async (id: string, updates: { title?: string, deadline?: string }) => {
+  updateSchedule: async (id: string, updates: { title?: string, deadline?: string, use_notification?: boolean, reminder_before?: number }) => {
     return await supabase.from('schedules').update(updates).eq('id', id);
   },
   deleteSchedule: async (id: string) => {

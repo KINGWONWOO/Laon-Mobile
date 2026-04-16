@@ -18,43 +18,50 @@ serve(async (req) => {
     )
 
     const now = new Date()
-    const thirtyMinsLater = new Date(now.getTime() + 30 * 60 * 1000)
-    const thirtyOneMinsLater = new Date(now.getTime() + 31 * 60 * 1000)
 
-    // 1. 마감이 약 30분 남은 일정들 조회
+    // 1. 마감 전 알림이 필요한 일정들 조회
     const { data: schedules } = await supabase
       .from('schedules')
-      .select('id, room_id, title, deadline')
+      .select('id, room_id, title, deadline, reminder_before, reminder_sent')
       .eq('use_notification', true)
-      .gte('deadline', thirtyMinsLater.toISOString())
-      .lt('deadline', thirtyOneMinsLater.toISOString())
+      .is('reminder_sent', false)
+      .not('deadline', 'is', null)
+      .not('reminder_before', 'is', null)
 
-    // 2. 마감이 약 30분 남은 투표들 조회
+    // 2. 마감 전 알림이 필요한 투표들 조회
     const { data: votes } = await supabase
       .from('votes')
-      .select('id, room_id, question, deadline')
+      .select('id, room_id, question, deadline, reminder_before, reminder_sent')
       .eq('use_notification', true)
-      .gte('deadline', thirtyMinsLater.toISOString())
-      .lt('deadline', thirtyOneMinsLater.toISOString())
+      .is('reminder_sent', false)
+      .not('deadline', 'is', null)
+      .not('reminder_before', 'is', null)
 
     const results = []
 
     // 일정 알림 처리
     if (schedules) {
       for (const s of schedules) {
-        // 방 멤버 조회
-        const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', s.room_id)
-        // 참여자 조회
-        const { data: responses } = await supabase.from('schedule_responses').select('user_id').eq('schedule_id', s.id)
+        const deadlineDate = new Date(s.deadline)
+        const reminderTime = new Date(deadlineDate.getTime() - s.reminder_before * 60 * 1000)
         
-        const participantIds = responses?.map(r => r.user_id) || []
-        const nonParticipantIds = members?.map(m => m.user_id).filter(id => !participantIds.includes(id)) || []
+        if (reminderTime <= now) {
+          const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', s.room_id)
+          const { data: responses } = await supabase.from('schedule_responses').select('user_id').eq('schedule_id', s.id)
+          
+          const participantIds = responses?.map(r => r.user_id) || []
+          const nonParticipantIds = members?.map(m => m.user_id).filter(id => !participantIds.includes(id)) || []
 
-        if (nonParticipantIds.length > 0) {
-          await supabase.functions.invoke('push-notification', {
-            body: { user_ids: nonParticipantIds, title: '일정 투표 마감 30분 전', body: `"${s.title}" 투표에 아직 참여하지 않으셨어요!` }
-          })
-          results.push(`Schedule ${s.id}: Sent to ${nonParticipantIds.length} users`)
+          if (nonParticipantIds.length > 0) {
+            const timeLabel = s.reminder_before >= 60 ? `${s.reminder_before/60}시간 전` : `${s.reminder_before}분 전`
+            await supabase.functions.invoke('push-notification', {
+              body: { user_ids: nonParticipantIds, title: `일정 조율 마감 ${timeLabel}`, body: `"${s.title}" 일정 조율에 아직 참여하지 않으셨어요!` }
+            })
+            await supabase.from('schedules').update({ reminder_sent: true }).eq('id', s.id)
+            results.push(`Schedule ${s.id}: Reminder sent`)
+          } else {
+            await supabase.from('schedules').update({ reminder_sent: true }).eq('id', s.id)
+          }
         }
       }
     }
@@ -62,17 +69,26 @@ serve(async (req) => {
     // 투표 알림 처리
     if (votes) {
       for (const v of votes) {
-        const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', v.room_id)
-        const { data: responses } = await supabase.from('vote_responses').select('user_id').eq('vote_id', v.id)
-        
-        const participantIds = responses?.map(r => r.user_id) || []
-        const nonParticipantIds = members?.map(m => m.user_id).filter(id => !participantIds.includes(id)) || []
+        const deadlineDate = new Date(v.deadline)
+        const reminderTime = new Date(deadlineDate.getTime() - v.reminder_before * 60 * 1000)
 
-        if (nonParticipantIds.length > 0) {
-          await supabase.functions.invoke('push-notification', {
-            body: { user_ids: nonParticipantIds, title: '투표 마감 30분 전', body: `"${v.question}" 투표에 아직 참여하지 않으셨어요!` }
-          })
-          results.push(`Vote ${v.id}: Sent to ${nonParticipantIds.length} users`)
+        if (reminderTime <= now) {
+          const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', v.room_id)
+          const { data: responses } = await supabase.from('vote_responses').select('user_id').eq('vote_id', v.id)
+          
+          const participantIds = responses?.map(r => r.user_id) || []
+          const nonParticipantIds = members?.map(m => m.user_id).filter(id => !participantIds.includes(id)) || []
+
+          if (nonParticipantIds.length > 0) {
+            const timeLabel = v.reminder_before >= 60 ? `${v.reminder_before/60}시간 전` : `${v.reminder_before}분 전`
+            await supabase.functions.invoke('push-notification', {
+              body: { user_ids: nonParticipantIds, title: `투표 마감 ${timeLabel}`, body: `"${v.question}" 투표에 아직 참여하지 않으셨어요!` }
+            })
+            await supabase.from('votes').update({ reminder_sent: true }).eq('id', v.id)
+            results.push(`Vote ${v.id}: Reminder sent`)
+          } else {
+            await supabase.from('votes').update({ reminder_sent: true }).eq('id', v.id)
+          }
         }
       }
     }

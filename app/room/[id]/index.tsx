@@ -8,7 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storageService } from '../../../services/storageService';
-import { RoomActionBtn, NoticeItem } from '../../../components/ui/RoomComponents';
+import { RoomActionBtn, NoticeItem, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 
 export default function RoomMainScreen() {
@@ -30,6 +30,7 @@ export default function RoomMainScreen() {
   // Modals
   const [showRoomEditModal, setShowRoomEditModal] = useState(false); 
   const [showUserProfileModal, setShowUserProfileModal] = useState(false); 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   const [roomName, setRoomName] = useState(room?.name || '');
   const [roomImage, setRoomImage] = useState<string | null>(null);
@@ -72,7 +73,6 @@ export default function RoomMainScreen() {
     if (!roomName.trim()) return Alert.alert('오류', '방 이름을 입력해주세요.');
     setIsUpdating(true);
     try {
-      // 💡 방 자체 정보(이름, 이미지) 업데이트 (Host 전용)
       await updateRoom(id as string, roomName, roomImage);
       setShowRoomEditModal(false);
       Alert.alert('성공', '방 정보가 업데이트되었습니다.');
@@ -93,6 +93,13 @@ export default function RoomMainScreen() {
     const message = `[LAON DANCE] '${room.name}' 크루룸 초대장\n\n방 ID: ${room.id}\n비밀번호: ${room.passcode}`;
     try { await Share.share({ title: room.name, message }); } catch (error) { Alert.alert('오류', '공유할 수 없습니다.'); }
   };
+
+  const deleteOptions = [
+    { label: '방 삭제하기', destructive: true, bold: true, onPress: () => {
+      deleteRoom(id as string);
+      router.replace('/rooms');
+    }}
+  ];
 
   const coreActions = [
     { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#5E5CE6', desc: '함께 영상을 보며 의견 나누기' },
@@ -119,7 +126,6 @@ export default function RoomMainScreen() {
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                {/* 💡 독립된 유저 프로필 편집 버튼 */}
                 <TouchableOpacity style={[styles.userProfileBtn, {borderColor: theme.primary}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
                   <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.userAvatarSmall} />
                 </TouchableOpacity>
@@ -134,7 +140,6 @@ export default function RoomMainScreen() {
             <View style={styles.roomBrand}>
               <View style={styles.roomImageWrapper}>
                 <Image source={{ uri: room.imageUri || 'https://placeholder.com/150' }} style={styles.mainRoomImg} />
-                {/* 💡 방 설정 (Host 전용) */}
                 {isLeader && (
                   <TouchableOpacity style={[styles.roomSettingsBtn, {backgroundColor: theme.card}]} onPress={() => { setRoomName(room.name); setRoomImage(null); setShowRoomEditModal(true); }}>
                     <Ionicons name="settings-sharp" size={14} color={theme.text} />
@@ -205,15 +210,17 @@ export default function RoomMainScreen() {
           </View>
 
           {isLeader && (
-            <TouchableOpacity style={styles.roomDeleteLink} onPress={() => Alert.alert('방 삭제', '정말 삭제하시겠습니까?', [{ text: '취소' }, { text: '삭제', style: 'destructive', onPress: () => { deleteRoom(id as string); router.replace('/rooms'); } }])}>
+            <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
               <Text style={styles.roomDeleteText}>크루룸 삭제하기</Text>
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
 
+      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title="방을 삭제하면 모든 데이터가 사라집니다." theme={theme} />
+
       {/* Room Edit Modal (Host Only) */}
-      <Modal visible={showRoomEditModal} animationType="fade" transparent>
+      <Modal visible={showRoomEditModal} animationType="fade" transparent onRequestClose={() => setShowRoomEditModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
             <Text style={[styles.polishedModalTitle, { color: theme.text }]}>크루룸 정보 수정</Text>
@@ -233,7 +240,7 @@ export default function RoomMainScreen() {
       </Modal>
 
       {/* User Profile Edit Modal */}
-      <Modal visible={showUserProfileModal} animationType="fade" transparent>
+      <Modal visible={showUserProfileModal} animationType="fade" transparent onRequestClose={() => setShowUserProfileModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
             <Text style={[styles.polishedModalTitle, { color: theme.text }]}>나의 방 프로필 설정</Text>
@@ -253,7 +260,7 @@ export default function RoomMainScreen() {
       </Modal>
 
       {/* Notice Modal */}
-      <Modal visible={showAddNotice} animationType="slide" transparent>
+      <Modal visible={showAddNotice} animationType="slide" transparent onRequestClose={() => setShowAddAddNotice(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
             <View style={[styles.addModalMain, { backgroundColor: theme.background }]}>
