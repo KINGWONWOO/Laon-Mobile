@@ -297,8 +297,8 @@ export default function FeedbackScreen() {
                       key={c.id} 
                       entering={FadeIn.duration(800)} 
                       exiting={FadeOut.duration(800)}
-                      // 새로운 댓글 추가 시에만 기존 댓글들을 위로 밀어 올림
-                      layout={LinearTransition.springify().damping(20).stiffness(90)}
+                      // skipExiting()을 추가하여 아이템 소멸 시 다른 아이템들이 움직이지 않도록 고정
+                      layout={LinearTransition.springify().damping(20).stiffness(90).skipExiting()}
                       style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 3 }, Shadows.medium]}
                     >
                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
