@@ -7,9 +7,9 @@ import { Colors } from '../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function RoomsScreen() {
-  const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType } = useAppContext();
+  const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
   const router = useRouter();
-  
+
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newName, setNewName] = useState(currentUser?.name || '');
   const [newImage, setNewImage] = useState<string | null>(null);
@@ -43,9 +43,20 @@ export default function RoomsScreen() {
     { type: 'dark', label: '다크', icon: 'moon', color: '#1B1927' },
     { type: 'light', label: '라이트', icon: 'sunny', color: '#FFFFFF' },
     { type: 'pink', label: '연핑크', icon: 'heart', color: '#FFF5F8' },
-    { type: 'shiba', label: '시바견', icon: 'paw', color: '#FDF7F2' },
+    { type: 'custom', label: '사용자 설정', icon: 'color-palette', color: themeType === 'custom' ? customBackgroundColor : '#333' },
   ];
 
+  const presetColors = [
+    '#5E5CE6', '#32D74B', '#64D2FF', '#BF5AF2', 
+    '#FF375F', '#AC8E68', '#FF6B6B', '#4ECDC4', 
+    '#A06CD5', '#FF9F43', '#00D2FF', '#FDCB6E'
+  ];
+
+  const bgPresetColors = [
+    '#1C1C1E', '#2C2C2E', '#3A3A3C', '#121212',
+    '#FFFFFF', '#F2F2F7', '#E5E5EA', '#D1D1D6',
+    '#FEF1F2', '#F0F9FF', '#F5F5F5', '#1A1A1A'
+  ];
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* 상단 헤더: 프로필 정보 및 액션 버튼 */}
@@ -158,11 +169,43 @@ export default function RoomsScreen() {
                     ]}
                     onPress={() => setThemeType(t.type as any)}
                   >
-                    <Ionicons name={t.icon as any} size={20} color={themeType === t.type ? theme.primary : theme.textSecondary} />
-                    <Text style={[styles.themeLabel, { color: themeType === t.type ? theme.primary : theme.textSecondary }]}>{t.label}</Text>
+                    <Ionicons name={t.icon as any} size={20} color={themeType === t.type ? (t.type === 'custom' ? theme.text : theme.primary) : theme.textSecondary} />
+                    <Text style={[styles.themeLabel, { color: themeType === t.type ? (t.type === 'custom' ? theme.text : theme.primary) : theme.textSecondary }]}>{t.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {themeType === 'custom' && (
+                <>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>메인 색상 설정</Text>
+                  <View style={styles.colorPalette}>
+                    {presetColors.map((color) => (
+                      <TouchableOpacity 
+                        key={color} 
+                        style={[
+                          styles.colorOption, 
+                          { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
+                        ]} 
+                        onPress={() => setCustomColor(color)} 
+                      />
+                    ))}
+                  </View>
+
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>배경 색상 설정</Text>
+                  <View style={styles.colorPalette}>
+                    {bgPresetColors.map((color) => (
+                      <TouchableOpacity 
+                        key={color} 
+                        style={[
+                          styles.colorOption, 
+                          { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.text : 'transparent' }
+                        ]} 
+                        onPress={() => setCustomBackgroundColor(color)} 
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
@@ -210,6 +253,8 @@ const styles = StyleSheet.create({
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%', marginBottom: 25 },
   themeItem: { width: '48%', padding: 15, borderRadius: 12, borderWidth: 2, alignItems: 'center', marginBottom: 10, flexDirection: 'row', justifyContent: 'center' },
   themeLabel: { marginLeft: 8, fontSize: 14, fontWeight: 'bold' },
+  colorPalette: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', marginBottom: 20 },
+  colorOption: { width: 40, height: 40, borderRadius: 20, margin: 8, borderWidth: 3 },
   modalBtns: { flexDirection: 'row', width: '100%', marginTop: 10 },
   cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },
   submitBtn: { flex: 2, padding: 15, borderRadius: 12, alignItems: 'center' }

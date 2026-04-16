@@ -76,6 +76,10 @@ type AppContextType = {
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
   setThemeType: (theme: ThemeType) => void;
+  customColor: string;
+  setCustomColor: (color: string) => void;
+  customBackgroundColor: string;
+  setCustomBackgroundColor: (color: string) => void;
   theme: any;
   updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null) => Promise<void>;
   getRoomUserProfile: (roomId: string, userId: string) => { name?: string, profileImage?: string } | null;
@@ -88,14 +92,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [themeType, setThemeType] = useState<ThemeType>('dark');
+  const [themeType, setThemeTypeState] = useState<ThemeType>('dark');
+  const [customColor, setCustomColorState] = useState('#5E5CE6');
+  const [customBackgroundColor, setCustomBackgroundColorState] = useState('#000000');
   const [roomProfiles, setRoomProfiles] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    AsyncStorage.getItem('room_profiles').then(val => {
-      if (val) setRoomProfiles(JSON.parse(val));
-    });
+    // Load theme settings
+    AsyncStorage.getItem('theme_type').then(val => { if (val) setThemeTypeState(val as ThemeType); });
+    AsyncStorage.getItem('theme_custom_color').then(val => { if (val) setCustomColorState(val); });
+    AsyncStorage.getItem('theme_custom_bg_color').then(val => { if (val) setCustomBackgroundColorState(val); });
+    // Load room profiles
+    AsyncStorage.getItem('room_profiles').then(val => { if (val) setRoomProfiles(JSON.parse(val)); });
   }, []);
+
+  const setThemeType = async (type: ThemeType) => {
+    setThemeTypeState(type);
+    await AsyncStorage.setItem('theme_type', type);
+  };
+
+  const setCustomColor = async (color: string) => {
+    setCustomColorState(color);
+    await AsyncStorage.setItem('theme_custom_color', color);
+  };
+
+  const setCustomBackgroundColor = async (color: string) => {
+    setCustomBackgroundColorState(color);
+    await AsyncStorage.setItem('theme_custom_bg_color', color);
+  };
 
   const updateRoomUserProfile = async (roomId: string, name: string, profileImage: string | null) => {
     const key = `${roomId}_${currentUser?.id}`;
@@ -106,7 +130,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getRoomUserProfile = (roomId: string, userId: string) => roomProfiles[`${roomId}_${userId}`] || null;
 
-  const theme = getThemeColors(themeType);
+  const theme = getThemeColors(themeType, customColor, customBackgroundColor);
 
   const sendPushNotification = async (userIds: string[], title: string, body: string, data?: any) => {
     if (!userIds || userIds.length === 0) return;
@@ -282,7 +306,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule,
       votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
       formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
-      refreshAllData, themeType, setThemeType, theme,
+      refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
       updateRoomUserProfile, getRoomUserProfile, roomProfiles
     }}>
       {children}

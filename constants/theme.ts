@@ -1,75 +1,99 @@
-import { Platform } from 'react-native';
-
-export const themeColors = {
-  light: {
-    primary: '#5E5CE6',     // 세련된 인디고 블루 (전문적인 느낌)
-    secondary: '#AFB1FF',
-    background: '#FFFFFF',
-    card: '#F2F2F7',        // 애플 스타일의 연한 그레이 카드
-    text: '#000000',
-    textSecondary: '#8E8E93',
-    border: '#E5E5EA',
-    accent: '#FF2D55',      // 대비되는 레드-핑크 포인트
-    error: '#FF3B30',
-    success: '#34C759'
-  },
-  dark: {
-    primary: '#5E5CE6',
-    secondary: '#3A3A3C',
-    background: '#000000',
-    card: '#1C1C1E',        // 다크모드 카드
-    text: '#FFFFFF',
-    textSecondary: '#8E8E93',
-    border: '#38383A',
-    accent: '#FF2D55',
-    error: '#FF453A',
-    success: '#32D74B'
-  },
-  pink: {
-    primary: '#FF6B8B',     // 기존 감성 연핑크 테마 유지
-    secondary: '#FFDEE4',
-    background: '#FFF5F6',
-    card: '#FFFFFF',
-    text: '#4A2C2C',
-    textSecondary: '#A08585',
-    border: '#FFE0E5',
-    accent: '#FFB4C2',
-    error: '#FF5A5F',
-    success: '#4ECDC4'
-  }
+export const Colors = {
+  primary: '#5E5CE6', // Default blue
+  background: '#000000',
+  card: '#1C1C1E',
+  text: '#FFFFFF',
+  textSecondary: '#8E8E93',
+  border: '#38383A',
+  error: '#FF453A',
+  success: '#32D74B',
 };
 
-export const Colors = themeColors.light;
+export type ThemeType = 'dark' | 'light' | 'pink' | 'custom';
+
+const getContrastColor = (hexcolor: string) => {
+  if (!hexcolor) return '#FFFFFF';
+  const r = parseInt(hexcolor.slice(1, 3), 16);
+  const g = parseInt(hexcolor.slice(3, 5), 16);
+  const b = parseInt(hexcolor.slice(5, 7), 16);
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 128) ? '#000000' : '#FFFFFF';
+};
+
+export const getThemeColors = (type: ThemeType, customColor?: string, customBgColor?: string) => {
+  const primary = customColor || Colors.primary;
+
+  switch (type) {
+    case 'light':
+      return {
+        primary,
+        background: '#F2F2F7',
+        card: '#FFFFFF',
+        text: '#000000',
+        textSecondary: '#8E8E93',
+        border: '#C6C6C8',
+        error: '#FF3B30',
+        success: '#34C759',
+      };
+    case 'pink':
+      return {
+        primary: '#FF2D55',
+        background: '#FFF5F8',
+        card: '#FFFFFF',
+        text: '#1C1C1E',
+        textSecondary: '#8E8E93',
+        border: '#FFD1DC',
+        error: '#FF3B30',
+        success: '#34C759',
+      };
+    case 'custom':
+      const bgColor = customBgColor || '#000000';
+      const textColor = getContrastColor(bgColor);
+      return {
+        primary,
+        background: bgColor,
+        card: textColor === '#FFFFFF' ? '#1C1C1E' : '#FFFFFF',
+        text: textColor,
+        textSecondary: textColor === '#FFFFFF' ? '#8E8E93' : '#636366',
+        border: textColor === '#FFFFFF' ? '#38383A' : '#C6C6C8',
+        error: '#FF453A',
+        success: '#32D74B',
+      };
+    case 'dark':
+    default:
+      return {
+        primary,
+        background: '#000000',
+        card: '#1C1C1E',
+        text: '#FFFFFF',
+        textSecondary: '#8E8E93',
+        border: '#38383A',
+        error: '#FF453A',
+        success: '#32D74B',
+      };
+  }
+};
 
 export const Shadows = {
   soft: {
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10 },
-      android: { elevation: 2 }
-    })
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   medium: {
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 20 },
-      android: { elevation: 5 }
-    })
-  },
-  card: {
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.06, shadowRadius: 24 },
-      android: { elevation: 3 }
-    })
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
   },
   glow: {
-    ...Platform.select({
-      ios: { shadowColor: '#5E5CE6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
-      android: { elevation: 8 }
-    })
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 10,
   }
-};
-
-export type ThemeType = 'light' | 'dark' | 'pink';
-
-export const getThemeColors = (type: ThemeType) => {
-  return themeColors[type] || themeColors.light;
 };

@@ -40,6 +40,7 @@ export default function RoomsLayout() {
   return (
     <Stack
       screenOptions={{
+        headerShown: false,
         headerStyle: { 
           backgroundColor: Colors.background,
           elevation: 0,
