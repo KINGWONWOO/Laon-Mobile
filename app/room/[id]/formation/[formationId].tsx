@@ -11,7 +11,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
-import { storageService } from '../../../../services/storageService';
+import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 const PX_PER_SEC = 60; 
@@ -48,66 +48,30 @@ const PlayButton = React.memo(function PlayButton({ player, theme, currentTimeMs
   );
 });
 
-const WaveformBackground = React.memo(function WaveformBackground({ duration, seed = 'default', player }: { duration: number, seed?: string, player?: any }) {
+const WaveformBackground = React.memo(function WaveformBackground({ duration, peaks }: { duration: number, peaks: number[] }) {
   const { theme } = useAppContext();
   
   if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
-  // 밀도를 대폭 높여서 "연속적인" 녹음기 스타일 구현 (초당 12개 바)
-  const barsCount = Math.floor(duration * 12); 
-  
-  const bars = useMemo(() => {
-    const hash = (str: string) => {
-      let h = 0;
-      for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-      return Math.abs(h);
-    };
-    
-    const s = hash(seed);
-    
-    return Array.from({ length: barsCount }).map((_, i) => {
-      const progress = i / barsCount;
-      
-      // 녹음기 스타일: 기승전결(Verse-Chorus) 흐름을 기반으로 한 진폭 변화
-      const verse = Math.sin(progress * Math.PI * 6 + s); 
-      const chorus = Math.pow(Math.sin(progress * Math.PI * 10 + s), 2) * 1.6;
-      const energyBase = (verse * 0.2 + chorus * 0.8) + 0.5;
-
-      const getNoise = (freq: number, amp: number) => Math.abs(Math.sin(i * freq + s)) * amp;
-      const detail = getNoise(0.8, 0.4) + getNoise(2.2, 0.3) + getNoise(4.5, 0.2);
-      
-      // 0.0 ~ 1.0 정규화된 레벨
-      let normalizedLevel = Math.max(0, Math.min(1, (energyBase * 0.5) + (detail * 0.5)));
-      
-      // dB 매핑 (0dB ~ 100dB)
-      const dbIntensity = Math.pow(normalizedLevel, 2.0) * 100; 
-
-      const MAX_W_HEIGHT = 48; // 요청하신 2배 높이 유지
-      const h = Math.max(1.5, (dbIntensity / 100) * MAX_W_HEIGHT);
-      
-      return { 
-        h,
-        // 요청: 더 연한 색상
-        opacity: dbIntensity > 40 ? 0.4 : 0.18
-      };
-    });
-  }, [barsCount, seed]);
+  const displayPeaks = useMemo(() => {
+    if (peaks.length > 0) return peaks;
+    return Array.from({ length: Math.floor(duration * 10) }).map(() => 0.05);
+  }, [peaks, duration]);
 
   return (
-    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC }]}>
-      {bars.map((bar, i) => (
+    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, alignItems: 'center' }]}>
+      {displayPeaks.map((peak, i) => (
         <View 
           key={i} 
           style={[
             styles.waveformBar, 
             { 
               backgroundColor: theme.text,
-              width: 1.8, // 더 얇게
-              height: bar.h,
-              opacity: bar.opacity,
-              marginHorizontal: 0.5, // 좁은 간격으로 연속성 부여
-              borderRadius: 0.9,
-              // waveformContainer의 alignItems: 'center'를 통해 상하 대칭 실현
+              width: 1.8,
+              height: Math.max(2, peak * 48),
+              opacity: peak > 0.3 ? 0.35 : 0.15,
+              marginHorizontal: 0.7,
+              borderRadius: 1
             }
           ]} 
         />
@@ -135,8 +99,8 @@ const TimeMarkers = React.memo(function TimeMarkers({ duration }: { duration: nu
 const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, dancers, settings }: { scene: FormationScene, dancers: Dancer[], settings: FormationSettings }) {
   const aspectRatio = settings.gridCols / settings.gridRows;
   return (
-    <View style={{ flex: 1, width: '100%', padding: 8, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: '100%', height: '100%', aspectRatio, maxHeight: '100%', maxWidth: '100%', position: 'relative' }}>
+    <View style={{ flex: 1, width: '100%', padding: 4, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: '100%', height: '100%', aspectRatio, position: 'relative' }}>
         {dancers.map(d => {
           const pos = scene.positions[d.id] || { x: 0.5, y: 0.5 };
           return <View key={d.id} style={[styles.miniDancer, { backgroundColor: d.color, left: `${pos.x * 100}%`, top: `${pos.y * 100}%` }]} />;
@@ -146,133 +110,38 @@ const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, d
   );
 });
 
-const TransitionX = React.memo(function TransitionX({ width, left }: { width: number, left: number }) {
-  const safeWidth = Math.max(0, width);
-  if (safeWidth <= 5) return null;
-  const height = 85; 
-  const angle = Math.atan2(height, safeWidth) * (180 / Math.PI);
-  const length = Math.sqrt(safeWidth * safeWidth + height * height);
-  const { theme } = useAppContext();
-  return (
-    <View style={[styles.transitionXContainer, { left, width: safeWidth, height, top: 10 }]} pointerEvents="none">
-      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
-      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `-${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
-    </View>
-  );
-});
-
-const ResizeHandle = ({ direction, localX, localWidth, startX, startW, minX, maxX, onCommit }: any) => {
-  const { theme } = useAppContext();
-  const pan = Gesture.Pan()
-    .onStart(() => {
-      'worklet';
-      startX.value = localX.value;
-      startW.value = localWidth.value;
-    })
-    .onUpdate((e) => {
-      'worklet';
-      if (direction === 'left') {
-        const newX = Math.max(minX, Math.min(startX.value + e.translationX, startX.value + startW.value - 10));
-        const actualDiff = newX - startX.value;
-        localX.value = newX;
-        localWidth.value = startW.value - actualDiff;
-      } else {
-        localWidth.value = Math.max(10, Math.min(startW.value + e.translationX, maxX - localX.value));
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      runOnJS(onCommit)(e.translationX);
-    });
-
-  return (
-    <GestureDetector gesture={pan}>
-      <Animated.View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
-        <View style={[styles.handleCircle, { backgroundColor: theme.text }]}>
-          <Ionicons name={direction === 'left' ? "chevron-back" : "chevron-forward"} size={14} color={theme.background} />
-        </View>
-      </Animated.View>
-    </GestureDetector>
-  );
-};
-
-const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes, settings }: any) {
-  const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
-  const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
-  const startX = useSharedValue(0);
-
-  useEffect(() => {
-    localX.value = (entry.timestampMillis / 1000) * PX_PER_SEC;
-    localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
-  }, [entry.timestampMillis, entry.durationMillis]);
-
+const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, onSelect, onDelete, dancers, scenes, settings }: any) {
+  const localX = (entry.timestampMillis / 1000) * PX_PER_SEC;
+  const localWidth = (entry.durationMillis / 1000) * PX_PER_SEC;
   const scene = scenes.find((s: any) => s.id === entry.sceneId);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    left: localX.value,
-    width: localWidth.value,
-    backgroundColor: isSelected ? (theme.primary + 'AA') : (theme.card + 'CC'),
-    borderColor: isSelected ? theme.primary : theme.border,
-    zIndex: isSelected ? 100 : 50
-  }));
-
-  const pan = Gesture.Pan()
-    .enabled(isSelected)
-    .onStart(() => {
-      'worklet';
-      startX.value = localX.value;
-    })
-    .onUpdate((g) => {
-      'worklet';
-      const newX = startX.value + g.translationX;
-      localX.value = Math.max(minX, Math.min(newX, maxX - localWidth.value));
-    })
-    .onEnd((g) => {
-      'worklet';
-      runOnJS(onCommitMove)(entry.id, g.translationX);
-    });
-
-  const tap = Gesture.Tap()
-    .runOnJS(true)
-    .onEnd(() => {
-      if (isSelected) {
-        Alert.alert('삭제', '제거할까요?', [{ text: '취소' }, { text: '삭제', onPress: () => onDelete(entry.id) }]);
-      } else {
-        onSelect(entry.id);
-      }
-    });
-
   return (
-    <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
-      <Animated.View style={[styles.block, animatedStyle, { borderWidth: 1 }]}>
-        {scene && (
-          <View style={styles.blockPreview}>
-            <MiniFormationPreview scene={scene} dancers={dancers} settings={settings} />
-          </View>
-        )}
-        <Text style={[styles.blockText, { color: isSelected ? theme.background : theme.text }]} numberOfLines={1}>{sceneName}</Text>
-        {isSelected && (
-          <>
-            <ResizeHandle 
-              direction="left" 
-              localX={localX} localWidth={localWidth} startX={startX} startW={localWidth}
-              minX={minX} maxX={maxX}
-              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'left')}
-            />
-            <ResizeHandle 
-              direction="right" 
-              localX={localX} localWidth={localWidth} startX={startX} startW={localWidth}
-              minX={minX} maxX={maxX}
-              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'right')}
-            />
-          </>
-        )}
-      </Animated.View>
-    </GestureDetector>
+    <TouchableOpacity 
+      onPress={() => onSelect(entry.id)}
+      onLongPress={() => {
+        Alert.alert('삭제', '이 블록을 삭제할까요?', [
+          { text: '취소' },
+          { text: '삭제', style: 'destructive', onPress: () => onDelete(entry.id) }
+        ]);
+      }}
+      style={[
+        styles.block, 
+        { 
+          left: localX, 
+          width: localWidth, 
+          backgroundColor: isSelected ? theme.primary + 'AA' : theme.card + 'CC',
+          borderColor: isSelected ? theme.primary : theme.border,
+          borderWidth: 1
+        }
+      ]}
+    >
+      {scene && <MiniFormationPreview scene={scene} dancers={dancers} settings={settings} />}
+      <Text style={[styles.blockText, { color: isSelected ? theme.background : theme.text }]} numberOfLines={1}>{sceneName}</Text>
+    </TouchableOpacity>
   );
 });
 
-const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlace }: any) {
+const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd }: any) {
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -284,9 +153,7 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
     return dancerPos?.value || { x: 0.5, y: 0.5 };
   });
 
-  const canDrag = mode === 'create' || (mode === 'place' && canDragInPlace);
-
-  const panGesture = Gesture.Pan().enabled(canDrag)
+  const panGesture = Gesture.Pan()
     .onStart(() => { 
       'worklet';
       isDragging.value = true; 
@@ -306,7 +173,6 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
         const stepX = (1 / settings.gridCols) / 2, stepY = (1 / settings.gridRows) / 2;
         fx = Math.round(fx / stepX) * stepX; fy = Math.round(fy / stepY) * stepY;
       }
-      if (dancerPos) dancerPos.value = { x: fx, y: fy };
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
     });
 
@@ -317,44 +183,18 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
       { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
       { scale: withSpring(isSelected || isDragging.value ? 1.1 : 1) }
     ],
-    opacity: mode === 'place' ? (canDragInPlace ? 1 : 0.4) : 1,
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
   const { theme } = useAppContext();
 
   return (
-    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => {
-      if (canDrag) onPress();
-    }))}>
+    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => runOnJS(onPress)()))}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
         <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
         <Text style={[styles.dancerNameText, { color: isSelected ? theme.text : theme.textSecondary, fontSize: (settings.dancerNameSize || 8) }]} numberOfLines={1}>{dancer.name}</Text>
       </Animated.View>
     </GestureDetector>
-  );
-});
-
-const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, stageHeight, cellSize }: any) {
-  return (
-    <View 
-      style={[
-        styles.dancerNode, 
-        { 
-          position: 'absolute',
-          width: cellSize * 2.5,
-          transform: [
-            { translateX: (pos.x * stageWidth) - (cellSize * 1.25) },
-            { translateY: (pos.y * stageHeight) - (cellSize * 0.35) }
-          ],
-          opacity: 0.2,
-          zIndex: 0
-        }
-      ]} 
-      pointerEvents="none"
-    >
-      <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: 'rgba(255,255,255,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1 }]} />
-    </View>
   );
 });
 
@@ -365,27 +205,17 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
 
   return (
     <View style={styles.gridLayer}>
-      {/* Horizontal Grid Lines */}
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
         <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.4, height: 1 }]} />
       ))}
-      {/* Vertical Grid Lines */}
       {Array.from({ length: settings.gridCols + 1 }).map((_, i) => (
         <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / settings.gridCols) * 100}%`, backgroundColor: gridColor, opacity: 0.4, width: 1 }]} />
       ))}
-      
-      {/* Short Center Crosshair */}
-      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 24, height: 2, backgroundColor: centerColor, marginLeft: -12, marginTop: -1, opacity: 0.9, borderRadius: 1 }} />
-      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 24, backgroundColor: centerColor, marginLeft: -1, marginTop: -12, opacity: 0.9, borderRadius: 1 }} />
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 24, height: 2, backgroundColor: centerColor, marginLeft: -12, marginTop: -1, opacity: 0.9 }} />
+      <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 24, backgroundColor: centerColor, marginLeft: -1, marginTop: -12, opacity: 0.9 }} />
     </View>
   );
 });
-
-const GUIDE_STEPS = [
-  { title: '대형 생성', description: '댄서를 추가하고 드래그하여 원하는 위치에 배치하세요. 아래 씬 목록에서 대형을 전환하거나 관리할 수 있습니다.' },
-  { title: '대형 배치', description: '음악의 특정 시점에 대형을 배치하세요. 배치된 블록의 길이를 조절하여 대형 유지 시간을 설정할 수 있습니다.' },
-  { title: '애니메이션', description: '배치된 대형 사이에는 자동으로 부드러운 이동 애니메이션이 적용됩니다. 재생 버튼을 눌러 확인해 보세요!' }
-];
 
 interface HistoryState {
   dancers: Dancer[];
@@ -406,6 +236,7 @@ export default function FormationEditorScreen() {
   const [scenes, setScenes] = useState<FormationScene[]>(formation?.data?.scenes || []);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
   const [audioUrl, setAudioUrl] = useState<string>(formation?.audioUrl || '');
+  const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
@@ -413,28 +244,22 @@ export default function FormationEditorScreen() {
   const [showTimelineMenu, setShowTimelineMenu] = useState(false);
   const [showDancerSheet, setShowDancerSheet] = useState(false);
   const [showStageSettings, setShowStageSettings] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
   const [showSceneModal, setShowSceneModal] = useState(false);
-  const [showMirrorModal, setShowMirrorModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showPublishModal, setShowPublishModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isChangingSong, setIsChangingSong] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
-  const [publishTitle, setPublishTitle] = useState('');
-  const [selectedMirrorType, setSelectedMirrorType] = useState<'horizontal' | 'vertical' | 'both'>('horizontal');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
   const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
   const [inputName, setInputName] = useState('');
-  const [guideIndex, setGuideIndex] = useState(0);
   const [touchTimeMs, setTouchTimeMs] = useState(0);
-  const [isExporting, setIsExporting] = useState(false);
   const [zoomUI, setZoomUI] = useState(100);
 
   const [tempRows, setTempRows] = useState('');
   const [tempCols, setTempCols] = useState('');
 
-  // SharedValues 및 Refs 선언
+  const webViewRef = useRef<WebView>(null);
+
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -446,6 +271,10 @@ export default function FormationEditorScreen() {
   const isUserScrollingSV = useSharedValue(false);
   const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
 
+  const stageAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }]
+  }));
+
   const player = useAudioPlayer(audioUrl);
   const status = useAudioPlayerStatus(player);
 
@@ -453,53 +282,71 @@ export default function FormationEditorScreen() {
   dancers.forEach(d => {
     if (!dancerPositionsRef.current[d.id]) {
       const activeScene = scenes.find(s => s.id === activeSceneId);
-      const initialPos = activeScene?.positions[d.id] || { x: 0.5, y: 0.5 };
-      dancerPositionsRef.current[d.id] = makeMutable(initialPos);
+      dancerPositionsRef.current[d.id] = makeMutable(activeScene?.positions[d.id] || { x: 0.5, y: 0.5 });
     }
   });
   const dancerPositions = dancerPositionsRef.current;
 
-  // 히스토리 관리 (모드별 분리)
   const [createPast, setCreatePast] = useState<HistoryState[]>([]);
   const [createFuture, setCreateFuture] = useState<HistoryState[]>([]);
   const [placePast, setPlacePast] = useState<HistoryState[]>([]);
   const [placeFuture, setPlaceFuture] = useState<HistoryState[]>([]);
 
-  const [nextSceneId, setNextSceneId] = useState<string | null>(null);
-  const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
-
-  useAnimatedReaction(
-    () => {
-      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      const next = sorted.find(e => e.timestampMillis > currentTimeMs.value);
-      
-      let currentEntryId = null;
-      for (let e of sorted) {
-        if (currentTimeMs.value >= e.timestampMillis && currentTimeMs.value < e.timestampMillis + e.durationMillis) {
-          currentEntryId = e.id;
-          break;
-        }
-      }
-      return { nextId: next?.sceneId || null, currentEntryId };
-    },
-    (data) => {
-      if (data.nextId !== nextSceneId) {
-        runOnJS(setNextSceneId)(data.nextId);
-      }
-      if (data.currentEntryId !== activeEntryIdInPlace) {
-        runOnJS(setActiveEntryIdInPlace)(data.currentEntryId);
-      }
-    },
-    [timeline]
-  );
-
-  const activeSceneIdToEdit = useMemo(() => {
-    if (mode === 'create') return activeSceneId;
-    if (mode === 'place' && activeEntryIdInPlace) {
-      return timeline.find(e => e.id === activeEntryIdInPlace)?.sceneId || null;
+  const analyzeAudio = async (uri: string) => {
+    if (!uri) return;
+    setIsAnalyzing(true);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const analysisScript = `
+        (async () => {
+          try {
+            const base64Data = "${base64}";
+            const binaryString = window.atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+            
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+            const rawData = audioBuffer.getChannelData(0); 
+            const samplesPerSec = 10;
+            const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
+            const blockSize = Math.floor(rawData.length / totalSamples);
+            const peaks = [];
+            
+            for (let i = 0; i < totalSamples; i++) {
+              let start = blockSize * i;
+              let max = 0;
+              for (let j = 0; j < blockSize; j++) {
+                const abs = Math.abs(rawData[start + j]);
+                if (abs > max) max = abs;
+              }
+              peaks.push(max);
+            }
+            const maxPeak = Math.max(...peaks);
+            const normalized = peaks.map(p => Math.pow(p / maxPeak, 0.8));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
+          } catch (e) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
+          }
+        })();
+      `;
+      webViewRef.current?.injectJavaScript(analysisScript);
+    } catch (e) {
+      console.error('Audio Analysis Error:', e);
+      setIsAnalyzing(false);
     }
-    return null;
-  }, [mode, activeSceneId, activeEntryIdInPlace, timeline]);
+  };
+
+  useEffect(() => { if (audioUrl) analyzeAudio(audioUrl); }, [audioUrl]);
+
+  const onWebViewMessage = (e: any) => {
+    try {
+      const event = JSON.parse(e.nativeEvent.data);
+      if (event.type === 'ANALYSIS_COMPLETE') setWaveformPeaks(event.data);
+      setIsAnalyzing(false);
+    } catch (err) {}
+  };
 
   const pushHistory = useCallback(() => {
     const current: HistoryState = { dancers: JSON.parse(JSON.stringify(dancers)), scenes: JSON.parse(JSON.stringify(scenes)), timeline: JSON.parse(JSON.stringify(timeline)), audioUrl };
@@ -508,232 +355,65 @@ export default function FormationEditorScreen() {
   }, [dancers, scenes, timeline, mode, audioUrl]);
 
   const onDragEnd = useCallback((dancerId: string, pos: Position) => {
-    const targetId = activeSceneIdToEdit;
+    const targetId = mode === 'create' ? activeSceneId : (timeline.find(e => currentTimeMs.value >= e.timestampMillis && currentTimeMs.value < e.timestampMillis + e.durationMillis)?.sceneId || null);
     if (!targetId) return;
-
-    setScenes(prev => prev.map(s => s.id === targetId ? {
-      ...s,
-      positions: { ...s.positions, [dancerId]: pos }
-    } : s));
+    setScenes(prev => prev.map(s => s.id === targetId ? { ...s, positions: { ...s.positions, [dancerId]: pos } } : s));
     pushHistory();
-  }, [activeSceneIdToEdit, pushHistory]);
+  }, [mode, activeSceneId, timeline, pushHistory]);
 
   const undo = () => {
-    if (mode === 'create') {
-      if (createPast.length === 0) return;
-      const previous = createPast[createPast.length - 1];
-      const current: HistoryState = { dancers, scenes, timeline, audioUrl };
-      setCreateFuture(prev => [current, ...prev]); setCreatePast(prev => prev.slice(0, -1));
-      setDancers(previous.dancers); setScenes(previous.scenes); setTimeline(previous.timeline); setAudioUrl(previous.audioUrl);
-      const active = previous.scenes.find(s => s.id === activeSceneId);
-      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = active.positions[dId]; });
-    } else {
-      if (placePast.length === 0) return;
-      const previous = placePast[placePast.length - 1];
-      const current: HistoryState = { dancers, scenes, timeline, audioUrl };
-      setPlaceFuture(prev => [current, ...prev]); setPlacePast(prev => prev.slice(0, -1));
-      setDancers(previous.dancers); setScenes(previous.scenes); setTimeline(previous.timeline); setAudioUrl(previous.audioUrl);
-    }
+    const past = mode === 'create' ? createPast : placePast;
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    const current = { dancers, scenes, timeline, audioUrl };
+    if (mode === 'create') { setCreateFuture(f => [current, ...f]); setCreatePast(p => p.slice(0, -1)); }
+    else { setPlaceFuture(f => [current, ...f]); setPlacePast(p => p.slice(0, -1)); }
+    setDancers(previous.dancers); setScenes(previous.scenes); setTimeline(previous.timeline); setAudioUrl(previous.audioUrl);
   };
 
   const redo = () => {
-    if (mode === 'create') {
-      if (createFuture.length === 0) return;
-      const next = createFuture[0];
-      const current: HistoryState = { dancers, scenes, timeline, audioUrl };
-      setCreatePast(prev => [...prev, current]); setCreateFuture(prev => prev.slice(1));
-      setDancers(next.dancers); setScenes(next.scenes); setTimeline(next.timeline); setAudioUrl(next.audioUrl);
-      const active = next.scenes.find(s => s.id === activeSceneId);
-      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = next.positions[dId]; });
-    } else {
-      if (placeFuture.length === 0) return;
-      const next = placeFuture[0];
-      const current: HistoryState = { dancers, scenes, timeline, audioUrl };
-      setPlacePast(prev => [...prev, current]); setPlaceFuture(prev => prev.slice(1));
-      setDancers(next.dancers); setScenes(next.scenes); setTimeline(next.timeline); setAudioUrl(next.audioUrl);
-    }
+    const future = mode === 'create' ? createFuture : placeFuture;
+    if (future.length === 0) return;
+    const next = future[0];
+    const current = { dancers, scenes, timeline, audioUrl };
+    if (mode === 'create') { setCreatePast(p => [...p, current]); setCreateFuture(f => f.slice(1)); }
+    else { setPlacePast(p => [...p, current]); setPlaceFuture(f => f.slice(1)); }
+    setDancers(next.dancers); setScenes(next.scenes); setTimeline(next.timeline); setAudioUrl(next.audioUrl);
   };
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      let newScale = Math.max(0.5, Math.min(5, savedScale.value * e.scale));
-      if (Math.abs(newScale - 1) < 0.07) newScale = 1; 
-      scale.value = newScale;
-      runOnJS(setZoomUI)(Math.round(newScale * 100));
-    })
-    .onEnd(() => { savedScale.value = scale.value; });
-
-  const panGesture = Gesture.Pan().minPointers(1).maxPointers(2)
-    .onUpdate((e) => { translateX.value = savedTranslateX.value + e.translationX; translateY.value = savedTranslateY.value + e.translationY; })
-    .onEnd(() => { savedTranslateX.value = translateX.value; savedTranslateY.value = translateY.value; });
-
-  const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
-
-  useEffect(() => {
-    isPlayerPlayingSV.value = status.playing;
-    if (status.playing && status.duration > 0) {
-      const remaining = (status.duration - status.currentTime) * 1000;
-      currentTimeMs.value = status.currentTime * 1000;
-      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-    } else {
-      cancelAnimation(currentTimeMs);
-      if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
-    }
-  }, [status.playing]);
-
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
-    if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
-  });
 
   const handleTimelineScroll = (e: any) => {
     if (isUserScrollingSV.value) {
-      const offset = e.nativeEvent.contentOffset.x;
-      const newTimeMs = (offset / PX_PER_SEC) * 1000;
+      const newTimeMs = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
-      runOnJS((t: number) => { player.seekTo(t / 1000); })(newTimeMs);
+      runOnJS((t: number) => player.seekTo(t / 1000))(newTimeMs);
     }
   };
 
-  const onScrollEnd = (e: any) => {
-    isUserScrollingSV.value = false;
-    if (isPlayerPlayingSV.value) {
-      const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
-      const remaining = (status.duration * 1000) - time;
-      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-    }
-  };
-
-  useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data) => {
-    if (data.mode === 'create') {
-      const targetScene = data.scenes.find(s => s.id === data.activeId);
-      if (targetScene) { dancers.forEach(d => { if (dancerPositions[d.id]) { dancerPositions[d.id].value = withTiming(targetScene.positions[d.id] || { x: 0.5, y: 0.5 }, { duration: 400, easing: Easing.out(Easing.quad) }); } }); }
-    }
-  }, [activeSceneId, mode, dancers, scenes]);
-
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
-    if (data.mode === 'place') {
-      const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      let prevE = null, nextE = null;
-      for (let e of sorted) { if (e.timestampMillis <= data.time) prevE = e; else { nextE = e; break; } }
-      dancers.forEach(d => {
-        let p = { x: 0.5, y: 0.5 };
-        const getScenePos = (sId: string) => data.scenes.find(s => s.id === sId)?.positions[d.id] || { x: 0.5, y: 0.5 };
-        if (!prevE) p = sorted.length > 0 ? getScenePos(sorted[0]?.sceneId) : { x: 0.5, y: 0.5 };
-        else {
-          const prevPos = getScenePos(prevE.sceneId);
-          if (data.time <= prevE.timestampMillis + prevE.durationMillis) p = prevPos;
-          else if (nextE) {
-            const nextPos = getScenePos(nextE.sceneId);
-            const gapStart = prevE.timestampMillis + prevE.durationMillis, gapEnd = nextE.timestampMillis;
-            const progress = Math.max(0, Math.min(1, (data.time - gapStart) / (gapEnd - gapStart)));
-            const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-            p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
-          } else p = prevPos;
-        }
-        if (dancerPositions[d.id]) dancerPositions[d.id].value = p;
-      });
-    }
-  }, [mode, timeline, scenes, dancers]);
-
-  const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
-  const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; setTimeline([...timeline, newEntry]); setShowTimelineMenu(false); };
-  const handleCommitMove = useCallback((entryId: string, totalDx: number) => { pushHistory(); const deltaMs = (totalDx / PX_PER_SEC) * 1000; setTimeline(prev => { const idx = prev.findIndex(x => x.id === entryId); if (idx === -1) return prev; const target = prev[idx], sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis), sIdx = sorted.findIndex(x => x.id === entryId), prevBlock = sorted[sIdx-1], nextBlock = sorted[sIdx+1]; let newTs = Math.max(0, target.timestampMillis + deltaMs); const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0, maxTs = nextBlock ? nextBlock.timestampMillis - target.durationMillis : Infinity; newTs = Math.max(minTs, Math.min(newTs, maxTs)); return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newTs } : e); }); }, [pushHistory]);
-  const handleCommitResize = useCallback((entryId: string, totalDx: number, dir: 'left' | 'right') => { pushHistory(); const deltaMs = (totalDx / PX_PER_SEC) * 1000; setTimeline(prev => { const sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis), sIdx = sorted.findIndex(x => x.id === entryId), target = sorted[sIdx], prevBlock = sorted[sIdx-1], nextBlock = sorted[sIdx+1]; if (dir === 'left') { const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0, newStart = Math.max(minTs, Math.min(target.timestampMillis + deltaMs, target.timestampMillis + target.durationMillis - 500)), diff = target.timestampMillis - newStart; return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: target.durationMillis + diff } : e); } else { const maxTs = nextBlock ? nextBlock.timestampMillis : Infinity, newDur = Math.max(500, Math.min(target.durationMillis + deltaMs, maxTs - target.timestampMillis)); return prev.map(e => e.id === entryId ? { ...e, durationMillis: newDur } : e); } }); }, [pushHistory]);
-  const handleDeleteEntry = useCallback((entryId: string) => { pushHistory(); setTimeline(prev => prev.filter(x => x.id !== entryId)); }, [pushHistory]);
-  const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1], nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]; setScenes(nScenes); setActiveSceneId(nid); } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
+  const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '대형을 먼저 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
+  const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); setTimeline([...timeline, { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }]); setShowTimelineMenu(false); };
   
   const handleChangeSong = async () => {
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
       if (res.canceled) return;
-      
       setIsChangingSong(true);
-      const asset = res.assets[0];
-      const sourceUri = asset.uri;
-      const fileName = `audio_${Date.now()}_${asset.name.replace(/\s+/g, '_')}`;
-      const destUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
-
-      pushHistory();
-      setAudioUrl(destUri);
-    } catch (e: any) {
-      Alert.alert('실패', e.message);
-    } finally {
-      setIsChangingSong(false);
-    }
+      const destUri = `${FileSystem.documentDirectory}audio_${Date.now()}_${res.assets[0].name.replace(/\s+/g, '_')}`;
+      await FileSystem.copyAsync({ from: res.assets[0].uri, to: destUri });
+      pushHistory(); setAudioUrl(destUri); setWaveformPeaks([]);
+    } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsChangingSong(false); }
   };
 
-  const handleSave = async () => { 
-    try { 
-      await updateFormation(formationId!, { audioUrl, settings, data: { dancers, scenes, timeline } }); 
-      setShowSaveToast(true);
-      setTimeout(() => setShowSaveToast(false), 2000);
-    } catch (e: any) { 
-      Alert.alert('오류', e.message); 
-    } 
-  };
-
-  const handleExportJSON = async () => {
-    try {
-      const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
-      const safeId = (formationId || 'new').replace(/[^a-z0-9]/gi, '_');
-      const filePath = `${FileSystem.documentDirectory}formation_${safeId}.json`;
-      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
-      if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
-      await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
-      setShowExportModal(false);
-    } catch (e: any) {
-      Alert.alert('오류', `파일 추출 실패: ${e.message}`);
-    }
-  };
-
-  const handlePublish = async () => {
-    if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
-    try {
-      setIsExporting(true);
-      await publishFormationAsFeedback(id!, formationId!, publishTitle, { settings, data: { dancers, scenes, timeline } });
-      setShowPublishModal(false); setShowExportModal(false);
-      Alert.alert('성공', '피드백이 성공적으로 발행되었습니다.');
-    } catch (e: any) {
-      Alert.alert('오류', e.message);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const copyActiveScene = () => {
-    if (!activeSceneId) return;
-    pushHistory();
-    const activeIdx = scenes.findIndex(s => s.id === activeSceneId);
-    if (activeIdx === -1) return;
-    const activeScene = scenes[activeIdx];
-    const newId = Math.random().toString(36).substr(2, 9);
-    const newScene: FormationScene = { id: newId, name: `${activeScene.name} 복사본`, positions: JSON.parse(JSON.stringify(activeScene.positions)) };
-    const newScenes = [...scenes]; newScenes.splice(activeIdx + 1, 0, newScene);
-    setScenes(newScenes); setActiveSceneId(newId);
-  };
-
-  const deleteActiveScene = () => { if (!activeSceneId || scenes.length <= 1) { Alert.alert('알림', '최소 하나의 대형은 유지되어야 합니다.'); return; } pushHistory(); const newScenes = scenes.filter(s => s.id !== activeSceneId), newTimeline = timeline.filter(e => e.sceneId !== activeSceneId); setScenes(newScenes); setTimeline(newTimeline); setActiveSceneId(newScenes[0].id); setShowDeleteModal(false); };
-  const addDancer = () => { pushHistory(); const newDancer: Dancer = { id: Math.random().toString(36).substr(2, 9), name: `댄서 ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] }; setDancers([...dancers, newDancer]); };
-  const handleApplySettings = () => { const r = parseInt(tempRows), c = parseInt(tempCols); if (isNaN(r) || isNaN(c) || r <= 0 || c <= 0) { Alert.alert('입력 오류', '격자 행과 열은 1 이상의 숫자여야 합니다.'); return; } setSettings({ ...settings, gridRows: r, gridCols: c }); setShowStageSettings(false); };
-  const applyMirror = (allScenes: boolean) => { pushHistory(); const flipPos = (pos: Position) => ({ x: (selectedMirrorType === 'horizontal' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.x)) : pos.x, y: (selectedMirrorType === 'vertical' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.y)) : pos.y }); if (allScenes) { setScenes(prev => { const next = prev.map(s => { const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); return { ...s, positions: nPos }; }); const current = next.find(s => s.id === activeSceneId); if (current) Object.keys(current.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = current.positions[dId]; }); return next; }); } else if (activeSceneId) { setScenes(prev => prev.map(s => { if (s.id !== activeSceneId) return s; const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); Object.keys(nPos).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = nPos[dId]; }); return { ...s, positions: nPos }; })); } setShowMirrorModal(false); };
-
-  const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
-
-  const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
-  const sceneNamesMap = useMemo(() => { const map: any = {}; scenes.forEach(s => { map[s.id] = s.name; }); return map; }, [scenes]);
+  const handleSave = async () => { try { await updateFormation(formationId!, { audioUrl, settings, data: { dancers, scenes, timeline } }); setShowSaveToast(true); setTimeout(() => setShowSaveToast(false), 2000); } catch (e: any) { Alert.alert('오류', e.message); } };
+  const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1]; setScenes([...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]); setActiveSceneId(nid); } else setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
 
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / settings.gridCols;
   const STAGE_WIDTH = settings.gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = settings.gridRows * STAGE_CELL_SIZE;
-
-  const hasPast = mode === 'create' ? createPast.length > 0 : placePast.length > 0;
-  const hasFuture = mode === 'create' ? createFuture.length > 0 : placeFuture.length > 0;
-
-  const controlTop = insets.top + 100;
+  const controlTop = 100;
+  const sortedTimeline = [...timeline].sort((a,b) => a.timestampMillis - b.timestampMillis);
+  const sceneNamesMap = scenes.reduce((acc: any, s) => ({ ...acc, [s.id]: s.name }), {});
 
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -743,49 +423,25 @@ export default function FormationEditorScreen() {
           <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'create' ? theme.background : theme.textSecondary }]}>대형 생성</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'place' ? theme.background : theme.textSecondary }]}>대형 배치</Text></TouchableOpacity>
         </View>
-        <View style={{ flexDirection: 'row', gap: 15 }}>
-          <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowExportModal(true)}><Ionicons name="share-outline" size={24} color={theme.primary} /></TouchableOpacity>
-        </View>
+        <View style={{ flexDirection: 'row', gap: 15 }}><TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity><TouchableOpacity onPress={() => setShowExportModal(true)}><Ionicons name="share-outline" size={24} color={theme.primary} /></TouchableOpacity></View>
       </View>
 
-      {/* Save Success Toast */}
-      {showSaveToast && (
-        <View style={[styles.toast, { backgroundColor: theme.primary }]}>
-          <Ionicons name="checkmark-circle" size={20} color={theme.background} />
-          <Text style={[styles.toastText, { color: theme.background }]}>성공적으로 저장되었습니다.</Text>
-        </View>
-      )}
+      <View style={{ height: 0, width: 0, opacity: 0, position: 'absolute' }}><WebView ref={webViewRef} onMessage={onWebViewMessage} source={{ html: '<html><body></body></html>' }} /></View>
 
-      <View style={[styles.historyControls, { top: controlTop, backgroundColor: theme.card, borderColor: theme.border }]}>
-        <TouchableOpacity style={[styles.zoomBtn, { borderRightWidth: 1, borderColor: theme.border }]} onPress={undo} disabled={!hasPast}><Ionicons name="arrow-undo" size={20} color={!hasPast ? theme.border : theme.text} /></TouchableOpacity>
-        <TouchableOpacity style={styles.zoomBtn} onPress={redo} disabled={!hasFuture}><Ionicons name="arrow-redo" size={20} color={!hasFuture ? theme.border : theme.text} /></TouchableOpacity>
-      </View>
-      <View style={[styles.zoomControls, { top: controlTop, backgroundColor: theme.card, borderColor: theme.border }]}>
-        <TouchableOpacity style={styles.zoomBtn} onPress={resetStage}><Text style={[styles.zoomText, { color: theme.text }]}>{zoomUI}%</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.min(5, (Math.floor(scale.value * 4) + 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="add" size={20} color={theme.text} /></TouchableOpacity>
-        <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nextScale = Math.max(0.5, (Math.ceil(scale.value * 4) - 1) / 4); if (nextScale === 1) resetStage(); else { scale.value = withTiming(nextScale); savedScale.value = nextScale; runOnJS(setZoomUI)(Math.round(nextScale * 100)); } }}><Ionicons name="remove" size={20} color={theme.text} /></TouchableOpacity>
-      </View>
+      {showSaveToast && <View style={[styles.toast, { backgroundColor: theme.primary }]}><Ionicons name="checkmark-circle" size={20} color={theme.background} /><Text style={[styles.toastText, { color: theme.background }]}>저장되었습니다.</Text></View>}
+      {isAnalyzing && <View style={[styles.analysisLoader, { backgroundColor: theme.card + 'CC' }]}><ActivityIndicator color={theme.primary} /><Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>음악 데이터 정밀 분석 중...</Text></View>}
+
+      <View style={[styles.historyControls, { top: controlTop + insets.top, backgroundColor: theme.card, borderColor: theme.border }]}><TouchableOpacity style={[styles.zoomBtn, { borderRightWidth: 1, borderColor: theme.border }]} onPress={undo} disabled={(mode === 'create' ? createPast : placePast).length === 0}><Ionicons name="arrow-undo" size={20} color={theme.text} /></TouchableOpacity><TouchableOpacity style={styles.zoomBtn} onPress={redo} disabled={(mode === 'create' ? createFuture : placeFuture).length === 0}><Ionicons name="arrow-redo" size={20} color={theme.text} /></TouchableOpacity></View>
+      <View style={[styles.zoomControls, { top: controlTop + insets.top, backgroundColor: theme.card, borderColor: theme.border }]}><TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); setZoomUI(100); }}><Text style={[styles.zoomText, { color: theme.text }]}>{zoomUI}%</Text></TouchableOpacity><TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.min(5, scale.value + 0.25)); runOnJS(setZoomUI)(Math.round(scale.value * 100)); }}><Ionicons name="add" size={20} color={theme.text} /></TouchableOpacity><TouchableOpacity style={styles.zoomBtn} onPress={() => { scale.value = withTiming(Math.max(0.5, scale.value - 0.25)); runOnJS(setZoomUI)(Math.round(scale.value * 100)); }}><Ionicons name="remove" size={20} color={theme.text} /></TouchableOpacity></View>
 
       <View style={styles.stageSection}>
-        <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, panGesture)}>
+        <GestureDetector gesture={Gesture.Simultaneous(Gesture.Pinch().onUpdate(e => { scale.value = Math.max(0.5, Math.min(5, savedScale.value * e.scale)); runOnJS(setZoomUI)(Math.round(scale.value * 100)); }).onEnd(() => savedScale.value = scale.value), Gesture.Pan().onUpdate(e => { translateX.value = savedTranslateX.value + e.translationX; translateY.value = savedTranslateY.value + e.translationY; }).onEnd(() => { savedTranslateX.value = translateX.value; savedTranslateY.value = translateY.value; }))}>
           <View style={[styles.stageWrapper, { paddingTop: 40 }]}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, backgroundColor: theme.card, borderColor: theme.border }, stageAnimatedStyle]}>
-              <View style={{ position: 'absolute', top: -45, left: 0, right: 0, alignSelf: 'center' }}>
-                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'top' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
-              </View>
               <GridLayer settings={settings} />
-              
-              {/* Ghost Dancers */}
-              {mode === 'create' && activeSceneId && scenes.find(s => s.id === activeSceneId)?.positions && dancers.map(d => { const pos = scenes.find(s => s.id === activeSceneId)?.positions[d.id]; if (!pos) return null; return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />; })}
-              {mode === 'place' && nextSceneId && scenes.find(s => s.id === nextSceneId)?.positions && dancers.map(d => { const pos = scenes.find(s => s.id === nextSceneId)?.positions[d.id]; if (!pos) return null; return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />; })}
-
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} />
               ))}
-              <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
-                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
-              </View>
             </Animated.View>
           </View>
         </GestureDetector>
@@ -795,17 +451,14 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={[styles.timelineWrapper, { backgroundColor: theme.card }]}>
-              <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); runOnJS(setSelectedEntryId)(null); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
+              <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); }} onMomentumScrollEnd={() => isUserScrollingSV.value = false} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
                 <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 120 }}>
-                    <WaveformBackground duration={status.duration || 60} seed={audioUrl || 'default'} player={player} />
+                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 120, justifyContent: 'center' }}>
+                    <WaveformBackground duration={status.duration || 60} peaks={waveformPeaks} />
                     <TimeMarkers duration={status.duration || 60} />
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
-                        <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scenes={scenes} settings={settings} />
-                          {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
-                        </React.Fragment>
+                        <TimelineBlock key={e.id} entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} onSelect={setSelectedEntryId} onDelete={(eid: string) => setTimeline(timeline.filter(x=>x.id!==eid))} dancers={dancers} scenes={scenes} settings={settings} />
                       ))}
                     </View>
                   </View>
@@ -813,104 +466,21 @@ export default function FormationEditorScreen() {
               </Animated.ScrollView>
               <View style={[styles.needle, { left: CENTER_OFFSET }]} pointerEvents="none" />
             </View>
-            <View style={styles.controls}>
-              <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
-              <PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} /><PlaybackTimeDisplay player={player} />
-            </View>
+            <View style={styles.controls}><TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}><Ionicons name="musical-notes" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity><PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} /><PlaybackTimeDisplay player={player} /></View>
           </View>
         ) : (
           <View style={styles.createDock}>
-            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity></View>
-            <View style={styles.sceneSection}>
-              <View style={styles.actionColumn}>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.primary }]} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={16} color={theme.background} /><Text style={[styles.addSceneText, { color: theme.background }]}>대형 추가</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowMirrorModal(true)}><Ionicons name="swap-horizontal" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>대형 반전</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={copyActiveScene}><Ionicons name="copy-outline" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>대형 복사</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(true)}><Ionicons name="trash-outline" size={16} color={theme.error} /><Text style={[styles.addSceneText, { color: theme.error }]}>대형 삭제</Text></TouchableOpacity>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ alignItems: 'center' }}>
-                {scenes.map(s => (
-                  <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => { pushHistory(); setScenes(scenes.filter(x => x.id !== s.id)); } }, { text: '취소' }]); }} onPress={() => { if (activeSceneId === s.id) { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } else setActiveSceneId(s.id); }} style={[styles.sceneCard, { backgroundColor: theme.card, borderColor: activeSceneId === s.id ? theme.primary : theme.border }, activeSceneId === s.id && { backgroundColor: theme.primary + '11' }]}><MiniFormationPreview scene={s} dancers={dancers} settings={settings} /><View style={[styles.sceneCardLabel, { backgroundColor: theme.border + '11' }]}><Text style={[styles.sceneCardText, { color: activeSceneId === s.id ? theme.primary : theme.textSecondary }]}>{s.name}</Text></View></TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={() => setDancers([...dancers, { id: Math.random().toString(36).substr(2,9), name: `댄서 ${dancers.length+1}`, color: COLORS[dancers.length%COLORS.length] }])}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => setShowStageSettings(true)}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity></View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 10 }}>
+              <TouchableOpacity style={[styles.addSceneBtn, { backgroundColor: theme.primary }]} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add" size={24} color={theme.background} /></TouchableOpacity>
+              {scenes.map(s => <TouchableOpacity key={s.id} onPress={() => setActiveSceneId(s.id)} style={[styles.sceneCard, { borderColor: activeSceneId === s.id ? theme.primary : theme.border, backgroundColor: theme.card }]}><MiniFormationPreview scene={s} dancers={dancers} settings={settings} /><Text style={[styles.sceneCardText, { color: theme.text }]} numberOfLines={1}>{s.name}</Text></TouchableOpacity>)}
+            </ScrollView>
           </View>
         )}
-        <View style={{ height: 15 }} />
       </View>
-
-      <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
-        <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}>
-              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text>
-              <TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity>
-            </View>
-            
-            <View style={{ gap: 12 }}>
-              <TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}>
-                <View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text>
-                  <Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.border} />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}>
-                <View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상으로 발행</Text>
-                  <Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.border} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
-        <View style={styles.modalBg}>
-          <View style={[styles.menu, { backgroundColor: theme.card }]}>
-            <Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text>
-            <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text>
-            <TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
-              <TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handlePublish} disabled={isExporting}>
-                {isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text>
-              <TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity>
-            </View>
-            <View style={{ alignItems: 'center', marginVertical: 15 }}>
-              <Ionicons name="trash" size={32} color={theme.error} />
-              <Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text>
-            </View>
-            <View style={{ gap: 8 }}>
-              <TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>대형 선택</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}><Text style={{color:theme.text}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
-      <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={[styles.sheet, { backgroundColor: theme.card }]}><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d)); }} placeholderTextColor={theme.textSecondary} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: theme.text }]} onPress={() => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d)); }} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { pushHistory(); setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color={theme.error} /><Text style={{ color: theme.error, marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
-      <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
-      <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 반전</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>반전 방식</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>좌우</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>상하</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>완전</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>적용 대상</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>현재 대형만</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>모든 대형 일괄 적용</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'90%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text><Text style={{color:theme.textSecondary, marginVertical:15}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
+      
+      <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20 }}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showExportModal} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>내보내기</Text><TouchableOpacity style={styles.exportOption} onPress={() => {}}><Ionicons name="document-text" size={24} color={theme.primary} /><Text style={{ color: theme.text, marginLeft: 15 }}>JSON 파일 추출</Text></TouchableOpacity><TouchableOpacity style={styles.exportOption} onPress={() => {}}><Ionicons name="cloud-upload" size={24} color={theme.primary} /><Text style={{ color: theme.text, marginLeft: 15 }}>피드백 발행</Text></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { marginTop: 10 }]} onPress={() => setShowExportModal(false)}><Text style={{ color: theme.error }}>닫기</Text></TouchableOpacity></View></View></Modal>
     </GestureHandlerRootView>
   );
 }
@@ -921,9 +491,9 @@ const styles = StyleSheet.create({
   modeToggle: { flexDirection: 'row', borderRadius: 20, padding: 4 },
   modeTab: { paddingHorizontal: 15, paddingVertical: 6, borderRadius: 18 },
   tabText: { fontWeight: 'bold', fontSize: 13 },
-  stageSection: { flex: 1, overflow: 'hidden', position: 'relative' },
+  stageSection: { flex: 1, overflow: 'hidden' },
   stageWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  stage: { borderWidth: 1, overflow: 'visible' },
+  stage: { borderWidth: 1 },
   gridLayer: { ...StyleSheet.absoluteFillObject },
   gridH: { position: 'absolute', left: 0, right: 0 },
   gridV: { position: 'absolute', top: 0, bottom: 0 },
@@ -934,8 +504,8 @@ const styles = StyleSheet.create({
   bottomDock: { borderTopWidth: 1 },
   placeDock: { padding: 15, height: 220 },
   timelineWrapper: { height: 120, position: 'relative', marginBottom: 15, borderRadius: 10, overflow: 'hidden' },
-  waveformContainer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 5 },
-  waveformBar: { width: 3, borderRadius: 1.5 },
+  waveformContainer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  waveformBar: { },
   waveformEmpty: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   timeMarkersLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 20 },
   timeMarker: { position: 'absolute', bottom: 0, alignItems: 'center' },
@@ -943,59 +513,33 @@ const styles = StyleSheet.create({
   timeMarkerText: { fontSize: 9, marginTop: 2, fontWeight: 'bold' },
   timelineTrack: { flex: 1, position: 'relative' },
   block: { position: 'absolute', top: 10, bottom: 25, borderRadius: 4, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5, zIndex: 50 },
-  blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none', alignItems: 'center' },
   blockText: { fontSize: 9, fontWeight: 'bold' },
   needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   toolBtnSmall: { alignItems: 'center', width: 60 },
   playBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   timeText: { fontSize: 16, fontWeight: 'bold', width: 60, textAlign: 'right' },
-  createDock: { paddingHorizontal: 12, paddingTop: 15, paddingBottom: 5, height: 240 },
-  createToolbar: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
-  toolBtn: { alignItems: 'center', gap: 4 },
-  toolBtnText: { fontSize: 11 },
-  sceneSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 10 },
-  actionColumn: { gap: 6, width: 85, justifyContent: 'center' },
-  addSceneBtnWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 32, borderRadius: 8, gap: 4 },
-  addSceneText: { fontWeight: 'bold', fontSize: 10 },
-  sceneCard: { width: 100, height: 112, borderRadius: 12, borderWidth: 2, marginRight: 12, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  miniDancer: { position: 'absolute', width: 6, height: 6, borderRadius: 3, marginLeft: -3, marginTop: -3 },
-  sceneCardLabel: { height: 28, width: '100%', justifyContent: 'center', alignItems: 'center' },
-  sceneCardText: { fontSize: 10, fontWeight: 'bold' },
+  createDock: { padding: 15, height: 220 },
+  createToolbar: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
+  toolBtn: { alignItems: 'center' },
+  toolBtnText: { fontSize: 11, marginTop: 4 },
+  addSceneBtn: { width: 60, height: 80, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  sceneCard: { width: 100, height: 110, borderRadius: 12, borderWidth: 2, marginRight: 12, overflow: 'hidden', alignItems: 'center' },
+  sceneCardText: { fontSize: 10, fontWeight: 'bold', marginVertical: 5 },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  menu: { padding: 25, borderRadius: 20, width: '80%' },
-  menuTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
-  menuItem: { padding: 15, borderRadius: 10, marginRight: 10 },
-  sheet: { padding: 25, borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', position: 'absolute', bottom: 0 },
-  sheetInput: { padding: 15, borderRadius: 12, marginBottom: 15 },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  colorChip: { width: 30, height: 30, borderRadius: 15 },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 20 },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  smallInput: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, width: 60, textAlign: 'center', fontWeight: 'bold' },
-  toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  doneBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  menu: { padding: 25, borderRadius: 20, width: '85%' },
+  menuTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  sheetInput: { padding: 15, borderRadius: 12, marginBottom: 20 },
+  exportOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
+  toast: { position: 'absolute', top: 120, left: '10%', right: '10%', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', zIndex: 999, elevation: 5 },
+  toastText: { marginLeft: 10, fontWeight: 'bold' },
+  analysisLoader: { position: 'absolute', top: 120, alignSelf: 'center', padding: 15, borderRadius: 12, alignItems: 'center', zIndex: 1000 },
   zoomControls: { position: 'absolute', right: 15, zIndex: 100, flexDirection: 'row', borderRadius: 20, padding: 4, borderWidth: 1 },
   historyControls: { position: 'absolute', left: 15, zIndex: 100, flexDirection: 'row', borderRadius: 20, padding: 4, borderWidth: 1 },
-  zoomBtn: { paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', justifyContent: 'center' },
+  zoomBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   zoomText: { fontSize: 11, fontWeight: 'bold' },
-  settingLabel: { fontSize: 12, marginBottom: 12, fontWeight: 'bold' },
-  mirrorRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  mirrorBox: { flex: 1, height: 80, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
-  mirrorText: { fontSize: 11, marginTop: 8, fontWeight: 'bold' },
-  mirrorApplyBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderRadius: 15 },
-  mirrorApplyText: { fontWeight: 'bold', fontSize: 14 },
-  transitionXContainer: { position: 'absolute', zIndex: 15, alignItems: 'center', justifyContent: 'center' },
-  xLine: { position: 'absolute', height: 1 },
+  miniDancer: { position: 'absolute', width: 6, height: 6, borderRadius: 3, marginLeft: -3, marginTop: -3 },
   resizeHandleLeft: { position: 'absolute', left: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
   resizeHandleRight: { position: 'absolute', right: -15, top: 0, bottom: 0, width: 30, justifyContent: 'center', alignItems: 'center', zIndex: 60 },
-  handleCircle: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2 },
-  directionLabelBox: { position: 'absolute', paddingHorizontal: 15, paddingVertical: 4, borderRadius: 12 },
-  directionLabelText: { fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  exportOption: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 16, marginBottom: 10 },
-  exportIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  exportLabel: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
-  exportDesc: { fontSize: 12 },
-  toast: { position: 'absolute', top: 120, left: '10%', right: '10%', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', zIndex: 999, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
-  toastText: { marginLeft: 10, fontWeight: 'bold', fontSize: 14 }
+  handleCircle: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 3 }
 });
