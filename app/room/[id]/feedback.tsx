@@ -98,8 +98,10 @@ export default function FeedbackScreen() {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
-      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000;
-    }).sort((a, b) => b.timestampMillis - a.timestampMillis); // 내림차순: column-reverse와 함께 사용하여 아래에서 위로 밀어 올림
+      // 댓글 ID를 기반으로 고유한 추가 유지 시간(0~0.8초)을 부여하여 순차적 소멸 유도
+      const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
+      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 오름차순: column + flex-end 조합으로 아래에서 위로 쌓음
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
