@@ -98,13 +98,14 @@ export default function FeedbackScreen() {
   
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
+  // 플로팅 말풍선 데이터 (시간순 정렬 + 고정 컨테이너 조합으로 안정성 확보)
   const activeFloatingBubbles = useMemo(() => {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => b.timestampMillis - a.timestampMillis); 
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 오름차순: 오래된 것이 위, 최신이 아래
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -284,7 +285,7 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Floating Comment Bubbles with Smoother Upward Transitions */}
+              {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
@@ -292,7 +293,7 @@ export default function FeedbackScreen() {
                       key={c.id} 
                       entering={FadeIn.duration(800)} 
                       exiting={FadeOut.duration(800)}
-                      // skipExiting() 대신 정교한 LinearTransition 사용하여 레이아웃 변동 최소화
+                      // 고정 높이 컨테이너 덕분에 삭제 시에는 움직이지 않고, 추가 시에만 위로 밀어 올림
                       layout={LinearTransition.springify().damping(20).stiffness(90)}
                       style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 3 }, Shadows.medium]}
                     >
@@ -496,8 +497,8 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, bottom: 40, width: 220, flexDirection: 'column-reverse', justifyContent: 'flex-start', alignItems: 'flex-end', zIndex: 90 },
-  bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8, borderLeftWidth: 3 },
+  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 40, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
+  bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
   bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 }
