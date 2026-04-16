@@ -53,7 +53,8 @@ const WaveformBackground = React.memo(function WaveformBackground({ duration, se
   
   if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
-  const barsCount = Math.max(40, Math.floor(duration * 6)); 
+  // 밀도를 대폭 높여서 "연속적인" 녹음기 스타일 구현 (초당 12개 바)
+  const barsCount = Math.floor(duration * 12); 
   
   const bars = useMemo(() => {
     const hash = (str: string) => {
@@ -67,22 +68,27 @@ const WaveformBackground = React.memo(function WaveformBackground({ duration, se
     return Array.from({ length: barsCount }).map((_, i) => {
       const progress = i / barsCount;
       
-      const verse1 = Math.sin(progress * Math.PI * 4 + s); 
-      const chorus = Math.pow(Math.sin(progress * Math.PI * 8 + s), 2) * 1.5;
-      const energyFlow = (verse1 * 0.3 + chorus * 0.7) + 0.5;
+      // 녹음기 스타일: 기승전결(Verse-Chorus) 흐름을 기반으로 한 진폭 변화
+      const verse = Math.sin(progress * Math.PI * 6 + s); 
+      const chorus = Math.pow(Math.sin(progress * Math.PI * 10 + s), 2) * 1.6;
+      const energyBase = (verse * 0.2 + chorus * 0.8) + 0.5;
 
       const getNoise = (freq: number, amp: number) => Math.abs(Math.sin(i * freq + s)) * amp;
-      const detail = getNoise(1.5, 0.4) + getNoise(3.8, 0.2);
+      const detail = getNoise(0.8, 0.4) + getNoise(2.2, 0.3) + getNoise(4.5, 0.2);
       
-      let combined = (energyFlow * 0.6) + (detail * 0.4);
+      // 0.0 ~ 1.0 정규화된 레벨
+      let normalizedLevel = Math.max(0, Math.min(1, (energyBase * 0.5) + (detail * 0.5)));
       
-      // 요청: 최대 크기 2배 (22 -> 44) 및 고저차 극대화
-      const MAX_W_HEIGHT = 44; 
-      const rawHeight = Math.pow(combined, 2.5) * 60; 
+      // dB 매핑 (0dB ~ 100dB)
+      const dbIntensity = Math.pow(normalizedLevel, 2.0) * 100; 
+
+      const MAX_W_HEIGHT = 48; // 요청하신 2배 높이 유지
+      const h = Math.max(1.5, (dbIntensity / 100) * MAX_W_HEIGHT);
       
       return { 
-        h: Math.max(2, Math.min(MAX_W_HEIGHT, rawHeight)),
-        opacity: combined > 0.5 ? 0.7 : 0.25
+        h,
+        // 요청: 더 연한 색상
+        opacity: dbIntensity > 40 ? 0.4 : 0.18
       };
     });
   }, [barsCount, seed]);
@@ -96,11 +102,12 @@ const WaveformBackground = React.memo(function WaveformBackground({ duration, se
             styles.waveformBar, 
             { 
               backgroundColor: theme.text,
-              width: 2.2,
+              width: 1.8, // 더 얇게
               height: bar.h,
               opacity: bar.opacity,
-              marginHorizontal: 1.3,
-              borderRadius: 1.1
+              marginHorizontal: 0.5, // 좁은 간격으로 연속성 부여
+              borderRadius: 0.9,
+              // waveformContainer의 alignItems: 'center'를 통해 상하 대칭 실현
             }
           ]} 
         />
@@ -834,16 +841,68 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상으로 발행</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
+          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}>
+              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text>
+              <TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity>
+            </View>
+            
+            <View style={{ gap: 12 }}>
+              <TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}>
+                <View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text>
+                  <Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.border} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}>
+                <View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상으로 발행</Text>
+                  <Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.border} />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
       <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
-        <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}</TouchableOpacity></View></View></View>
+        <View style={styles.modalBg}>
+          <View style={[styles.menu, { backgroundColor: theme.card }]}>
+            <Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text>
+            <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text>
+            <TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
+              <TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handlePublish} disabled={isExporting}>
+                {isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={styles.modalBg}><View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text><TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ alignItems: 'center', marginVertical: 15 }}><Ionicons name="trash" size={32} color={theme.error} /><Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text></View><View style={{ gap: 8 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity></View></View></View>
+        <View style={styles.modalBg}>
+          <View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text>
+              <TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity>
+            </View>
+            <View style={{ alignItems: 'center', marginVertical: 15 }}>
+              <Ionicons name="trash" size={32} color={theme.error} />
+              <Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text>
+            </View>
+            <View style={{ gap: 8 }}>
+              <TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>대형 선택</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}><Text style={{color:theme.text}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
