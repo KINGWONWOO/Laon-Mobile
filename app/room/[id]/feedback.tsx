@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Image, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, Dimensions } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
@@ -33,13 +33,11 @@ export default function FeedbackScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
 
-  // Edit states
   const [editingVideo, setEditingVideo] = useState<VideoFeedback | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
 
-  // Option Modal states
   const [showVideoOptions, setShowVideoOptions] = useState(false);
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
@@ -83,7 +81,6 @@ export default function FeedbackScreen() {
     if (cachedVideoUrl) p.play();
   });
 
-  // Track regular video time
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (selectedVideo && !isFormation && player) {
@@ -100,7 +97,6 @@ export default function FeedbackScreen() {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
-      // 1초 전 등장, 3초간 유지 (페이드인 1초, 대기 1초, 페이드아웃 1초)
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000;
     }).sort((a, b) => a.timestampMillis - b.timestampMillis);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
@@ -215,27 +211,6 @@ export default function FeedbackScreen() {
     ]);
   };
 
-  const videoOptions = [
-    { label: '제목 수정', icon: 'create-outline', onPress: () => {
-      if (!selectedVideoForOptions) return;
-      setEditingVideo(selectedVideoForOptions);
-      setEditTitle(selectedVideoForOptions.title);
-    }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
-  ];
-
-  const commentOptions = [
-    { label: '수정', icon: 'create-outline', onPress: () => {
-      if (!selectedCommentForOptions) return;
-      setEditingComment(selectedCommentForOptions);
-      setEditCommentText(selectedCommentForOptions.text);
-    }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
-      if (!selectedCommentForOptions) return;
-      handleDeleteComment(selectedCommentForOptions.id);
-    }}
-  ];
-
   const seekTo = (ms: number) => { 
     if (isFormation) setFormationTime(ms);
     else if (player) player.currentTime = ms / 1000; 
@@ -285,7 +260,6 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Floating Comment Bubbles with Stacking Animation */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
@@ -308,7 +282,7 @@ export default function FeedbackScreen() {
             </View>
 
             {(!isFullScreen || showSidebar) && (
-              <View style={[styles.sidebar, isFullScreen && styles.landscapeSidebar, { backgroundColor: theme.background, borderLeftColor: theme.border }]}>
+              <View style={[styles.sidebar, isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }], { backgroundColor: theme.background }]}>
                 <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.sidebarTitle, { color: theme.text }]}>피드백 {videoObj.comments.length}</Text>
                   <TouchableOpacity onPress={() => setShowCommentInput(true)}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity>
@@ -339,7 +313,17 @@ export default function FeedbackScreen() {
             )}
           </View>
 
-          <OptionModal visible={showCommentOptions} onClose={() => setShowCommentOptions(false)} options={commentOptions} title="댓글 설정" theme={theme} />
+          <OptionModal visible={showCommentOptions} onClose={() => setShowCommentOptions(false)} options={[
+            { label: '수정', icon: 'create-outline', onPress: () => {
+              if (!selectedCommentForOptions) return;
+              setEditingComment(selectedCommentForOptions);
+              setEditCommentText(selectedCommentForOptions.text);
+            }},
+            { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
+              if (!selectedCommentForOptions) return;
+              handleDeleteComment(selectedCommentForOptions.id);
+            }}
+          ]} title="댓글 설정" theme={theme} />
 
           <Modal visible={showCommentInput} transparent animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
             <View style={styles.modalOverlay}>
@@ -412,7 +396,14 @@ export default function FeedbackScreen() {
         )}
       />
 
-      <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={videoOptions} title="영상 설정" theme={theme} />
+      <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={[
+        { label: '제목 수정', icon: 'create-outline', onPress: () => {
+          if (!selectedVideoForOptions) return;
+          setEditingVideo(selectedVideoForOptions);
+          setEditTitle(selectedVideoForOptions.title);
+        }},
+        { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
+      ]} title="영상 설정" theme={theme} />
 
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
@@ -460,7 +451,7 @@ const styles = StyleSheet.create({
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1 },
-  landscapeSidebar: { width: 300, borderLeftColor: theme.border, borderLeftWidth: 1, flex: undefined },
+  landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
   sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, alignItems: 'center' },
   sidebarTitle: { fontWeight: '900', letterSpacing: -0.5 },
   cItem: { padding: 15, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
