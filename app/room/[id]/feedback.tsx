@@ -152,7 +152,19 @@ export default function FeedbackScreen() {
     }
     cacheAndPlay();
     if (isFormation) { setFormationTime(0); setIsFormationPlaying(true); }
-  }, [selectedVideo]);
+  }, [selectedVideo?.id]); // ID가 바뀔 때만 캐싱 로직 실행 (댓글 추가 시 깜빡임 방지)
+
+  // 댓글 입력 중 일시정지 및 완료 후 재생 로직
+  useEffect(() => {
+    if (!selectedVideo) return;
+    if (showCommentInput) {
+      if (isFormation) setIsFormationPlaying(false);
+      else player.pause();
+    } else {
+      if (isFormation) setIsFormationPlaying(true);
+      else player.play();
+    }
+  }, [showCommentInput]);
 
   const handlePickVideo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
