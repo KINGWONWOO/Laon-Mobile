@@ -312,7 +312,7 @@ export default function FeedbackScreen() {
                         <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
                       </TouchableOpacity>
                       {item.userId === currentUser?.id && (
-                        <View style.commentActions>
+                        <View style={styles.commentActions}>
                           <TouchableOpacity onPress={() => { setSelectedCommentForOptions(item); setShowCommentOptions(true); }}>
                             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
                           </TouchableOpacity>
