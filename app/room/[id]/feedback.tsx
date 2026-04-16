@@ -34,11 +34,13 @@ export default function FeedbackScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
 
+  // Edit states
   const [editingVideo, setEditingVideo] = useState<VideoFeedback | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
 
+  // Option Modal states
   const [showVideoOptions, setShowVideoOptions] = useState(false);
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
@@ -82,15 +84,20 @@ export default function FeedbackScreen() {
     if (cachedVideoUrl) p.play();
   });
 
+  // Track regular video time with safety check
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (selectedVideo && !isFormation && player) {
       interval = setInterval(() => {
-        setVideoTime(Math.floor(player.currentTime * 1000));
+        try {
+          if (player && typeof player.currentTime === 'number') {
+            setVideoTime(Math.floor(player.currentTime * 1000));
+          }
+        } catch (e) {}
       }, 100);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [selectedVideo, isFormation, player]);
+  }, [selectedVideo?.id, isFormation, player]);
   
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
@@ -98,10 +105,10 @@ export default function FeedbackScreen() {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
-      // 댓글 ID를 기반으로 고유한 추가 유지 시간(0~0.8초)을 부여하여 순차적 소멸 유도
+      // 순차 소멸을 위한 미세 오프셋
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 오름차순: column + flex-end 조합으로 아래에서 위로 쌓음
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 오름차순 정렬: flex-end와 함께 사용하여 위로 밀어 올림
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -259,7 +266,7 @@ export default function FeedbackScreen() {
                   </View>
                 ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
               ) : (
-                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} contentFit="contain" />
+                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} fullscreenOptions={{ variant: 'allow' }} contentFit="contain" />
               )}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
@@ -281,17 +288,17 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Floating Comment Bubbles with Smoother Transitions */}
+              {/* Floating Comment Bubbles with Smoother Upward Transitions */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
                     <Animated.View 
                       key={c.id} 
-                      entering={FadeIn.duration(1000)} 
-                      exiting={FadeOut.duration(1000)}
-                      // 이동 애니메이션 최적화
-                      layout={LinearTransition.duration(700).springify().damping(15).stiffness(90)}
-                      style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary }, Shadows.medium]}
+                      entering={FadeIn.duration(800)} 
+                      exiting={FadeOut.duration(800)}
+                      // 정방향 column + flex-end 구조에서 새로운 아이템 추가 시 위로 부드럽게 밀어 올림
+                      layout={LinearTransition.springify().damping(18).stiffness(100)}
+                      style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 3 }, Shadows.medium]}
                     >
                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
                         <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUserById(c.userId)?.name}</Text>
@@ -493,8 +500,8 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, bottom: 40, width: 220, flexDirection: 'column-reverse', justifyContent: 'flex-start', alignItems: 'flex-end', zIndex: 90 },
-  bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8, borderLeftWidth: 3 },
+  floatingContainer: { position: 'absolute', right: 20, bottom: 40, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
+  bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
   bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 }
