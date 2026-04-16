@@ -46,6 +46,7 @@ export default function FeedbackScreen() {
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [enableFloatingComments, setEnableFloatingComments] = useState(true);
   
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
@@ -53,6 +54,7 @@ export default function FeedbackScreen() {
   const [formationTime, setFormationTime] = useState(0);
   const [formationDuration, setFormationDuration] = useState(60);
   const formationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [videoTime, setVideoTime] = useState(0);
 
   const isFormation = selectedVideo?.videoUrl?.startsWith('formation://');
   const selectedFormation = useMemo(() => {
@@ -74,7 +76,33 @@ export default function FeedbackScreen() {
     }
     return () => { if (formationTimerRef.current) clearInterval(formationTimerRef.current); };
   }, [isFormation, isFormationPlaying, formationDuration]);
+
+  const player = useVideoPlayer(cachedVideoUrl || '', p => {
+    p.loop = true;
+    if (cachedVideoUrl) p.play();
+  });
+
+  // Track regular video time
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (selectedVideo && !isFormation && player) {
+      interval = setInterval(() => {
+        setVideoTime(Math.floor(player.currentTime * 1000));
+      }, 100);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [selectedVideo, isFormation, player]);
   
+  const currentPlaybackTime = isFormation ? formationTime : videoTime;
+
+  const activeFloatingBubbles = useMemo(() => {
+    if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
+    return selectedVideo.comments.filter(c => {
+      const triggerTime = c.timestampMillis - 1000;
+      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 2000;
+    });
+  }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
+
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
 
   const filteredVideos = useMemo(() => {
@@ -123,11 +151,6 @@ export default function FeedbackScreen() {
     cacheAndPlay();
     if (isFormation) { setFormationTime(0); setIsFormationPlaying(true); }
   }, [selectedVideo]);
-
-  const player = useVideoPlayer(cachedVideoUrl || '', p => {
-    p.loop = true;
-    if (cachedVideoUrl) p.play();
-  });
 
   const handlePickVideo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
@@ -227,7 +250,7 @@ export default function FeedbackScreen() {
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
-            <View style={[styles.videoSection, isFullScreen && styles.landscapeVideo, { backgroundColor: '#000' }]}>
+            <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
               {isFormation ? (
                 selectedFormation ? (
                   <View style={{flex: 1}}>
@@ -238,7 +261,7 @@ export default function FeedbackScreen() {
                   </View>
                 ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
               ) : (
-                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} />
+                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} allowsFullscreen={false} contentFit="contain" />
               )}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
@@ -246,14 +269,34 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
                 <View style={{flex: 1}} />
                 {isFullScreen && (
-                  <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
-                    <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
-                  </TouchableOpacity>
+                  <>
+                    <TouchableOpacity style={{marginRight: 20}} onPress={() => setEnableFloatingComments(!enableFloatingComments)}>
+                      <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
+                      <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
+                    </TouchableOpacity>
+                  </>
                 )}
                 <TouchableOpacity onPress={() => setIsFullScreen(!isFullScreen)}>
                   <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
+
+              {/* Floating Comment Bubbles */}
+              {activeFloatingBubbles.length > 0 && (
+                <View style={styles.floatingContainer} pointerEvents="none">
+                  {activeFloatingBubbles.map((c, idx) => (
+                    <View key={c.id} style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 4, marginTop: idx > 0 ? 8 : 0 }, Shadows.medium]}>
+                      <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
+                        <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUserById(c.userId)?.name}</Text>
+                        <Text style={[styles.bubbleTime, { color: theme.textSecondary }]}>{formatTime(c.timestampMillis)}</Text>
+                      </View>
+                      <Text style={[styles.bubbleText, { color: theme.text }]}>{c.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
 
             {(!isFullScreen || showSidebar) && (
@@ -403,12 +446,13 @@ const styles = StyleSheet.create({
   fullView: { flex: 1 },
   mainLayout: { flex: 1 },
   landscapeLayout: { flexDirection: 'row' },
-  videoSection: { width: '100%', aspectRatio: 16/9, justifyContent: 'center' },
-  landscapeVideo: { flex: 1, aspectRatio: undefined },
+  videoSection: { width: '100%', justifyContent: 'center', overflow: 'hidden' },
+  portraitVideo: { aspectRatio: 16/9 },
+  landscapeVideo: { flex: 1 },
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
   sidebar: { flex: 1 },
-  landscapeSidebar: { width: 300, borderLeftWidth: 1 },
+  landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
   sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, alignItems: 'center' },
   sidebarTitle: { fontWeight: '900', letterSpacing: -0.5 },
   cItem: { padding: 15, borderBottomWidth: 0.5, flexDirection: 'row', alignItems: 'center' },
@@ -424,5 +468,10 @@ const styles = StyleSheet.create({
   titleInput: { borderRadius: 20, padding: 18, marginBottom: 20, fontSize: 16, fontWeight: '600' },
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }
+  formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  floatingContainer: { position: 'absolute', right: 20, top: 80, bottom: 20, width: 250, justifyContent: 'center', alignItems: 'flex-end', zIndex: 90 },
+  bubble: { padding: 12, borderRadius: 16, width: '100%', maxWidth: 240 },
+  bubbleUser: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
+  bubbleTime: { fontSize: 9, fontWeight: '600', marginLeft: 6 },
+  bubbleText: { fontSize: 13, fontWeight: '600' }
 });
