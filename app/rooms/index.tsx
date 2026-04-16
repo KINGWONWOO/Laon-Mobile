@@ -39,13 +39,6 @@ export default function RoomsScreen() {
     }
   };
 
-  const themes = [
-    { type: 'dark', label: '다크', icon: 'moon', color: '#1B1927' },
-    { type: 'light', label: '라이트', icon: 'sunny', color: '#FFFFFF' },
-    { type: 'pink', label: '연핑크', icon: 'heart', color: '#FFF5F8' },
-    { type: 'custom', label: '사용자 설정', icon: 'color-palette', color: themeType === 'custom' ? customBackgroundColor : '#333' },
-  ];
-
   const presetColors = [
     '#5E5CE6', '#32D74B', '#64D2FF', '#BF5AF2', 
     '#FF375F', '#AC8E68', '#FF6B6B', '#4ECDC4', 
@@ -158,54 +151,39 @@ export default function RoomsScreen() {
               
               <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder="이름을 입력하세요" placeholderTextColor={theme.textSecondary} />
 
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>테마 선택</Text>
-              <View style={styles.themeGrid}>
-                {themes.map((t) => (
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>사용자 설정 (메인 색상)</Text>
+              <View style={styles.colorPalette}>
+                {presetColors.map((color) => (
                   <TouchableOpacity 
-                    key={t.type} 
+                    key={color} 
                     style={[
-                      styles.themeItem, 
-                      { borderColor: themeType === t.type ? theme.primary : theme.border, backgroundColor: t.color }
-                    ]}
-                    onPress={() => setThemeType(t.type as any)}
-                  >
-                    <Ionicons name={t.icon as any} size={20} color={themeType === t.type ? (t.type === 'custom' ? theme.text : theme.primary) : theme.textSecondary} />
-                    <Text style={[styles.themeLabel, { color: themeType === t.type ? (t.type === 'custom' ? theme.text : theme.primary) : theme.textSecondary }]}>{t.label}</Text>
-                  </TouchableOpacity>
+                      styles.colorOption, 
+                      { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
+                    ]} 
+                    onPress={() => {
+                      setThemeType('custom');
+                      setCustomColor(color);
+                    }} 
+                  />
                 ))}
               </View>
 
-              {themeType === 'custom' && (
-                <>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>메인 색상 설정</Text>
-                  <View style={styles.colorPalette}>
-                    {presetColors.map((color) => (
-                      <TouchableOpacity 
-                        key={color} 
-                        style={[
-                          styles.colorOption, 
-                          { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
-                        ]} 
-                        onPress={() => setCustomColor(color)} 
-                      />
-                    ))}
-                  </View>
-
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>배경 색상 설정</Text>
-                  <View style={styles.colorPalette}>
-                    {bgPresetColors.map((color) => (
-                      <TouchableOpacity 
-                        key={color} 
-                        style={[
-                          styles.colorOption, 
-                          { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.text : 'transparent' }
-                        ]} 
-                        onPress={() => setCustomBackgroundColor(color)} 
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>사용자 설정 (배경 색상)</Text>
+              <View style={styles.colorPalette}>
+                {bgPresetColors.map((color) => (
+                  <TouchableOpacity 
+                    key={color} 
+                    style={[
+                      styles.colorOption, 
+                      { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.text : 'transparent' }
+                    ]} 
+                    onPress={() => {
+                      setThemeType('custom');
+                      setCustomBackgroundColor(color);
+                    }} 
+                  />
+                ))}
+              </View>
 
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
