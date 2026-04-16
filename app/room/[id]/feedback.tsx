@@ -30,14 +30,17 @@ export default function FeedbackScreen() {
   const [newComment, setNewComment] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
 
+  // Edit states
   const [editingVideo, setEditingVideo] = useState<VideoFeedback | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
 
+  // Option Modal states
   const [showVideoOptions, setShowVideoOptions] = useState(false);
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
@@ -81,6 +84,7 @@ export default function FeedbackScreen() {
     if (cachedVideoUrl) p.play();
   });
 
+  // Track regular video time
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (selectedVideo && !isFormation && player) {
@@ -98,7 +102,7 @@ export default function FeedbackScreen() {
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis);
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 시간순 정렬하여 아래로 쌓이게 함
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -167,13 +171,20 @@ export default function FeedbackScreen() {
   };
 
   const handleAddComment = async () => {
-    if (!selectedVideo || !newComment.trim()) return;
-    const posMillis = isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000);
-    await addComment(selectedVideo.id, newComment.trim(), posMillis);
-    setNewComment('');
-    setShowCommentInput(false);
-    const refreshed = videos.find(v => v.id === selectedVideo.id);
-    if (refreshed) setSelectedVideo(refreshed);
+    if (!selectedVideo || !newComment.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
+    try {
+      const posMillis = isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000);
+      await addComment(selectedVideo.id, newComment.trim(), posMillis);
+      setNewComment('');
+      setShowCommentInput(false);
+      const refreshed = videos.find(v => v.id === selectedVideo.id);
+      if (refreshed) setSelectedVideo(refreshed);
+    } catch (error) {
+      Alert.alert('오류', '댓글 등록에 실패했습니다.');
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
   const handleUpdateVideo = async () => {
@@ -260,6 +271,7 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Floating Comment Bubbles with Upward Stacking Animation */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
@@ -300,7 +312,7 @@ export default function FeedbackScreen() {
                         <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
                       </TouchableOpacity>
                       {item.userId === currentUser?.id && (
-                        <View style={styles.commentActions}>
+                        <View style.commentActions>
                           <TouchableOpacity onPress={() => { setSelectedCommentForOptions(item); setShowCommentOptions(true); }}>
                             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
                           </TouchableOpacity>
@@ -332,7 +344,9 @@ export default function FeedbackScreen() {
                 <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
                 <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
                   <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleAddComment} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>등록</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={handleAddComment} style={{padding: 10}} disabled={isSubmittingComment}>
+                    {isSubmittingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight:'900'}}>등록</Text>}
+                  </TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
             </View>
