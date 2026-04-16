@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition, withSpring } from 'react-native-reanimated';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -97,12 +97,13 @@ export default function FeedbackScreen() {
   
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
+  // 플로팅 말풍선 데이터 추출 (시간순 정렬)
   const activeFloatingBubbles = useMemo(() => {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 시간순 정렬하여 아래로 쌓이게 함
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -152,9 +153,8 @@ export default function FeedbackScreen() {
     }
     cacheAndPlay();
     if (isFormation) { setFormationTime(0); setIsFormationPlaying(true); }
-  }, [selectedVideo?.id]); // ID가 바뀔 때만 캐싱 로직 실행 (댓글 추가 시 깜빡임 방지)
+  }, [selectedVideo?.id]); 
 
-  // 댓글 입력 중 일시정지 및 완료 후 재생 로직
   useEffect(() => {
     if (!selectedVideo) return;
     if (showCommentInput) {
@@ -283,7 +283,7 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Floating Comment Bubbles with Upward Stacking Animation */}
+              {/* Floating Comment Bubbles with Improved Upward Transition */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
@@ -291,7 +291,8 @@ export default function FeedbackScreen() {
                       key={c.id} 
                       entering={FadeIn.duration(1000)} 
                       exiting={FadeOut.duration(1000)}
-                      layout={LinearTransition.springify()}
+                      // layout 트랜지션을 spring 효과로 더 부드럽게 위로 밀어 올림
+                      layout={LinearTransition.duration(600).springify().damping(15)}
                       style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary }, Shadows.medium]}
                     >
                       <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
