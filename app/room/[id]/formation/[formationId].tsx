@@ -477,8 +477,8 @@ export default function FormationEditorScreen() {
             }
             
             const maxPeak = Math.max(...peaks);
-            // 지수를 1.8로 높여 고저차를 뚜렷하게 만듦 (0.8에서 수정)
-            const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.8));
+            // 지수를 1.3으로 조정하여 적절한 고저차 유지 (1.8에서 수정)
+            const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.3));
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
           } catch (e) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
