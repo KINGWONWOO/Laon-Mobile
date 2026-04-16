@@ -467,15 +467,18 @@ export default function FormationEditorScreen() {
             
             for (let i = 0; i < totalSamples; i++) {
               let start = blockSize * i;
-              let max = 0;
+              let sum = 0;
               for (let j = 0; j < blockSize; j++) {
                 const abs = Math.abs(rawData[start + j]);
-                if (abs > max) max = abs;
+                sum += abs;
               }
-              peaks.push(max);
+              // 평균 진폭 사용 (단순 Peak보다 소리의 밀도를 더 잘 표현)
+              peaks.push(sum / blockSize);
             }
+            
             const maxPeak = Math.max(...peaks);
-            const normalized = peaks.map(p => Math.pow(p / maxPeak, 0.8));
+            // 지수를 1.8로 높여 고저차를 뚜렷하게 만듦 (0.8에서 수정)
+            const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.8));
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
           } catch (e) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
