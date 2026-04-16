@@ -99,6 +99,18 @@ export default function ArchiveScreen() {
     ]);
   };
 
+  const handlePhotoOptions = () => {
+    if (!selectedPhoto) return;
+    Alert.alert('아카이브 설정', '어떤 작업을 하시겠습니까?', [
+      { text: '설명 수정', onPress: () => {
+        setEditDesc(selectedPhoto.description || '');
+        setIsEditingPhoto(true);
+      }},
+      { text: '삭제', style: 'destructive', onPress: () => handleDeletePhoto(selectedPhoto) },
+      { text: '취소', style: 'cancel' }
+    ]);
+  };
+
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity 
       activeOpacity={0.9}
@@ -111,7 +123,7 @@ export default function ArchiveScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
         <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
@@ -126,73 +138,117 @@ export default function ArchiveScreen() {
         contentContainerStyle={styles.listContent}
       />
 
-      <Modal visible={!!selectedPhoto} animationType="fade" transparent>
-        <View style={styles.detailOverlay}>
-          <View style={[styles.detailContent, { backgroundColor: theme.background }]}>
-            {/* 💡 Social Media Style Header (Author Info) */}
-            <View style={[styles.detailHeader, { paddingTop: insets.top + 10, backgroundColor: theme.card }]}>
-              <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.closeBtn}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
-              
-              <View style={styles.headerAuthorInfo}>
-                <Image source={{ uri: getUserById(selectedPhoto?.userId)?.profileImage }} style={styles.headerAuthorImg} />
-                <View>
-                  <Text style={{color: theme.text, fontWeight: '800', fontSize: 15}}>{getUserById(selectedPhoto?.userId)?.name}</Text>
-                  <Text style={{color: theme.textSecondary, fontSize: 11, fontWeight: '500'}}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
-                </View>
-              </View>
+      <Modal visible={!!selectedPhoto} animationType="slide" transparent>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={[styles.container, { backgroundColor: theme.background }]}
+        >
+          <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.backBtn}>
+              <Ionicons name="close" size={28} color={theme.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>아카이브 상세</Text>
+            {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) ? (
+              <TouchableOpacity onPress={handlePhotoOptions} style={styles.deleteBtn}>
+                <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
+              </TouchableOpacity>
+            ) : <View style={{ width: 40 }} />}
+          </View>
 
-              {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
-                <View style={{flexDirection: 'row'}}>
-                  <TouchableOpacity onPress={() => { setEditDesc(selectedPhoto.description || ''); setIsEditingPhoto(true); }} style={styles.headerActionBtn}>
-                    <Ionicons name="pencil" size={20} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeletePhoto(selectedPhoto)} style={styles.headerActionBtn}>
-                    <Ionicons name="trash" size={20} color={theme.error} />
-                  </TouchableOpacity>
+          <FlatList
+            data={selectedPhoto?.comments || []}
+            keyExtractor={item => item.id}
+            ListHeaderComponent={
+              <View style={styles.contentSection}>
+                <View style={styles.authorRow}>
+                  {getUserById(selectedPhoto?.userId)?.profileImage ? (
+                    <Image source={{ uri: getUserById(selectedPhoto?.userId).profileImage }} style={styles.authorAvatar} />
+                  ) : (
+                    <View style={[styles.authorAvatar, { backgroundColor: theme.primary + '15' }]}>
+                      <Text style={{ color: theme.primary, fontWeight: '800' }}>{getUserById(selectedPhoto?.userId)?.name?.[0]}</Text>
+                    </View>
+                  )}
+                  <View>
+                    <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || '알 수 없음'}</Text>
+                    <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
+                  </View>
                 </View>
-              )}
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* 💡 Content (Image) below header */}
-              <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="contain" />
-              
-              <View style={styles.detailInfoArea}>
-                <View style={[styles.descSection, { backgroundColor: theme.card }, Shadows.soft]}>
-                  <Text style={{color: theme.text, fontSize: 16, lineHeight: 24, fontWeight: '500'}}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
-                </View>
+                <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="cover" />
                 
-                <View style={styles.commentSection}>
-                  <Text style={{color: theme.text, fontWeight: '900', fontSize: 18, marginBottom: 20, letterSpacing: -0.5}}>댓글 {selectedPhoto?.comments?.length || 0}</Text>
-                  {selectedPhoto?.comments?.map((c: any) => (
-                    <View key={c.id} style={[styles.cItem, { backgroundColor: theme.card }, Shadows.soft]}>
-                      <Image source={{ uri: getUserById(c.userId)?.profileImage }} style={styles.cAuthorImg} />
-                      <View style={{flex: 1}}>
-                        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                          <Text style={{color: theme.text, fontWeight: '800', fontSize: 14}}>{getUserById(c.userId)?.name}</Text>
-                          {c.userId === currentUser?.id && (
-                            <View style={{flexDirection: 'row'}}>
-                              <TouchableOpacity onPress={() => { setEditingComment(c); setEditCommentText(c.text); }} style={{padding: 4}}><Ionicons name="pencil" size={14} color={theme.textSecondary} /></TouchableOpacity>
-                              <TouchableOpacity onPress={() => handleDeleteComment(c.id)} style={{padding: 4}}><Ionicons name="trash" size={14} color={theme.error} /></TouchableOpacity>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={{color: theme.text, fontSize: 15, marginTop: 4, lineHeight: 20}}>{c.text}</Text>
-                        <Text style={{color: theme.textSecondary, fontSize: 11, marginTop: 8, opacity: 0.6}}>{formatDateFull(c.createdAt)}</Text>
+                <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
+
+                <View style={[styles.divider, { backgroundColor: theme.border, opacity: 0.5, marginTop: 20 }]} />
+                <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>댓글 {selectedPhoto?.comments?.length || 0}</Text>
+              </View>
+            }
+            renderItem={({ item: comment }) => {
+              const cAuthor = getUserById(comment.userId);
+              const isEditing = editingComment?.id === comment.id;
+
+              return (
+                <View style={styles.commentItem}>
+                  <View style={styles.commentHeader}>
+                    <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
+                    <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
+                    {comment.userId === currentUser?.id && !isEditing && (
+                      <TouchableOpacity onPress={() => {
+                        Alert.alert('댓글 설정', '어떤 작업을 하시겠습니까?', [
+                          { text: '수정', onPress: () => {
+                            setEditingComment(comment);
+                            setEditCommentText(comment.text);
+                          }},
+                          { text: '삭제', style: 'destructive', onPress: () => handleDeleteComment(comment.id) },
+                          { text: '취소', style: 'cancel' }
+                        ]);
+                      }}>
+                        <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {isEditing ? (
+                    <View style={styles.commentEditBox}>
+                      <TextInput
+                        style={[styles.commentEditInput, { color: theme.text, backgroundColor: theme.background }]}
+                        value={editCommentText}
+                        onChangeText={setEditCommentText}
+                        multiline
+                        autoFocus
+                      />
+                      <View style={styles.commentEditBtns}>
+                        <TouchableOpacity onPress={() => setEditingComment(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>취소</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={handleUpdateComment}>
+                          <Text style={{ color: theme.primary, fontWeight: '800' }}>저장</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
-                  ))}
+                  ) : (
+                    <Text style={[styles.commentText, { color: theme.text }]}>{comment.text}</Text>
+                  )}
                 </View>
-              </View>
-            </ScrollView>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <View style={[styles.commentInputArea, { backgroundColor: theme.card, paddingBottom: insets.bottom + 10 }]}>
-                <TextInput style={[styles.cInput, { color: theme.text, backgroundColor: theme.background }]} placeholder="따뜻한 댓글을 남겨주세요..." placeholderTextColor={theme.textSecondary} value={newComment} onChangeText={setNewComment} />
-                <TouchableOpacity onPress={handleAddComment} style={[styles.sendBtn, { backgroundColor: theme.primary }, Shadows.glow]}><Ionicons name="send" size={18} color="#fff" /></TouchableOpacity>
-              </View>
-            </KeyboardAvoidingView>
+              );
+            }}
+            contentContainerStyle={{ paddingBottom: 100 }}
+          />
+
+          <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
+            <TextInput
+              style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
+              placeholder="댓글을 입력하세요..."
+              placeholderTextColor="#888"
+              value={newComment}
+              onChangeText={setNewComment}
+              multiline
+            />
+            <TouchableOpacity 
+              style={[styles.sendBtn, { backgroundColor: theme.primary }]} 
+              onPress={handleAddComment}
+              disabled={!newComment.trim()}
+            >
+              <Ionicons name="send" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit & Add Modals remain consistent... */}
@@ -228,28 +284,32 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 15, borderBottomWidth: 0.5 },
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
+  deleteBtn: { padding: 5 },
   listContent: { padding: 16 },
   gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.2, margin: 8, borderRadius: 28, overflow: 'hidden' },
   gridImage: { width: '100%', height: '100%' },
-  detailOverlay: { flex: 1, backgroundColor: '#000' },
-  detailContent: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10 },
-  headerAuthorInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 10 },
-  headerAuthorImg: { width: 36, height: 36, borderRadius: 14, marginRight: 10 },
-  closeBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  headerActionBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 5 },
-  detailImage: { width: '100%', height: width * 1.1, backgroundColor: '#000' },
-  detailInfoArea: { padding: 24 },
-  descSection: { padding: 20, borderRadius: 24, marginBottom: 32 },
-  commentSection: { marginTop: 10 },
-  cItem: { flexDirection: 'row', padding: 16, borderRadius: 24, marginBottom: 14 },
-  cAuthorImg: { width: 36, height: 36, borderRadius: 14, marginRight: 12 },
-  commentInputArea: { flexDirection: 'row', alignItems: 'center', padding: 16, borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.05)' },
-  cInput: { flex: 1, height: 48, borderRadius: 24, paddingHorizontal: 20, marginRight: 12, fontWeight: '600' },
-  sendBtn: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  contentSection: { padding: 20 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  authorAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
+  authorName: { fontSize: 15, fontWeight: '800', letterSpacing: -0.5 },
+  dateText: { fontSize: 12, marginTop: 2, fontWeight: '500', opacity: 0.7 },
+  detailImage: { width: '100%', height: width * 1.1, borderRadius: 28, ...Shadows.soft },
+  content: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
+  divider: { height: 1, width: '100%', marginBottom: 15 },
+  commentCount: { fontSize: 14, fontWeight: '800', marginBottom: 15, letterSpacing: -0.5 },
+  commentItem: { paddingVertical: 15, paddingHorizontal: 20 },
+  commentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  commentAuthor: { fontSize: 14, fontWeight: '800', marginRight: 10, letterSpacing: -0.5 },
+  commentDate: { fontSize: 11, flex: 1, fontWeight: '500', opacity: 0.7 },
+  commentText: { fontSize: 14, lineHeight: 20 },
+  commentEditBox: { marginTop: 5 },
+  commentEditInput: { borderRadius: 20, padding: 12, fontSize: 14, minHeight: 60, textAlignVertical: 'top', ...Shadows.soft },
+  commentEditBtns: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, alignItems: 'center' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 15 },
+  input: { flex: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, maxHeight: 100, marginRight: 10, ...Shadows.soft },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 30 },
   modalContent: { padding: 28, borderRadius: 32 },
-  input: { padding: 18, borderRadius: 20, minHeight: 100, textAlignVertical: 'top', fontSize: 16, fontWeight: '600' },
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentUpload: { padding: 32, borderTopLeftRadius: 40, borderTopRightRadius: 40 },
   titleInput: { borderRadius: 20, padding: 18, marginBottom: 24, fontSize: 16, fontWeight: '600', minHeight: 120, textAlignVertical: 'top' },

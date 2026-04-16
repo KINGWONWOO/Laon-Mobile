@@ -103,22 +103,22 @@ export default function ScheduleScreen() {
     const isClosed = schedule.deadline && new Date(schedule.deadline) < new Date();
     return (
       <TouchableOpacity 
-        style={[
-          styles.listCard, 
-          { backgroundColor: theme.card }
-        ]} 
+        activeOpacity={0.8}
+        style={[styles.listCard, { backgroundColor: theme.card }, Shadows.soft]} 
         onPress={() => setSelectedScheduleId(schedule.id)}
       >
         <View style={styles.listInfo}>
-          <View style={{flexDirection:'row', alignItems:'center', marginBottom: 8}}>
+          <View style={{flexDirection:'row', alignItems:'center', marginBottom: 6}}>
             <Text style={[styles.listTitle, { color: theme.text }]} numberOfLines={1}>{schedule.title}</Text>
-            {isClosed && <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '22'}]}><Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: 'bold'}}>종료</Text></View>}
+            {isClosed && (
+              <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '20'}]}>
+                <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '800'}}>종료</Text>
+              </View>
+            )}
           </View>
           <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {formatDateFull(schedule.createdAt)}</Text>
         </View>
-        <View style={[styles.iconCircle, { backgroundColor: theme.primary + '15' }]}>
-          <Ionicons name="chevron-forward" size={18} color={theme.primary} />
-        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: 0.5}} />
       </TouchableOpacity>
     );
   };
@@ -159,165 +159,101 @@ export default function ScheduleScreen() {
           </View>
 
           <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
-            <View style={{flexDirection:'row', alignItems:'center', marginBottom: 12}}>
-              {isClosed ? <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>마감됨</Text></View> : <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>진행 중</Text></View>}
-              {schedule.deadline && !isClosed && <Text style={{color: theme.error, fontSize: 12, marginLeft: 10, fontWeight: '600'}}>마감: {formatDateFull(schedule.deadline)}</Text>}
-            </View>
-            <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
-            
-            <View style={[styles.matrixCard, { backgroundColor: theme.card }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
-                <View>
-                  <View style={styles.matrixRow}>
-                    <View style={styles.timeLabelCell} />
-                    {uniqueDates.map(date => {
-                      const d = new Date(date as string);
-                      return (
-                        <View key={date as string} style={styles.dateHeaderCell}>
-                          <Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
-                          <Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                  {hours.map(hour => (
-                    <View key={hour as number} style={styles.matrixRow}>
-                      <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
-                      {uniqueDates.map(date => {
-                        const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
-                        const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
-                        if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
-                        const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
-                        const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
-                        return (
-                          <TouchableOpacity 
-                            key={date as string} 
-                            disabled={isClosed} 
-                            activeOpacity={0.7} 
-                            style={[
-                              styles.gridCell, 
-                              { backgroundColor: getHeatmapColor(votersForThisOpt.length) },
-                              isSelected && { borderWidth: 2, borderColor: theme.background, ...Shadows.glow }
-                            ]} 
-                            onPress={() => {
-                              const currentRes = schedule.responses[currentUser?.id || ''] || [];
-                              respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
-                            }} 
-                            onLongPress={() => {
-                              setVotersToDisplay(votersForThisOpt);
-                              setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
-                              setShowVoterModal(true);
-                            }}
-                          >
-                            {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-              
-              <View style={styles.legendContainer}>
-                <Text style={[styles.legendText, { color: theme.textSecondary }]}>적음</Text>
-                <View style={[styles.legendBox, { backgroundColor: theme.primary + '33' }]} />
-                <View style={[styles.legendBox, { backgroundColor: theme.primary + '66' }]} />
-                <View style={[styles.legendBox, { backgroundColor: theme.primary + '99' }]} />
-                <View style={[styles.legendBox, { backgroundColor: theme.primary + 'FF' }]} />
-                <Text style={[styles.legendText, { color: theme.textSecondary }]}>많음</Text>
-              </View>
-            </View>
-
-            <View style={styles.voterSummaryCard}>
-              <View style={styles.voterRow}>
-                <View style={[styles.voterLabelContainer, { backgroundColor: theme.primary + '10' }]}>
-                  <Text style={[styles.voterLabel, { color: theme.primary }]}>참여자 {participants.length}</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarScroll}>
-                  {participants.map(vId => (
-                    <View key={vId} style={styles.avatarItem}>
-                      <View style={[styles.avatarCircle, { backgroundColor: theme.primary + '15' }]}>
-                        <Text style={[styles.avatarText, { color: theme.primary }]}>{getUserById(vId)?.name?.charAt(0) || '?'}</Text>
-                      </View>
-                      <Text style={[styles.avatarName, { color: theme.textSecondary }]} numberOfLines={1}>{getUserById(vId)?.name}</Text>
-                    </View>
-                  ))}
-                  {participants.length === 0 && <Text style={{ color: theme.textSecondary, fontSize: 13, marginLeft: 10 }}>아직 참여자가 없습니다.</Text>}
-                </ScrollView>
-              </View>
-              <View style={[styles.voterRow, { marginTop: 20 }]}>
-                <View style={[styles.voterLabelContainer, { backgroundColor: theme.textSecondary + '10' }]}>
-                  <Text style={[styles.voterLabel, { color: theme.textSecondary }]}>미참여 {nonParticipants.length}</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarScroll}>
-                  {nonParticipants.map(vId => (
-                    <View key={vId} style={[styles.avatarItem, { opacity: 0.5 }]}>
-                      <View style={[styles.avatarCircle, { backgroundColor: theme.textSecondary + '10' }]}>
-                        <Text style={[styles.avatarText, { color: theme.textSecondary }]}>{getUserById(vId)?.name?.charAt(0) || '?'}</Text>
-                      </View>
-                      <Text style={[styles.avatarName, { color: theme.textSecondary }]} numberOfLines={1}>{getUserById(vId)?.name}</Text>
-                    </View>
-                  ))}
-                  {nonParticipants.length === 0 && <Text style={{ color: theme.success, fontSize: 13, marginLeft: 10, fontWeight: '600' }}>모두 참여했습니다!</Text>}
-                </ScrollView>
-              </View>
-            </View>
-
-            <View style={[styles.rankingBox, { backgroundColor: theme.card }]}>
-              <View style={{flexDirection:'row', alignItems:'center', marginBottom: 20}}>
-                <View style={[styles.iconCircleSmall, { backgroundColor: theme.accent + '15', marginRight: 10 }]}>
-                  <Ionicons name="time" size={16} color={theme.accent} />
-                </View>
-                <Text style={[styles.rankingHeader, { color: theme.text }]}>가장 많이 모이는 시간</Text>
-              </View>
-              
-              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
-                <TouchableOpacity 
-                  key={idx} 
-                  style={styles.rankingItem} 
-                  onPress={() => { setVotersToDisplay(r.voters); setVoterModalTitle(`${r.dateTime.slice(5)} 투표자`); setShowVoterModal(true); }}
-                >
-                  <View style={[styles.rankingBadge, { backgroundColor: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : '#CD7F32' }]}>
-                    <Text style={styles.rankingBadgeText}>{idx + 1}</Text>
-                  </View>
-                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.dateTime.slice(5)}시</Text>
-                  <View style={styles.rankingCountRow}>
-                    <Text style={[styles.rankingCount, { color: theme.primary }]}>{r.votes}명</Text>
-                    <Ionicons name="people" size={16} color={theme.primary} />
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {ranked.filter(r => r.votes > 0).length === 0 && (
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: theme.textSecondary }}>아직 투표 데이터가 없습니다.</Text>
+            <View style={styles.statusRow}>
+              {isClosed ? (
+                <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>마감됨</Text></View>
+              ) : (
+                <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>진행 중</Text></View>
+              )}
+              {schedule.deadline && !isClosed && (
+                <View style={styles.deadlineInfo}>
+                  <Ionicons name="time-outline" size={14} color={theme.textSecondary} />
+                  <Text style={{color: theme.textSecondary, fontSize: 12, marginLeft: 4, fontWeight: '600'}}>{formatDateFull(schedule.deadline)} 마감</Text>
                 </View>
               )}
             </View>
-
-            {isClosed && ranked[0]?.votes > 0 && (
-              <View style={[styles.winnerCard, { backgroundColor: theme.primary }]}>
-                <View style={styles.winnerDecoration}>
-                  <Ionicons name="calendar" size={40} color="rgba(255,255,255,0.3)" />
+            <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
+            
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
+              <View>
+                <View style={styles.matrixRow}>
+                  <View style={styles.timeLabelCell} />
+                  {uniqueDates.map(date => {
+                    const d = new Date(date as string);
+                    return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
+                  })}
                 </View>
-                <View style={styles.winnerContent}>
-                  <Text style={styles.winnerLabel}>BEST TIME</Text>
-                  <Text style={styles.winnerText}>{ranked[0].dateTime.slice(5)}시</Text>
-                  <View style={styles.winnerStats}>
-                    <Ionicons name="people" size={16} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.winnerStatsText}>{ranked[0].votes}명 참여 가능</Text>
+                {hours.map(hour => (
+                  <View key={hour as number} style={styles.matrixRow}>
+                    <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+                    {uniqueDates.map(date => {
+                      const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                      const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                      if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+                      const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
+                      const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
+                      return (
+                        <TouchableOpacity key={date as string} disabled={isClosed} activeOpacity={0.7} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: isSelected ? theme.primary : theme.border + '33' }]} onPress={() => {
+                          const currentRes = schedule.responses[currentUser?.id || ''] || [];
+                          respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
+                        }} onLongPress={() => {
+                          setVotersToDisplay(votersForThisOpt);
+                          setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
+                          setShowVoterModal(true);
+                        }}>
+                          {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                </View>
-                <Ionicons name="checkmark-circle" size={30} color="rgba(255,255,255,0.5)" />
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
+              <View style={styles.voterRow}>
+                <View style={[styles.voterLabelPill, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 11}}>참여 {participants.length}</Text></View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
+                  {participants.map(vId => (
+                    <View key={vId} style={styles.avatarMini}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary}}>{getUserById(vId)?.name[0]}</Text></View>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={[styles.voterRow, { marginTop: 12 }]}>
+                <View style={[styles.voterLabelPill, {backgroundColor: theme.textSecondary + '15'}]}><Text style={{color: theme.textSecondary, fontWeight:'800', fontSize: 11}}>미참여 {nonParticipants.length}</Text></View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
+                  {nonParticipants.map(vId => (
+                    <View key={vId} style={styles.avatarMini}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary + '80'}}>{getUserById(vId)?.name[0]}</Text></View>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
+              <Text style={[styles.rankingHeader, { color: theme.text }]}>가장 많이 모이는 시간</Text>
+              {ranked.filter(r => r.votes > 0).slice(0, 3).map((r, idx) => (
+                <TouchableOpacity key={idx} style={styles.rankingItem} onPress={() => { setVotersToDisplay(r.voters); setVoterModalTitle(`${r.dateTime.slice(5)} 투표자`); setShowVoterModal(true); }}>
+                  <Text style={[styles.rankingIdx, { color: theme.textSecondary }]}>{idx + 1}위</Text>
+                  <Text style={[styles.rankingText, { color: theme.text }]}>{r.dateTime.slice(5)}시</Text>
+                  <View style={{flexDirection:'row', alignItems:'center'}}>
+                    <Text style={[styles.rankingCount, { color: theme.primary, marginRight: 5 }]}>{r.votes}명</Text>
+                    <Ionicons name="people" size={14} color={theme.primary} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {ranked.filter(r => r.votes > 0).length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>아직 투표가 없습니다.</Text>}
+            </View>
+
+            {isClosed && ranked[0].votes > 0 && (
+              <View style={[styles.resultBanner, {backgroundColor: theme.primary + '15', borderColor: theme.primary}]}>
+                <Ionicons name="star" size={20} color={theme.primary} style={{marginBottom: 4}} />
+                <Text style={{color: theme.primary, fontWeight:'900', fontSize: 16}}>최종 추천: {ranked[0].dateTime.slice(5)}시 ({ranked[0].votes}명)</Text>
               </View>
             )}
 
             {isOwner && !isClosed && (
-              <TouchableOpacity style={styles.manualCloseBtn} onPress={() => handleCloseScheduleManual(schedule.id)}>
-                <Ionicons name="stop-circle-outline" size={20} color={theme.error} />
-                <Text style={{color: theme.error, fontWeight: '800', marginLeft: 8}}>일정 투표 마감하기</Text>
-              </TouchableOpacity>
+              <TouchableOpacity style={[styles.manualCloseBtn, {backgroundColor: theme.error + '10', borderColor: theme.error}]} onPress={() => handleCloseScheduleManual(schedule.id)}><Ionicons name="stop-circle" size={20} color={theme.error} /><Text style={{color: theme.error, fontWeight: '800', marginLeft: 8}}>지금 일정 투표 종료하기</Text></TouchableOpacity>
             )}
-            <View style={{ height: 40 }} />
           </ScrollView>
         </View>
       </Modal>
@@ -329,55 +265,13 @@ export default function ScheduleScreen() {
     const hours = Array.from({length: 24}).map((_, i) => i);
     const minutes = [0, 10, 20, 30, 40, 50, 59];
     return (
-      <View style={[styles.compactPicker, { backgroundColor: theme.card }]}>
+      <View style={[styles.compactPicker, {backgroundColor: theme.background}, Shadows.soft]}>
         <View style={styles.pickerHeader}>
-          <TouchableOpacity 
-            style={[styles.pickerTab, show === 'date' && { backgroundColor: theme.primary + '10' }]} 
-            onPress={() => setShow('date')}
-          >
-            <Text style={{color: show === 'date' ? theme.primary : theme.text, fontWeight: '800'}}>{date.toLocaleDateString()}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.pickerTab, show === 'time' && { backgroundColor: theme.primary + '10' }]} 
-            onPress={() => setShow('time')}
-          >
-            <Text style={{color: show === 'time' ? theme.primary : theme.text, fontWeight: '800'}}>{date.getHours()}:{date.getMinutes().toString().padStart(2,'0')}</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>날짜</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>시간</Text></TouchableOpacity>
         </View>
-        <View style={{ padding: 10 }}>
-          {show === 'date' && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingBottom: 5}}>
-              {days.map((d, i) => (
-                <TouchableOpacity 
-                  key={i} 
-                  style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary, ...Shadows.glow}]} 
-                  onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}
-                >
-                  <Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? theme.background : theme.textSecondary, fontWeight: '600'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
-                  <Text style={{fontWeight: '800', fontSize: 16, color: date.toDateString() === d.toDateString() ? theme.background : theme.text}}>{d.getDate()}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          {show === 'time' && (
-            <View style={{flexDirection:'row', height: 160}}>
-              <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
-                {hours.map(h => (
-                  <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}>
-                    <Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: date.getHours() === h ? '900' : '500', fontSize: 16}}>{h}시</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>
-                {minutes.map(m => (
-                  <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '15'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}>
-                    <Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: date.getMinutes() === m ? '900' : '500', fontSize: 16}}>{m}분</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-        </View>
+        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}, Shadows.soft]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontSize: 16, fontWeight: '900', color: date.toDateString() === d.toDateString() ? '#fff' : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
@@ -386,82 +280,33 @@ export default function ScheduleScreen() {
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
       <View style={styles.header}>
         <View><Text style={[styles.headerTitle, { color: theme.text }]}>일정 투표</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>가장 많이 모이는 시간을 찾아드려요!</Text></View>
-        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color={theme.background} /></TouchableOpacity>
+        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }, Shadows.glow]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color="#fff" /></TouchableOpacity>
       </View>
 
-      <FlatList 
-        data={roomSchedules} 
-        keyExtractor={item => item.id} 
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} 
-        renderItem={renderScheduleListItem} 
-        ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="calendar-outline" size={60} color={theme.border} /><Text style={[styles.emptyText, { color: theme.textSecondary }]}>진행 중인 일정이 없습니다.</Text></View>} 
-      />
+      <FlatList data={roomSchedules} keyExtractor={item => item.id} contentContainerStyle={{paddingBottom: 100}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} renderItem={renderScheduleListItem} ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="calendar-outline" size={48} color={theme.textSecondary + '30'} /><Text style={[styles.emptyText, { color: theme.textSecondary }]}>아직 일정이 없습니다.</Text></View>} />
 
       {renderDetail()}
 
       <Modal visible={showVoterModal} transparent animationType="fade">
-        <TouchableOpacity activeOpacity={1} style={styles.modalOverlayCenter} onPress={() => setShowVoterModal(false)}>
-          <View style={[styles.voterModalContent, { backgroundColor: theme.card, shadowColor: theme.text }]} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text, fontSize: 18 }]}>{voterModalTitle}</Text>
-              <TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
-            </View>
-            <ScrollView style={styles.voterList} showsVerticalScrollIndicator={false}>
-              {votersToDisplay.map(vId => (
-                <View key={vId} style={styles.voterListItem}>
-                  <View style={[styles.iconCircleSmall, { backgroundColor: theme.primary + '15', marginRight: 12 }]}>
-                    <Ionicons name="person" size={14} color={theme.primary} />
-                  </View>
-                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>{getUserById(vId)?.name || '알 수 없음'}</Text>
-                </View>
-              ))}
-              {votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginVertical: 20 }}>참여자가 없습니다.</Text>}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUserById(vId)?.name[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUserById(vId)?.name || '알 수 없음'}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>참여자가 없습니다.</Text>}</View></View></View>
       </Modal>
 
-      {/* Add/Edit Modal */}
       <Modal visible={showAddModal || showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '일정 수정' : '새 일정 투표 만들기'}</Text>
-              <TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
+        <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+          <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '일정 수정' : '새 일정 투표'}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
+          <ScrollView showsVerticalScrollIndicator={false} style={{flex: 1}}>
+            <Text style={[styles.label, { color: theme.text }]}>제목</Text><TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 정기 연습" placeholderTextColor={theme.textSecondary} value={title} onChangeText={setTitle} />
+            <Text style={[styles.label, { color: theme.text, marginTop: 20 }]}>날짜 선택</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>{Array.from({length: 31}).map((_, day) => { const d = new Date(); d.setDate(d.getDate() + day); const isSelected = !!selectedDates.find(sd => sd.toDateString() === d.toDateString()); return (<TouchableOpacity key={day} style={[styles.dateItem, isSelected && { backgroundColor: theme.primary, borderColor: theme.primary }, Shadows.soft]} onPress={() => toggleDate(d)}><Text style={[styles.dateWeek, { color: isSelected ? "#fff" : theme.textSecondary, fontWeight: '800' }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateDay, { color: isSelected ? "#fff" : theme.text, fontWeight: '900' }]}>{d.getDate()}</Text></TouchableOpacity>); })}</ScrollView>
+            <Text style={[styles.label, { color: theme.text }]}>시간 범위 ({startTime}:00 ~ {endTime}:00)</Text>
+            <View style={styles.timeSelectRow}>
+              <View style={styles.timeCol}><Text style={styles.timeLabel}>시작</Text><ScrollView style={styles.timeScroll}>{Array.from({length: 24}).map((_, i) => (<TouchableOpacity key={i} onPress={() => setStartTime(i)} style={[styles.smallTimeBtn, startTime === i && { backgroundColor: theme.primary + '20' }]}><Text style={{ color: startTime === i ? theme.primary : theme.text, fontWeight: '700' }}>{i}시</Text></TouchableOpacity>))}</ScrollView></View>
+              <View style={styles.timeCol}><Text style={styles.timeLabel}>종료</Text><ScrollView style={styles.timeScroll}>{Array.from({length: 25}).map((_, i) => (<TouchableOpacity key={i} onPress={() => setEndTime(i)} style={[styles.smallTimeBtn, endTime === i && { backgroundColor: theme.primary + '20' }]}><Text style={{ color: endTime === i ? theme.primary : theme.text, fontWeight: '700' }}>{i}시</Text></TouchableOpacity>))}</ScrollView></View>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>제목</Text>
-              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 정기 연습" placeholderTextColor="#888" value={title} onChangeText={setTitle} />
-              
-              <Text style={[styles.label, { color: theme.textSecondary, marginTop: 15 }]}>날짜 선택 (복수 가능)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20, paddingVertical: 5}}>{Array.from({length: 31}).map((_, day) => { const d = new Date(); d.setDate(d.getDate() + day); const isSelected = !!selectedDates.find(sd => sd.toDateString() === d.toDateString()); return (<TouchableOpacity key={day} style={[styles.dateItem, { backgroundColor: isSelected ? theme.primary : theme.card }]} onPress={() => toggleDate(d)}><Text style={[styles.dateWeek, { color: isSelected ? theme.background : theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateDay, { color: isSelected ? theme.background : theme.text }]}>{d.getDate()}</Text></TouchableOpacity>); })}</ScrollView>
-              
-              <Text style={[styles.label, { color: theme.textSecondary }]}>시간 범위 ({startTime}:00 ~ {endTime}:00)</Text>
-              <View style={styles.timeSelectCard}>
-                <View style={styles.timeSelectRow}>
-                  <View style={styles.timeCol}><Text style={styles.timeLabel}>시작</Text><ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>{Array.from({length: 24}).map((_, i) => (<TouchableOpacity key={i} onPress={() => setStartTime(i)} style={[styles.timeItem, startTime === i && { backgroundColor: theme.primary + '15' }]}><Text style={{ color: startTime === i ? theme.primary : theme.text, fontWeight: startTime === i ? '800' : '500' }}>{i}시</Text></TouchableOpacity>))}</ScrollView></View>
-                  <View style={styles.timeCol}><Text style={styles.timeLabel}>종료</Text><ScrollView style={styles.timeScroll} showsVerticalScrollIndicator={false}>{Array.from({length: 25}).map((_, i) => (<TouchableOpacity key={i} onPress={() => setEndTime(i)} style={[styles.timeItem, endTime === i && { backgroundColor: theme.primary + '15' }]}><Text style={{ color: endTime === i ? theme.primary : theme.text, fontWeight: endTime === i ? '800' : '500' }}>{i}시</Text></TouchableOpacity>))}</ScrollView></View>
-                </View>
-              </View>
-
-              <View style={[styles.settingCard, { marginTop: 20 }]}>
-                <View style={styles.settingRow}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary, false: '#ddd' }} thumbColor={Platform.OS === 'android' ? (hasDeadline ? theme.primary : '#f4f3f4') : ''} /></View>
-                {hasDeadline && (
-                  <View style={{marginTop: 15}}>
-                    <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.card}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
-                      <Ionicons name="calendar" size={20} color={theme.primary} />
-                      <Text style={{color: theme.text, marginLeft: 10, fontWeight: '600'}}>{formatDateFull(deadline.getTime())}</Text>
-                    </TouchableOpacity>
-                    {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
-                  </View>
-                )}
-              </View>
-
-              <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: theme.background }]}>{showEditModal ? '수정 완료' : '등록하기'}</Text>}</TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
+            <View style={[styles.settingItem, {marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}]}><Text style={[styles.settingLabel, { color: theme.text, fontSize: 16, fontWeight: '700' }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} /></View>
+            {hasDeadline && <View style={{marginTop: 10, marginBottom: 20}}><TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}><Ionicons name="calendar" size={18} color={theme.primary} /><Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{formatDateFull(deadline.getTime())}</Text></TouchableOpacity>{showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}</View>}
+            <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? '변경사항 저장' : '일정 만들기'}</Text>}</TouchableOpacity>
+          </ScrollView></View></View>
       </Modal>
     </View>
   );
@@ -469,125 +314,73 @@ export default function ScheduleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 24 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
-  headerTitle: { fontSize: 30, fontWeight: '800', letterSpacing: -1 },
-  headerSub: { fontSize: 14, marginTop: 4, fontWeight: '500', opacity: 0.7 },
-  addButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', ...Shadows.glow },
-  listCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 24, 
-    borderRadius: 28, 
-    marginBottom: 16,
-    ...Shadows.card
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingHorizontal: 4 },
+  headerTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  headerSub: { fontSize: 14, fontWeight: '500', marginTop: 2, opacity: 0.7 },
+  addButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  listCard: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 32, marginBottom: 16 },
   listInfo: { flex: 1 },
   listTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  listMeta: { fontSize: 13, fontWeight: '500', marginTop: 2, opacity: 0.7 },
-  closedBadge: { marginLeft: 10, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  iconCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  iconCircleSmall: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  listMeta: { fontSize: 12, fontWeight: '500', opacity: 0.6, marginTop: 4 },
+  closedBadge: { marginLeft: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   detailContainer: { flex: 1 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15 },
-  detailHeaderTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.8 },
-  closeBtn: { padding: 5 },
-  detailDeleteBtn: { padding: 5 },
-  detailScroll: { padding: 24 },
-  statusBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, alignSelf: 'flex-start' },
-  detailTitle: { fontSize: 26, fontWeight: '800', marginBottom: 25, lineHeight: 34, letterSpacing: -1 },
-  matrixCard: { 
-    padding: 20, 
-    borderRadius: 32, 
-    marginBottom: 25,
-    ...Shadows.card
-  },
-  matrixContainer: { marginTop: 5 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
+  detailHeaderTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  closeBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  detailDeleteBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  detailScroll: { paddingHorizontal: 24, paddingBottom: 50 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  deadlineInfo: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+  detailTitle: { fontSize: 26, fontWeight: '900', marginBottom: 25, letterSpacing: -1, lineHeight: 34 },
+  matrixContainer: { marginBottom: 25, marginTop: 10 },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
-  timeLabelCell: { width: 55, alignItems: 'center', justifyContent: 'center', height: 45 },
-  timeLabelText: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
-  dateHeaderCell: { width: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  dateHeaderText: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
-  dateHeaderDay: { fontSize: 18, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
-  gridCell: { width: 50, height: 45, alignItems: 'center', justifyContent: 'center', borderRadius: 12, margin: 2 },
-  gridCellEmpty: { width: 50, height: 45, margin: 2 },
-  legendContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
-  legendBox: { width: 16, height: 16, borderRadius: 4, marginHorizontal: 4 },
-  legendText: { fontSize: 11, fontWeight: '600', marginHorizontal: 8 },
-  voterSummaryCard: { 
-    padding: 20, 
-    borderRadius: 28, 
-    marginBottom: 25,
-  },
+  timeLabelCell: { width: 50, alignItems: 'center', justifyContent: 'center', height: 40 },
+  timeLabelText: { fontSize: 11, fontWeight: '600' },
+  dateHeaderCell: { width: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  dateHeaderText: { fontSize: 11, fontWeight: '600' },
+  dateHeaderDay: { fontSize: 16, fontWeight: 'bold' },
+  gridCell: { width: 50, height: 40, borderWidth: 0.5, borderRadius: 8, margin: 1 },
+  gridCellEmpty: { width: 50, height: 40 },
+  voterSummaryCard: { padding: 20, borderRadius: 32, marginBottom: 24 },
   voterRow: { flexDirection: 'row', alignItems: 'center' },
-  voterLabelContainer: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, width: 75, alignItems: 'center', marginRight: 15 },
-  voterLabel: { fontSize: 11, fontWeight: '800' },
-  avatarScroll: { paddingRight: 20 },
-  avatarItem: { alignItems: 'center', marginRight: 12, width: 45 },
-  avatarCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  avatarText: { fontSize: 14, fontWeight: '800' },
-  avatarName: { fontSize: 10, fontWeight: '500', textAlign: 'center' },
-  rankingBox: { 
-    padding: 24, 
-    borderRadius: 32, 
-    marginBottom: 25,
-    ...Shadows.card
-  },
-  rankingHeader: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  rankingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
-  rankingBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 15 },
-  rankingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  rankingText: { flex: 1, fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
-  rankingCountRow: { flexDirection: 'row', alignItems: 'center' },
-  rankingCount: { fontSize: 16, fontWeight: '800', marginRight: 4 },
-  winnerCard: { 
-    flexDirection: 'row', 
-    padding: 24, 
-    borderRadius: 32, 
-    alignItems: 'center', 
-    marginBottom: 25,
-    ...Shadows.card,
-    shadowColor: '#5E5CE6',
-    shadowOpacity: 0.3,
-    overflow: 'hidden'
-  },
-  winnerDecoration: { position: 'absolute', left: -10, top: -10 },
-  winnerContent: { flex: 1, marginLeft: 15 },
-  winnerLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  winnerText: { color: '#fff', fontSize: 22, fontWeight: '900', marginVertical: 4, letterSpacing: -0.5 },
-  winnerStats: { flexDirection: 'row', alignItems: 'center' },
-  winnerStatsText: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600', marginLeft: 6 },
-  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 28, marginTop: 10, backgroundColor: '#8E8E9310' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { padding: 25, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '92%', ...Shadows.card },
-  voterModalContent: { padding: 25, borderRadius: 32, width: '85%', maxHeight: '70%', ...Shadows.card },
-  voterList: { marginTop: 10 },
-  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  modalTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -1 },
-  label: { fontSize: 14, fontWeight: '800', marginTop: 20, marginBottom: 10, marginLeft: 4, letterSpacing: -0.5 },
-  input: { borderRadius: 20, padding: 18, fontSize: 16, marginBottom: 12, ...Shadows.soft },
-  settingCard: { padding: 20, borderRadius: 28, backgroundColor: '#8E8E9308' },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingLabel: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
-  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20, ...Shadows.soft },
-  compactPicker: { borderRadius: 28, marginTop: 12, overflow: 'hidden' },
-  pickerHeader: { flexDirection: 'row' },
-  pickerTab: { flex: 1, padding: 18, alignItems: 'center' },
-  smallDateBtn: { width: 50, height: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
-  smallTimeBtn: { padding: 18, alignItems: 'center' },
-  dateItem: { width: 60, height: 75, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12, ...Shadows.soft },
-  dateWeek: { fontSize: 12, fontWeight: '500', opacity: 0.7 },
-  dateDay: { fontSize: 20, fontWeight: '800', marginTop: 2, letterSpacing: -0.5 },
-  timeSelectCard: { padding: 20, borderRadius: 28, backgroundColor: '#8E8E9308' },
-  timeSelectRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  timeCol: { width: '42%', alignItems: 'center' },
-  timeLabel: { fontSize: 13, marginBottom: 10, fontWeight: '800', letterSpacing: -0.3 },
-  timeScroll: { height: 150, width: '100%', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.5)' },
-  timeItem: { padding: 12, alignItems: 'center', borderRadius: 12 },
-  saveBtn: { padding: 20, borderRadius: 28, alignItems: 'center', marginTop: 25, ...Shadows.glow },
-  saveBtnText: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyText: { textAlign: 'center', marginTop: 15, fontSize: 16, fontWeight: '600', opacity: 0.7 }
+  voterLabelPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginRight: 12 },
+  avatarScroll: { flex: 1 },
+  avatarMini: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center', marginRight: 6 },
+  rankingSection: { padding: 24, borderRadius: 32, marginBottom: 24 },
+  rankingHeader: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, marginBottom: 16 },
+  rankingItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  rankingIdx: { width: 30, fontSize: 13, fontWeight: 'bold' },
+  rankingText: { flex: 1, fontSize: 15, fontWeight: '600' },
+  rankingCount: { fontSize: 14, fontWeight: '800' },
+  resultBanner: { padding: 20, borderRadius: 24, borderWidth: 1.5, alignItems: 'center', marginBottom: 24 },
+  manualCloseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 24, borderWidth: 1.5, marginTop: 10, borderStyle: 'dashed' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalContent: { padding: 28, borderTopLeftRadius: 40, borderTopRightRadius: 40, maxHeight: '92%' },
+  voterModalContent: { padding: 24, borderRadius: 32, width: '100%' },
+  voterList: { marginTop: 16 },
+  voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  voterAvatar: { width: 40, height: 40, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  label: { fontSize: 15, fontWeight: '800', marginBottom: 12, opacity: 0.8 },
+  input: { borderRadius: 20, padding: 18, fontSize: 16, fontWeight: '600', marginBottom: 16 },
+  dateItem: { width: 50, height: 56, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 10, borderColor: 'rgba(0,0,0,0.05)' },
+  dateWeek: { fontSize: 10 },
+  dateDay: { fontSize: 16 },
+  timeSelectRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  timeCol: { flex: 0.48, alignItems: 'center' },
+  timeLabel: { fontSize: 12, fontWeight: '700', marginBottom: 8, opacity: 0.5 },
+  timeScroll: { height: 120, width: '100%', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 20 },
+  smallTimeBtn: { padding: 15, alignItems: 'center' },
+  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20 },
+  compactPicker: { borderRadius: 24, marginTop: 12, overflow: 'hidden', paddingBottom: 10 },
+  pickerHeader: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.02)' },
+  pickerTab: { flex: 1, padding: 15, alignItems: 'center' },
+  smallDateBtn: { width: 50, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
+  saveBtn: { padding: 20, borderRadius: 24, alignItems: 'center', marginTop: 24 },
+  saveBtnText: { fontSize: 18, fontWeight: '900' },
+  emptyContainer: { alignItems: 'center', marginTop: 120 },
+  emptyText: { fontSize: 16, fontWeight: '600', marginTop: 16 }
 });
-

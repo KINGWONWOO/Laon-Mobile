@@ -44,5 +44,17 @@ export const roomService = {
   getRoomByIdRemote: async (roomId: string): Promise<Room | null> => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId).single();
     return data ? { ...data, leaderId: data.leader_id, imageUri: data.image_uri } as Room : null;
+  },
+
+  updateRoom: async (roomId: string, name: string, imageUri?: string | null): Promise<void> => {
+    const updates: any = { name };
+    if (imageUri && !imageUri.startsWith('http')) {
+      const finalImage = await storageService.uploadProfileImage('room', roomId, imageUri);
+      updates.image_uri = finalImage;
+    } else if (imageUri) {
+      updates.image_uri = imageUri;
+    }
+    const { error } = await supabase.from('rooms').update(updates).eq('id', roomId);
+    if (error) throw error;
   }
 };

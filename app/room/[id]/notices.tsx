@@ -1,22 +1,29 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NoticeItem } from '../../../components/ui/RoomComponents';
 
 export default function NoticesFullListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { notices, theme, refreshAllData, getUserById } = useAppContext();
+  const { notices, theme, refreshAllData } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const roomNotices = useMemo(() => 
-    notices.filter(n => n.roomId === id).sort((a, b) => b.createdAt - a.createdAt), 
+    notices.filter(n => n.roomId === id).sort((a, b) => {
+      // Pinned notices first, then by date
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return b.createdAt - a.createdAt;
+    }), 
     [notices, id]
   );
 
-  const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshAllData();
@@ -25,7 +32,7 @@ export default function NoticesFullListScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomWidth: 0.5, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
@@ -37,33 +44,18 @@ export default function NoticesFullListScreen() {
         data={roomNotices}
         keyExtractor={item => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
-        contentContainerStyle={{ padding: 20 }}
-        renderItem={({ item: notice }) => {
-          const author = getUserById(notice.userId);
-          return (
-            <TouchableOpacity 
-              style={[styles.noticeCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => router.push(`/room/${id}/notice/${notice.id}`)}
-            >
-              <View style={styles.noticeHeader}>
-                <Text style={[styles.noticeTitle, { color: theme.text }]} numberOfLines={1}>{notice.title}</Text>
-                {notice.imageUrls && notice.imageUrls.length > 0 && (
-                  <Ionicons name="image" size={16} color={theme.primary} />
-                )}
-              </View>
-              <Text style={[styles.noticeContent, { color: theme.textSecondary }]} numberOfLines={2}>{notice.content}</Text>
-              <View style={styles.noticeFooter}>
-                <Text style={[styles.noticeAuthor, { color: theme.textSecondary }]}>{author?.name || '...'}</Text>
-                <Text style={[styles.noticeDate, { color: theme.textSecondary + '88' }]}>
-                  {new Date(notice.createdAt).toLocaleString()}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+        contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20 }}
+        renderItem={({ item: notice }) => (
+          <NoticeItem 
+            notice={notice} 
+            theme={theme} 
+            onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} 
+          />
+        )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={{ color: theme.textSecondary }}>등록된 공지사항이 없습니다.</Text>
+            <Ionicons name="document-text-outline" size={64} color={theme.textSecondary} style={{ opacity: 0.2, marginBottom: 16 }} />
+            <Text style={{ color: theme.textSecondary, fontSize: 16, fontWeight: '600' }}>등록된 공지사항이 없습니다.</Text>
           </View>
         }
       />
@@ -73,15 +65,14 @@ export default function NoticesFullListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, borderBottomWidth: 1 },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 15, 
+    paddingBottom: 15,
+  },
   backBtn: { padding: 5 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold' },
-  noticeCard: { padding: 20, borderRadius: 20, marginBottom: 15, borderWidth: 1 },
-  noticeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  noticeTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
-  noticeContent: { fontSize: 14, lineHeight: 20, marginBottom: 15 },
-  noticeFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  noticeAuthor: { fontSize: 12, fontWeight: '600' },
-  noticeDate: { fontSize: 11 },
-  emptyContainer: { alignItems: 'center', marginTop: 100 }
+  headerTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  emptyContainer: { alignItems: 'center', marginTop: 140 }
 });

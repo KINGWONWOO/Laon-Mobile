@@ -28,8 +28,8 @@ export default function RoomMainScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Modals
-  const [showRoomEditModal, setShowRoomEditModal] = useState(false); // 💡 방 설정 모달
-  const [showUserProfileModal, setShowUserProfileModal] = useState(false); // 💡 개인 프로필 설정 모달
+  const [showRoomEditModal, setShowRoomEditModal] = useState(false); 
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false); 
   
   const [roomName, setRoomName] = useState(room?.name || '');
   const [roomImage, setRoomImage] = useState<string | null>(null);
@@ -72,10 +72,8 @@ export default function RoomMainScreen() {
     if (!roomName.trim()) return Alert.alert('오류', '방 이름을 입력해주세요.');
     setIsUpdating(true);
     try {
-      // 💡 방 자체 정보(이름, 이미지) 수정 로직
-      // AppContext에 updateRoom (혹은 관련 서비스) 호출 연동 필요
-      // 임시로 updateRoomUserProfile 대신 방 정보를 업데이트하는 로직으로 가정
-      await updateRoomUserProfile(id as string, roomName, roomImage); // 실제로는 방 테이블 업데이트여야 함
+      // 💡 방 자체 정보(이름, 이미지) 업데이트 (Host 전용)
+      await updateRoom(id as string, roomName, roomImage);
       setShowRoomEditModal(false);
       Alert.alert('성공', '방 정보가 업데이트되었습니다.');
     } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsUpdating(false); }
@@ -121,8 +119,8 @@ export default function RoomMainScreen() {
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                {/* 💡 유저 개인 프로필 버튼 (분리) */}
-                <TouchableOpacity style={styles.userProfileBtn} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setShowUserProfileModal(true); }}>
+                {/* 💡 독립된 유저 프로필 편집 버튼 */}
+                <TouchableOpacity style={[styles.userProfileBtn, {borderColor: theme.primary}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
                   <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.userAvatarSmall} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginLeft: 10}]} onPress={() => router.push(`/room/${id}/members`)}>
@@ -136,9 +134,9 @@ export default function RoomMainScreen() {
             <View style={styles.roomBrand}>
               <View style={styles.roomImageWrapper}>
                 <Image source={{ uri: room.imageUri || 'https://placeholder.com/150' }} style={styles.mainRoomImg} />
-                {/* 💡 방 설정 아이콘 (방장 권한 체크) */}
+                {/* 💡 방 설정 (Host 전용) */}
                 {isLeader && (
-                  <TouchableOpacity style={[styles.roomSettingsBtn, {backgroundColor: theme.card}]} onPress={() => { setRoomName(room.name); setShowRoomEditModal(true); }}>
+                  <TouchableOpacity style={[styles.roomSettingsBtn, {backgroundColor: theme.card}]} onPress={() => { setRoomName(room.name); setRoomImage(null); setShowRoomEditModal(true); }}>
                     <Ionicons name="settings-sharp" size={14} color={theme.text} />
                   </TouchableOpacity>
                 )}
@@ -165,9 +163,15 @@ export default function RoomMainScreen() {
               <Text style={[styles.sectionLabel, { color: theme.primary }]}>ANNOUNCEMENTS</Text>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>공지사항</Text>
             </View>
-            <TouchableOpacity activeOpacity={0.7} style={[styles.addNoticeSmallBtn, {backgroundColor: theme.primary}]} onPress={() => setShowAddAddNotice(true)}>
-              <Ionicons name="add" size={20} color="#fff" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity activeOpacity={0.7} style={styles.viewAllHeaderBtn} onPress={() => router.push(`/room/${id}/notices` as any)}>
+                <Text style={{ color: theme.textSecondary, fontWeight: '700', fontSize: 13 }}>전체보기</Text>
+              </TouchableOpacity>
+              <View style={[styles.headerDivider, { backgroundColor: theme.border }]} />
+              <TouchableOpacity activeOpacity={0.7} style={[styles.addNoticeSmallBtn, {backgroundColor: theme.primary}]} onPress={() => setShowAddAddNotice(true)}>
+                <Ionicons name="add" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {roomNotices.length > 0 ? roomNotices.slice(0, 3).map(notice => (
@@ -176,11 +180,6 @@ export default function RoomMainScreen() {
             <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
               <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>새로운 공지가 없습니다.</Text>
             </View>
-          )}
-          {roomNotices.length > 3 && (
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => router.push(`/room/${id}/notices`)}>
-              <Text style={{ color: theme.textSecondary, fontWeight: '700' }}>전체 보기</Text>
-            </TouchableOpacity>
           )}
 
           <View style={styles.sectionHeader}>
@@ -213,7 +212,7 @@ export default function RoomMainScreen() {
         </View>
       </ScrollView>
 
-      {/* Room Info Edit Modal (Host Only) */}
+      {/* Room Edit Modal (Host Only) */}
       <Modal visible={showRoomEditModal} animationType="fade" transparent>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
@@ -253,7 +252,7 @@ export default function RoomMainScreen() {
         </View>
       </Modal>
 
-      {/* Add Notice Modal (existing) */}
+      {/* Notice Modal */}
       <Modal visible={showAddNotice} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalOverlay}>
@@ -291,7 +290,7 @@ const styles = StyleSheet.create({
   heroContent: { flex: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 20 },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   backCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
-  userProfileBtn: { width: 40, height: 40, borderRadius: 16, overflow: 'hidden', borderWidth: 2, borderColor: '#fff' },
+  userProfileBtn: { width: 40, height: 40, borderRadius: 16, overflow: 'hidden', borderWidth: 2 },
   userAvatarSmall: { width: '100%', height: '100%' },
   smallMemberBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, ...Shadows.soft },
   smallMemberText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 4 },
@@ -313,9 +312,10 @@ const styles = StyleSheet.create({
   gridIconCircle: { width: 52, height: 52, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   gridCardTitle: { fontSize: 14, fontWeight: '800', letterSpacing: -0.3 },
   noticeHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 32, marginBottom: 16 },
+  viewAllHeaderBtn: { paddingHorizontal: 10, paddingVertical: 5 },
+  headerDivider: { width: 1, height: 14, marginHorizontal: 8, opacity: 0.2 },
   addNoticeSmallBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
   emptyNoticeBox: { padding: 30, borderRadius: 28, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#ddd' },
-  viewAllBtn: { alignItems: 'center', paddingVertical: 16 },
   roomDeleteLink: { marginTop: 40, alignItems: 'center', paddingBottom: 40 },
   roomDeleteText: { color: '#ff4444', fontSize: 13, fontWeight: '600', opacity: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },

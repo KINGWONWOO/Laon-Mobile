@@ -25,6 +25,7 @@ type AppContextType = {
   getRoomByIdRemote: (roomId: string) => Promise<Room | null>;
   createRoom: (name: string, passcode: string, imageUri?: string) => Promise<Room>;
   joinRoom: (roomId: string, passcode: string) => Promise<Room | null>;
+  updateRoom: (roomId: string, name: string, imageUri?: string | null) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
   
   notices: Notice[];
@@ -228,6 +229,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updateUserProfile = async (n: string, i?: string) => { let final = i; if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); await fetchMyProfile(currentUser!.id); refreshAllData(); };
   const createRoom = async (n: string, p: string, i?: string) => { const room = await roomService.createRoom(n, p, currentUser!.id, i); refreshAllData(); return room; };
   const joinRoom = async (rid: string, pc: string) => { const room = await roomService.joinRoom(rid, pc, currentUser!.id); if (room) refreshAllData(); return room; };
+  const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); refreshAllData(); };
   const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); refreshAllData(); };
   
   const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { await contentService.addNotice(rid, currentUser!.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 공지사항', t); refreshAllData(); };
@@ -273,7 +275,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AppContext.Provider value={{
       currentUser, isLoadingUser, login, updateUserProfile, logout,
-      rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, deleteRoom,
+      rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
       notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
       videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
       photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
