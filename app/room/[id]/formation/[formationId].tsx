@@ -396,6 +396,8 @@ export default function FormationEditorScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showFilenameModal, setShowFilenameModal] = useState(false);
+  const [exportFileName, setExportFileName] = useState('');
   const [isChangingSong, setIsChangingSong] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [publishTitle, setPublishTitle] = useState('');
@@ -744,35 +746,26 @@ export default function FormationEditorScreen() {
 
   const handleExportJSON = async () => {
     try {
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
-      const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-      const defaultName = `${formation?.title || '동선'}_${dateStr}_${timeStr}`;
-      
-      Alert.prompt(
-        '파일 내보내기',
-        '저장할 파일 이름을 입력하세요.',
-        [
-          { text: '취소', style: 'cancel' },
-          { 
-            text: '추가', 
-            onPress: async (fileName) => {
-              const finalName = (fileName || defaultName).replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
-              const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
-              const filePath = `${FileSystem.documentDirectory}${finalName}.json`;
-              await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
-              if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
-              await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
-              setShowExportModal(false);
-            }
-          }
-        ],
-        'plain-text',
-        defaultName
-      );
+      const finalName = (exportFileName || '동선').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
+      const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
+      const filePath = `${FileSystem.documentDirectory}${finalName}.json`;
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
+      if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
+      await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
+      setShowFilenameModal(false);
+      setShowExportModal(false);
     } catch (e: any) {
       Alert.alert('오류', `파일 추출 실패: ${e.message}`);
     }
+  };
+
+  const startExportJSON = () => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+    const defaultName = `${formation?.title || '동선'}_${dateStr}_${timeStr}`;
+    setExportFileName(defaultName);
+    setShowFilenameModal(true);
   };
 
   const handlePublish = async () => {
@@ -959,7 +952,7 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상 업로드</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
+          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={startExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상 업로드</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
         </View>
       </Modal>
 
@@ -969,6 +962,27 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
         <View style={styles.modalBg}><View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text><TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ alignItems: 'center', marginVertical: 15 }}><Ionicons name="trash" size={32} color={theme.error} /><Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text></View><View style={{ gap: 8 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity></View></View></View></Modal>
+
+      <Modal visible={showFilenameModal} transparent animationType="fade" onRequestClose={() => setShowFilenameModal(false)}>
+        <View style={styles.modalBg}>
+          <View style={[styles.menu, { backgroundColor: theme.card }]}>
+            <Text style={[styles.menuTitle, { color: theme.text }]}>파일 이름 설정</Text>
+            <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>저장할 JSON 파일의 이름을 입력하세요.</Text>
+            <TextInput 
+              style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
+              value={exportFileName} 
+              onChangeText={setExportFileName} 
+              placeholder="파일 이름" 
+              placeholderTextColor={theme.textSecondary} 
+              autoFocus 
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
+              <TouchableOpacity onPress={() => setShowFilenameModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleExportJSON}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>내보내기</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>대형 선택</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}><Text style={{color:theme.text}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
       <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
