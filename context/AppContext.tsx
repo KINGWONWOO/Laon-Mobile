@@ -250,7 +250,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // --- Handlers ---
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
-  const updateUserProfile = async (n: string, i?: string) => { let final = i; if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); await fetchMyProfile(currentUser!.id); await refreshAllData(); };
+  const updateUserProfile = async (n: string, i?: string) => { 
+    let final = i; 
+    if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); 
+    await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); 
+    // Optimistic update of currentUser
+    setCurrentUser(prev => prev ? { ...prev, name: n, profileImage: final || null } : null);
+    await refreshAllData(); 
+  };
   const createRoom = async (n: string, p: string, i?: string) => { const room = await roomService.createRoom(n, p, currentUser!.id, i); await refreshAllData(); return room; };
   const joinRoom = async (rid: string, pc: string) => { const room = await roomService.joinRoom(rid, pc, currentUser!.id); if (room) await refreshAllData(); return room; };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };

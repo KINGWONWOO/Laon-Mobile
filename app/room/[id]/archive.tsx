@@ -22,6 +22,7 @@ export default function ArchiveScreen() {
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [description, setDescription] = useState('');
+  const [selectedContent, setSelectedContent] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -46,60 +47,124 @@ export default function ArchiveScreen() {
     setRefreshing(false);
   };
 
-  const handlePickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+  const handlePickContent = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.5,
+      allowsEditing: true,
+      videoMaxDuration: 60,
+    });
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setIsLoading(true);
-      try {
-        await addPhoto(id || '', result.assets[0].uri, description);
-        setShowAddModal(false);
-        setDescription('');
-      } catch (error: any) { Alert.alert('업로드 실패', error.message); } finally { setIsLoading(false); }
+      const asset = result.assets[0];
+      const type = asset.type === 'video' ? 'video' : 'image';
+      if (type === 'video' && asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        return Alert.alert('용량 제한', '영상은 5MB 이하만 업로드 가능합니다.');
+      }
+      setSelectedContent({ uri: asset.uri, type });
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedContent || !description.trim()) return;
+    setIsLoading(true);
+    try {
+      await addPhoto(id || '', selectedContent.uri, description.trim());
+      setShowAddModal(false);
+      setDescription('');
+      setSelectedContent(null);
+    } catch (error: any) {
+      Alert.alert('업로드 실패', error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleAddComment = async () => {
     if (!selectedPhoto || !newComment.trim()) return;
-    await addPhotoComment(selectedPhoto.id, newComment.trim());
+    const commentText = newComment.trim();
     setNewComment('');
-    const refreshed = photos.find(p => p.id === selectedPhoto.id);
-    if (refreshed) setSelectedPhoto(refreshed);
+    
+    // Optimistic update
+    const tempId = Math.random().toString();
+    const optimisticComment = { id: tempId, text: commentText, userId: currentUser?.id, createdAt: new Date().toISOString() };
+    const updatedPhoto = { ...selectedPhoto, comments: [...(selectedPhoto.comments || []), optimisticComment] };
+    setSelectedPhoto(updatedPhoto);
+
+    try {
+      await addPhotoComment(selectedPhoto.id, commentText);
+    } catch (e) {
+      Alert.alert('오류', '댓글 등록에 실패했습니다.');
+      setSelectedPhoto(selectedPhoto); // Rollback
+    }
   };
 
   const handleUpdatePhoto = async () => {
     if (!selectedPhoto || !editDesc.trim()) return;
-    await updatePhoto(selectedPhoto.id, editDesc);
+    const oldDesc = selectedPhoto.description;
+    const newDesc = editDesc.trim();
     setIsEditingPhoto(false);
-    const refreshed = photos.find(p => p.id === selectedPhoto.id);
-    if (refreshed) setSelectedPhoto(refreshed);
+    
+    // Optimistic update
+    setSelectedPhoto({ ...selectedPhoto, description: newDesc });
+
+    try {
+      await updatePhoto(selectedPhoto.id, newDesc);
+    } catch (e) {
+      Alert.alert('오류', '설명 수정에 실패했습니다.');
+      setSelectedPhoto({ ...selectedPhoto, description: oldDesc });
+    }
   };
 
   const handleDeletePhoto = (photo: any) => {
     Alert.alert('사진 삭제', '정말 삭제하시겠습니까?', [
       { text: '취소' },
       { text: '삭제', style: 'destructive', onPress: async () => {
-        await deletePhoto(photo.id, photo.photoUrl);
-        setSelectedPhoto(null);
-        refreshAllData();
+        try {
+          await deletePhoto(photo.id, photo.photoUrl);
+          setSelectedPhoto(null);
+        } catch (e) {
+          Alert.alert('오류', '사진 삭제에 실패했습니다.');
+        }
       }}
     ]);
   };
 
   const handleUpdateComment = async () => {
     if (!editingComment || !editCommentText.trim()) return;
-    await updatePhotoComment(editingComment.id, editCommentText);
+    const cid = editingComment.id;
+    const newText = editCommentText.trim();
+    const oldText = editingComment.text;
     setEditingComment(null);
-    const refreshed = photos.find(p => p.id === selectedPhoto.id);
-    if (refreshed) setSelectedPhoto(refreshed);
+    
+    // Optimistic update
+    const updatedComments = selectedPhoto.comments.map((c: any) => c.id === cid ? { ...c, text: newText } : c);
+    setSelectedPhoto({ ...selectedPhoto, comments: updatedComments });
+
+    try {
+      await updatePhotoComment(cid, newText);
+    } catch (e) {
+      Alert.alert('오류', '댓글 수정에 실패했습니다.');
+      const rollbackComments = selectedPhoto.comments.map((c: any) => c.id === cid ? { ...c, text: oldText } : c);
+      setSelectedPhoto({ ...selectedPhoto, comments: rollbackComments });
+    }
   };
 
   const handleDeleteComment = (cid: string) => {
     Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
       { text: '취소' },
       { text: '삭제', style: 'destructive', onPress: async () => {
-        await deletePhotoComment(cid);
-        const refreshed = photos.find(p => p.id === selectedPhoto.id);
-        if (refreshed) setSelectedPhoto(refreshed);
+        const oldComments = [...selectedPhoto.comments];
+        // Optimistic update
+        const updatedComments = selectedPhoto.comments.filter((c: any) => c.id !== cid);
+        setSelectedPhoto({ ...selectedPhoto, comments: updatedComments });
+
+        try {
+          await deletePhotoComment(cid);
+        } catch (e) {
+          Alert.alert('오류', '댓글 삭제에 실패했습니다.');
+          setSelectedPhoto({ ...selectedPhoto, comments: oldComments });
+        }
       }}
     ]);
   };
@@ -124,22 +189,30 @@ export default function ArchiveScreen() {
     }}
   ];
 
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      activeOpacity={0.9}
-      style={[styles.gridItem, { backgroundColor: theme.card }, Shadows.soft]} 
-      onPress={() => { setSelectedPhoto(item); markItemAsAccessed('photo', item.id); }}
-    >
-      <Image source={{ uri: item.photoUrl }} style={styles.gridImage} />
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }: { item: any }) => {
+    const isVideo = item.photoUrl.toLowerCase().match(/\.(mp4|mov|m4v)$/) || item.description?.includes('[VIDEO]');
+    return (
+      <TouchableOpacity 
+        activeOpacity={0.9}
+        style={[styles.gridItem, { backgroundColor: '#000' }, Shadows.soft]} 
+        onPress={() => { setSelectedPhoto(item); markItemAsAccessed('photo', item.id); }}
+      >
+        <Image source={{ uri: item.photoUrl }} style={styles.gridImage} resizeMode="contain" />
+        {isVideo && (
+          <View style={styles.videoBadge}>
+            <Ionicons name="play" size={16} color="#fff" />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
-        <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => { setShowAddModal(true); setSelectedContent(null); setDescription(''); }}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
       </View>
 
       <FlatList
@@ -187,7 +260,9 @@ export default function ArchiveScreen() {
                   </View>
                 </View>
 
-                <Image source={{ uri: selectedPhoto?.photoUrl }} style={styles.detailImage} resizeMode="cover" />
+                <View style={{ width: '100%', height: width * 1.1, backgroundColor: '#000', borderRadius: 28, overflow: 'hidden', ...Shadows.soft }}>
+                  <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                </View>
                 
                 <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
 
@@ -291,9 +366,48 @@ export default function ArchiveScreen() {
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>사진 업로드</Text>
-            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder="사진에 대한 짧은 설명" placeholderTextColor={theme.textSecondary} value={description} onChangeText={setDescription} multiline />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickImage} style={[styles.pickBtn, {backgroundColor: theme.primary}, Shadows.glow]}><Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>팀 아카이브 업로드</Text>
+            
+            <View style={[styles.uploadPreview, { backgroundColor: '#000', height: 200, justifyContent: 'center', alignItems: 'center', borderRadius: 15, overflow: 'hidden' }]}>
+              {selectedContent ? (
+                <View style={{position:'relative', width: '100%', height: '100%'}}>
+                  <Image source={{ uri: selectedContent.uri }} style={{width:'100%', height:'100%'}} resizeMode="contain" />
+                  <TouchableOpacity style={styles.removePreview} onPress={() => setSelectedContent(null)}>
+                    <Ionicons name="close-circle" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={{ height: 100, width: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background, borderRadius: 15, borderStyle: 'dashed', borderWidth: 1, borderColor: '#888' }} onPress={handlePickContent}>
+                  <Ionicons name="cloud-upload" size={32} color={theme.primary} />
+                  <Text style={{color: theme.text, marginTop: 8, fontSize: 14, fontWeight:'700'}}>사진 또는 영상 선택</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TextInput 
+              style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1, marginTop: 20 }]} 
+              placeholder="아카이브에 대한 설명 (필수)" 
+              placeholderTextColor={theme.textSecondary} 
+              value={description} 
+              onChangeText={setDescription} 
+              multiline 
+            />
+            
+            {isLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} />
+            ) : (
+              <TouchableOpacity 
+                onPress={handleUpload} 
+                disabled={!selectedContent || !description.trim()}
+                style={[
+                  styles.pickBtn, 
+                  {backgroundColor: (selectedContent && description.trim()) ? theme.primary : theme.border},
+                  Shadows.glow
+                ]}
+              >
+                <Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>업로드 완료</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>취소</Text></TouchableOpacity>
           </View>
         </View>
@@ -316,7 +430,7 @@ const styles = StyleSheet.create({
   authorAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
   authorName: { fontSize: 15, fontWeight: '800', letterSpacing: -0.5 },
   dateText: { fontSize: 12, marginTop: 2, fontWeight: '500', opacity: 0.7 },
-  detailImage: { width: '100%', height: width * 1.1, borderRadius: 28, ...Shadows.soft },
+  detailImage: { width: '100%', height: '100%' },
   content: { fontSize: 16, lineHeight: 26, marginBottom: 20 },
   divider: { height: 1, width: '100%', marginBottom: 15 },
   commentCount: { fontSize: 14, fontWeight: '800', marginBottom: 15, letterSpacing: -0.5 },
@@ -336,5 +450,10 @@ const styles = StyleSheet.create({
   modalOverlayUpload: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContentUpload: { padding: 32, borderTopLeftRadius: 40, borderTopRightRadius: 40 },
   titleInput: { borderRadius: 20, padding: 18, marginBottom: 24, fontSize: 16, fontWeight: '600', minHeight: 120, textAlignVertical: 'top' },
-  pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' }
+  pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
+  uploadPreview: { width: '100%', marginBottom: 20, borderRadius: 15, overflow: 'hidden' },
+  removePreview: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12 },
+  pickButtonsRow: { flexDirection: 'row', gap: 15 },
+  pickTypeBtn: { flex: 1, height: 100, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#888' },
+  videoBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, padding: 4 }
 });

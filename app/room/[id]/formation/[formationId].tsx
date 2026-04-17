@@ -52,15 +52,13 @@ const PlayButton = React.memo(function PlayButton({ player, theme, currentTimeMs
 const WaveformBackground = React.memo(function WaveformBackground({ duration, peaks }: { duration: number, peaks: number[] }) {
   const { theme } = useAppContext();
   
-  if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
-
   // 실제 분석된 데이터가 없으면 기본값(평탄한 선) 표시
   const displayPeaks = useMemo(() => {
     if (peaks.length > 0) return peaks;
     return Array.from({ length: Math.floor(duration * 10) }).map(() => 0.05);
   }, [peaks, duration]);
 
-  const barsCount = displayPeaks.length;
+  if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
   return (
     <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, justifyContent: 'space-around', alignItems: 'center', flexDirection: 'row' }]}>
@@ -114,12 +112,12 @@ const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, d
 });
 
 const TransitionX = React.memo(function TransitionX({ width, left }: { width: number, left: number }) {
+  const { theme } = useAppContext();
   const safeWidth = Math.max(0, width);
   if (safeWidth <= 5) return null;
   const height = 85; 
   const angle = Math.atan2(height, safeWidth) * (180 / Math.PI);
   const length = Math.sqrt(safeWidth * safeWidth + height * height);
-  const { theme } = useAppContext();
   return (
     <View style={[styles.transitionXContainer, { left, width: safeWidth, height, top: 10 }]} pointerEvents="none">
       <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
@@ -171,7 +169,7 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
   useEffect(() => {
     localX.value = (entry.timestampMillis / 1000) * PX_PER_SEC;
     localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
-  }, [entry.timestampMillis, entry.durationMillis]);
+  }, [entry.timestampMillis, entry.durationMillis, localWidth, localX]);
 
   const scene = scenes.find((s: any) => s.id === entry.sceneId);
 
@@ -240,6 +238,7 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
 });
 
 const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlace }: any) {
+  const { theme } = useAppContext();
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -288,8 +287,6 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
-  const { theme } = useAppContext();
-
   return (
     <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => {
       if (canDrag) onPress();
@@ -314,7 +311,7 @@ const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, s
             { translateX: (pos.x * stageWidth) - (cellSize * 1.25) },
             { translateY: (pos.y * stageHeight) - (cellSize * 0.35) }
           ],
-          opacity: 0.2,
+          opacity: 0.4,
           zIndex: 0
         }
       ]} 
@@ -349,9 +346,21 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
 });
 
 const GUIDE_STEPS = [
-  { title: '대형 생성', description: '댄서를 추가하고 드래그하여 원하는 위치에 배치하세요. 아래 씬 목록에서 대형을 전환하거나 관리할 수 있습니다.' },
-  { title: '대형 배치', description: '음악의 특정 시점에 대형을 배치하세요. 배치된 블록의 길이를 조절하여 대형 유지 시간을 설정할 수 있습니다.' },
-  { title: '애니메이션', description: '배치된 대형 사이에는 자동으로 부드러운 이동 애니메이션이 적용됩니다. 재생 버튼을 눌러 확인해 보세요!' }
+  { 
+    title: '1. 대형 생성', 
+    description: '댄서를 추가하고 드래그하여 원하는 위치에 배치하세요. 아래 씬 목록에서 대형을 전환하거나 관리할 수 있습니다. 각 대형의 이름을 설정하여 관리하기 편하게 만드세요.',
+    image: require('../../../../example/동선예시사진기본.jpg')
+  },
+  { 
+    title: '2. 대형 배치', 
+    description: '음악의 특정 시점에 대형을 배치하세요. 타임라인을 터치하면 현재 시간에 대형을 추가할 수 있습니다. 배치된 블록의 길이를 조절하여 대형 유지 시간을 설정할 수 있습니다.',
+    image: require('../../../../example/동선예시사진플레이.jpg')
+  },
+  { 
+    title: '3. 애니메이션', 
+    description: '배치된 대형 사이의 빈 공간에는 자동으로 부드러운 이동 애니메이션이 적용됩니다. X 표시가 된 구간이 이동 구간입니다. 재생 버튼을 눌러 전체적인 흐름을 확인해 보세요!',
+    image: require('../../../../example/transitionexample.jpg')
+  }
 ];
 
 interface HistoryState {
@@ -440,6 +449,30 @@ export default function FormationEditorScreen() {
 
   const [nextSceneId, setNextSceneId] = useState<string | null>(null);
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
+
+  const [, setChangeCount] = useState(0);
+
+  // Auto-save logic
+  const handleAutoSave = useCallback(async () => {
+    try {
+      const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
+      const filePath = `${FileSystem.documentDirectory}autosave_${formationId}.json`;
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
+    } catch (e) {
+      console.warn('Auto-save failed:', e);
+    }
+  }, [formation, audioUrl, settings, dancers, scenes, timeline, formationId]);
+
+  const incrementChange = useCallback(() => {
+    setChangeCount(prev => {
+      const next = prev + 1;
+      if (next >= 10) {
+        handleAutoSave();
+        return 0;
+      }
+      return next;
+    });
+  }, [handleAutoSave]);
 
   // [NEW: 실제 오디오 PCM 디코딩 로직]
   const analyzeAudio = async (uri: string) => {
@@ -534,10 +567,11 @@ export default function FormationEditorScreen() {
   }, [mode, activeSceneId, activeEntryIdInPlace, timeline]);
 
   const pushHistory = useCallback(() => {
+    incrementChange();
     const current: HistoryState = { dancers: JSON.parse(JSON.stringify(dancers)), scenes: JSON.parse(JSON.stringify(scenes)), timeline: JSON.parse(JSON.stringify(timeline)), audioUrl };
     if (mode === 'create') { setCreatePast(prev => [...prev, current].slice(-30)); setCreateFuture([]); }
     else { setPlacePast(prev => [...prev, current].slice(-30)); setPlaceFuture([]); }
-  }, [dancers, scenes, timeline, mode, audioUrl]);
+  }, [dancers, scenes, timeline, mode, audioUrl, incrementChange]);
 
   const onDragEnd = useCallback((dancerId: string, pos: Position) => {
     const targetId = activeSceneIdToEdit;
@@ -611,7 +645,7 @@ export default function FormationEditorScreen() {
       cancelAnimation(currentTimeMs);
       if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
     }
-  }, [status.playing]);
+  }, [status.playing, status.currentTime, status.duration, currentTimeMs, isPlayerPlayingSV]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -710,13 +744,32 @@ export default function FormationEditorScreen() {
 
   const handleExportJSON = async () => {
     try {
-      const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
-      const safeId = (formationId || 'new').replace(/[^a-z0-9]/gi, '_');
-      const filePath = `${FileSystem.documentDirectory}formation_${safeId}.json`;
-      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
-      if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
-      await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
-      setShowExportModal(false);
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      const defaultName = `${formation?.title || '동선'}_${dateStr}_${timeStr}`;
+      
+      Alert.prompt(
+        '파일 내보내기',
+        '저장할 파일 이름을 입력하세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          { 
+            text: '추가', 
+            onPress: async (fileName) => {
+              const finalName = (fileName || defaultName).replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
+              const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
+              const filePath = `${FileSystem.documentDirectory}${finalName}.json`;
+              await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
+              if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
+              await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
+              setShowExportModal(false);
+            }
+          }
+        ],
+        'plain-text',
+        defaultName
+      );
     } catch (e: any) {
       Alert.alert('오류', `파일 추출 실패: ${e.message}`);
     }
@@ -728,7 +781,7 @@ export default function FormationEditorScreen() {
       setIsExporting(true);
       await publishFormationAsFeedback(id!, formationId!, publishTitle, { settings, data: { dancers, scenes, timeline } });
       setShowPublishModal(false); setShowExportModal(false);
-      Alert.alert('성공', '피드백이 성공적으로 발행되었습니다.');
+      Alert.alert('성공', '피드백이 성공적으로 업로드되었습니다.');
     } catch (e: any) {
       Alert.alert('오류', e.message);
     } finally {
@@ -757,6 +810,15 @@ export default function FormationEditorScreen() {
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
   const sceneNamesMap = useMemo(() => { const map: any = {}; scenes.forEach(s => { map[s.id] = s.name; }); return map; }, [scenes]);
+
+  useEffect(() => {
+    if (showExportModal || showPublishModal) {
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
+      setPublishTitle(`${formation?.title || '동선'}_${dateStr}.${timeStr}`);
+    }
+  }, [showExportModal, showPublishModal, formation?.title]);
 
   if (!formation) return null;
   const STAGE_CELL_SIZE = (width - 40) / settings.gridCols;
@@ -823,8 +885,18 @@ export default function FormationEditorScreen() {
               <GridLayer settings={settings} />
               
               {/* Ghost Dancers */}
-              {mode === 'create' && activeSceneId && scenes.find(s => s.id === activeSceneId)?.positions && dancers.map(d => { const pos = scenes.find(s => s.id === activeSceneId)?.positions[d.id]; if (!pos) return null; return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />; })}
-              {mode === 'place' && nextSceneId && scenes.find(s => s.id === nextSceneId)?.positions && dancers.map(d => { const pos = scenes.find(s => s.id === nextSceneId)?.positions[d.id]; if (!pos) return null; return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />; })}
+              {mode === 'create' && activeSceneId && (
+                (() => {
+                  const currentIndex = scenes.findIndex(s => s.id === activeSceneId);
+                  const prevScene = currentIndex > 0 ? scenes[currentIndex - 1] : null;
+                  if (!prevScene) return null;
+                  return dancers.map(d => {
+                    const pos = prevScene.positions[d.id];
+                    if (!pos) return null;
+                    return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
+                  });
+                })()
+              )}
 
               {dancers.map((d, i) => (
                 <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
@@ -887,7 +959,7 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상으로 발행</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
+          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={handleExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상 업로드</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
         </View>
       </Modal>
 
@@ -903,7 +975,7 @@ export default function FormationEditorScreen() {
       <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={[styles.sheet, { backgroundColor: theme.card }]}><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d)); }} placeholderTextColor={theme.textSecondary} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: theme.text }]} onPress={() => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d)); }} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { pushHistory(); setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color={theme.error} /><Text style={{ color: theme.error, marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
       <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 반전</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>반전 방식</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>좌우</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>상하</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>완전</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>적용 대상</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>현재 대형만</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>모든 대형 일괄 적용</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'90%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text><Text style={{color:theme.textSecondary, marginVertical:15}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
+      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text>{GUIDE_STEPS[guideIndex].image && <Image source={GUIDE_STEPS[guideIndex].image} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
     </GestureHandlerRootView>
   );
 }

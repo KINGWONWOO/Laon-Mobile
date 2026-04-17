@@ -8,7 +8,7 @@ import { Shadows } from '../../../constants/theme';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { theme, users, getRoomByIdRemote, getRoomUserProfile } = useAppContext();
+  const { theme, users, getRoomByIdRemote, getRoomUserProfile, currentUser } = useAppContext();
   const router = useRouter();
   
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -66,6 +66,7 @@ export default function MembersScreen() {
           const isLeader = item.id === leaderId;
           const roomProfile = getRoomUserProfile(id as string, item.id);
           const displayName = roomProfile?.name || item.name;
+          const realName = item.name;
           const displayImage = roomProfile?.profileImage || item.profileImage;
 
           return (
@@ -86,9 +87,9 @@ export default function MembersScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.6 }}>본명: {item.name}</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.6 }}>본명: {realName}</Text>
               </View>
-              {item.id === (supabase.auth.getUser() as any)?.id && (
+              {item.id === currentUser?.id && (
                 <View style={[styles.meBadge, { backgroundColor: theme.textSecondary + '10' }]}>
                   <Text style={{ fontSize: 10, color: theme.textSecondary, fontWeight: 'bold' }}>나</Text>
                 </View>

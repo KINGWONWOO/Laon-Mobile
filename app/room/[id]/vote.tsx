@@ -228,7 +228,7 @@ export default function VoteScreen() {
                 <View style={[styles.voterLabelPill, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 11}}>참여 {participants.length}</Text></View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
                   {participants.map(vId => (
-                    <View key={vId} style={styles.avatarMini}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary}}>{getUserById(vId)?.name?.[0]}</Text></View>
+                    <View key={vId} style={[styles.namePill, {backgroundColor: theme.primary + '10'}]}><Text style={{fontSize: 10, fontWeight: '800', color: theme.primary}}>{getUserById(vId)?.name || '?'}</Text></View>
                   ))}
                 </ScrollView>
               </View>
@@ -236,7 +236,7 @@ export default function VoteScreen() {
                 <View style={[styles.voterLabelPill, {backgroundColor: theme.textSecondary + '15'}]}><Text style={{color: theme.textSecondary, fontWeight:'800', fontSize: 11}}>미참여 {nonParticipants.length}</Text></View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
                   {nonParticipants.map(vId => (
-                    <View key={vId} style={styles.avatarMini}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary + '80'}}>{getUserById(vId)?.name?.[0]}</Text></View>
+                    <View key={vId} style={[styles.namePill, {backgroundColor: theme.textSecondary + '10'}]}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary}}>{getUserById(vId)?.name || '?'}</Text></View>
                   ))}
                 </ScrollView>
               </View>

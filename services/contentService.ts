@@ -97,5 +97,21 @@ export const contentService = {
   },
   closeSchedule: async (id: string) => {
     return await supabase.from('schedules').update({ deadline: new Date().toISOString() }).eq('id', id);
+  },
+  updateRemoteFormation: async (id: string, updates: any) => {
+    const dbUpdates: any = {};
+    if (updates.title) dbUpdates.title = updates.title;
+    if (updates.audioUrl) dbUpdates.audio_url = updates.audioUrl;
+    if (updates.settings) dbUpdates.settings = updates.settings;
+    if (updates.data) dbUpdates.data = updates.data;
+    return await supabase.from('formations').update(dbUpdates).eq('id', id);
+  },
+  deleteRemoteFormation: async (id: string) => {
+    return await supabase.from('formations').delete().eq('id', id);
+  },
+  publishFormation: async (rid: string, uid: string, t: string, audio: string, settings: any, data: any) => {
+    return await supabase.from('formations').insert([{
+      room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data
+    }]).select().single();
   }
 };

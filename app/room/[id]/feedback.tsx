@@ -83,6 +83,13 @@ export default function FeedbackScreen() {
   });
 
   useEffect(() => {
+    if (cachedVideoUrl && player) {
+      player.replace(cachedVideoUrl);
+      player.play();
+    }
+  }, [cachedVideoUrl, player]);
+
+  useEffect(() => {
     let interval: NodeJS.Timeout;
     if (selectedVideo && !isFormation && player) {
       interval = setInterval(() => {

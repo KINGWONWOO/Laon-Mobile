@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Shadows } from '../constants/theme';
-import { StyledBackButton } from '../components/ui/Interactions';
+import { StyledBackButton, DanceButton } from '../components/ui/Interactions';
 import { supabase } from '../lib/supabase';
 
 export default function ResetPasswordScreen() {
