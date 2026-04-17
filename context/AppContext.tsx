@@ -319,27 +319,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
     if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
 
-    let remoteId = formationId;
+    // Always create a new remote record as a snapshot for the feedback video
+    const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData);
+    if (error) throw error;
 
-    if (formation?.isLocal) {
-      // 1. Upload to server
-      const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData);
-      if (error) throw error;
-      remoteId = remote.id;
-
-      // 2. Delete local formation to avoid redundancy
-      const localRaw = await AsyncStorage.getItem('local_formations');
-      if (localRaw) {
-        const local = JSON.parse(localRaw);
-        await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== formationId)));
-      }
-    } else {
-      // It's already a remote formation, just update it with current editor state
-      await updateFormation(formationId, { title, audioUrl: finalAudioUrl, settings: finalSettings, data: finalData });
-    }
-
-    // 3. Link to video feedback
-    await addVideo(roomId, `formation://${remoteId}`, `[동선] ${title}`);
+    // Link to video feedback using the new remote record ID
+    await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
     await refreshAllData();
   };
 

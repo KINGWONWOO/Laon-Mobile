@@ -263,7 +263,7 @@ export default function FeedbackScreen() {
               {isFormation ? (
                 selectedFormation ? (
                   <View style={{flex: 1}}>
-                    <FormationPlayer formation={selectedFormation} currentTimeMs={formationTime} onDurationDetected={setFormationDuration} />
+                    <FormationPlayer formation={selectedFormation} currentTimeMs={formationTime} onDurationDetected={setFormationDuration} isPlaying={isFormationPlaying} />
                     <TouchableOpacity style={styles.formationPlayOverlay} onPress={() => setIsFormationPlaying(!isFormationPlaying)}>
                       <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
                     </TouchableOpacity>

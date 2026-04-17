@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Formation } from '../../types';
+import { useAudioPlayer } from 'expo-audio';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -9,12 +10,12 @@ interface FormationPlayerProps {
   formation: Formation;
   currentTimeMs: number;
   onDurationDetected?: (duration: number) => void;
+  isPlaying?: boolean;
 }
 
 const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stageHeight, cellSize, index }: any) => {
   const pos = useSharedValue({ x: 0.5, y: 0.5 });
 
-  // 개별 노드에서 위치 계산 및 업데이트
   useEffect(() => {
     if (!timeline || timeline.length === 0) return;
 
@@ -65,7 +66,7 @@ const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stage
   );
 };
 
-export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected }: FormationPlayerProps) {
+export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected, isPlaying = false }: FormationPlayerProps) {
   const dancers = formation?.data?.dancers || [];
   const scenes = formation?.data?.scenes || [];
   const timeline = formation?.data?.timeline || [];
@@ -77,6 +78,25 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
 
+  const player = useAudioPlayer(formation?.audioUrl || '');
+
+  useEffect(() => {
+    if (player) {
+      player.loop = true;
+      if (isPlaying) {
+        player.play();
+      } else {
+        player.pause();
+      }
+    }
+  }, [isPlaying, player]);
+
+  useEffect(() => {
+    if (player && Math.abs(player.currentTime - (currentTimeMs / 1000)) > 0.3) {
+      player.seekTo(currentTimeMs / 1000);
+    }
+  }, [currentTimeMs, player]);
+
   useEffect(() => {
     if (timeline && timeline.length > 0) {
       const sortedTimeline = [...timeline].sort((a, b) => (b.timestampMillis + b.durationMillis) - (a.timestampMillis + a.durationMillis));
@@ -84,7 +104,7 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
       const duration = (lastEntry.timestampMillis + lastEntry.durationMillis) / 1000;
       if (onDurationDetected) onDurationDetected(duration);
     }
-  }, [timeline]);
+  }, [timeline, onDurationDetected]);
 
   if (!formation) return null;
 
