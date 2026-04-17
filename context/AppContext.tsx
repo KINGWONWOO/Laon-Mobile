@@ -1,90 +1,87 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, Alarm, AlarmType, ThemeType, Formation } from '../types';
-import * as Crypto from 'expo-crypto';
+import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo } from 'react';
+import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, FormationScene, TimelineEntry, Dancer, Position, FormationSettings } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
+import { roomService } from '../services/roomService';
+import { storageService } from '../services/storageService';
+import { contentService } from '../services/contentService';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
-import { storageService } from '../services/storageService';
-import { roomService } from '../services/roomService';
-import { contentService } from '../services/contentService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const uuidv4 = () => Crypto.randomUUID();
-
-type AppContextType = {
+interface AppContextType {
   currentUser: User | null;
   isLoadingUser: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  updateUserProfile: (name: string, profileImage?: string) => Promise<void>;
+  login: (email: string, pass: string) => Promise<void>;
+  updateUserProfile: (name: string, image?: string) => Promise<void>;
   logout: () => Promise<void>;
   
   rooms: Room[];
   isLoadingRooms: boolean;
   users: User[];
   getUserById: (id: string) => User | undefined;
-  getRoomByIdRemote: (roomId: string) => Promise<Room | null>;
-  createRoom: (name: string, passcode: string, imageUri?: string) => Promise<Room>;
-  joinRoom: (roomId: string, passcode: string) => Promise<Room | null>;
-  updateRoom: (roomId: string, name: string, imageUri?: string | null) => Promise<void>;
-  deleteRoom: (roomId: string) => Promise<void>;
-  
+  getRoomByIdRemote: (id: string) => Promise<any>;
+  createRoom: (name: string, passcode: string, image?: string) => Promise<any>;
+  joinRoom: (roomId: string, passcode: string) => Promise<any>;
+  updateRoom: (roomId: string, name: string, image?: string | null) => Promise<void>;
+  deleteRoom: (id: string) => Promise<void>;
+
   notices: Notice[];
-  addNotice: (roomId: string, title: string, content: string, isPinned?: boolean, images?: string[], useNotification?: boolean) => Promise<void>;
+  addNotice: (rid: string, t: string, c: string, p?: boolean, imgs?: string[], useNoti?: boolean) => Promise<void>;
   updateNotice: (id: string, updates: Partial<Notice>) => Promise<void>;
-  deleteNotice: (noticeId: string) => Promise<void>;
-  addNoticeComment: (noticeId: string, text: string, parentId?: string) => Promise<void>;
-  updateNoticeComment: (commentId: string, text: string) => Promise<void>;
-  deleteNoticeComment: (commentId: string) => Promise<void>;
-  
+  deleteNotice: (id: string) => Promise<void>;
+  addNoticeComment: (nid: string, t: string, pid?: string) => Promise<void>;
+  updateNoticeComment: (id: string, t: string) => Promise<void>;
+  deleteNoticeComment: (id: string) => Promise<void>;
+
   videos: VideoFeedback[];
-  addVideo: (roomId: string, videoUrl: string, title: string, useNotification?: boolean) => Promise<void>;
-  updateVideo: (id: string, title: string) => Promise<void>;
+  addVideo: (rid: string, url: string, t: string, useNoti?: boolean) => Promise<void>;
+  updateVideo: (id: string, t: string) => Promise<void>;
   deleteVideo: (id: string) => Promise<void>;
-  addComment: (videoId: string, text: string, timestampMillis: number, parentId?: string) => Promise<void>;
-  updateComment: (id: string, text: string) => Promise<void>;
+  addComment: (vid: string, t: string, ts: number, pid?: string) => Promise<void>;
+  updateComment: (id: string, t: string) => Promise<void>;
   deleteComment: (id: string) => Promise<void>;
-  
+
   photos: Photo[];
-  addPhoto: (roomId: string, photoUrl: string, description?: string, useNotification?: boolean) => Promise<void>;
-  updatePhoto: (id: string, description: string) => Promise<void>;
-  deletePhoto: (photoId: string, photoUrl: string) => Promise<void>;
-  addPhotoComment: (photoId: string, text: string, parentId?: string) => Promise<void>;
-  updatePhotoComment: (id: string, text: string) => Promise<void>;
+  addPhoto: (rid: string, url: string, d?: string, useNoti?: boolean) => Promise<void>;
+  updatePhoto: (id: string, d: string) => Promise<void>;
+  deletePhoto: (id: string, url: string) => Promise<void>;
+  addPhotoComment: (phid: string, t: string, pid?: string) => Promise<void>;
+  updatePhotoComment: (id: string, t: string) => Promise<void>;
   deletePhotoComment: (id: string) => Promise<void>;
-  markItemAsAccessed: (type: 'video' | 'photo', id: string) => Promise<void>;
+  markItemAsAccessed: (type: string, id: string) => Promise<void>;
 
   schedules: Schedule[];
-  addSchedule: (roomId: string, title: string, options: string[], useNotification?: boolean, deadline?: number, reminderMinutes?: number) => Promise<void>;
+  addSchedule: (rid: string, t: string, opts: string[], useNoti?: boolean, dl?: number, reminderMinutes?: number) => Promise<void>;
   updateSchedule: (id: string, updates: Partial<Schedule>) => Promise<void>;
-  respondToSchedule: (scheduleId: string, optionIds: string[]) => Promise<void>;
-  deleteSchedule: (scheduleId: string) => Promise<void>;
+  respondToSchedule: (sid: string, oids: string[]) => Promise<void>;
+  deleteSchedule: (id: string) => Promise<void>;
   closeSchedule: (id: string) => Promise<void>;
 
   votes: Vote[];
-  addVote: (roomId: string, question: string, options: string[], settings: any) => Promise<void>;
+  addVote: (rid: string, q: string, opts: string[], settings: any) => Promise<void>;
   updateVote: (id: string, updates: Partial<Vote>) => Promise<void>;
-  respondToVote: (voteId: string, optionIds: string[]) => Promise<void>;
-  deleteVote: (voteId: string) => Promise<void>;
+  respondToVote: (vid: string, oids: string[]) => Promise<void>;
+  deleteVote: (id: string) => Promise<void>;
   closeVote: (id: string) => Promise<void>;
 
   formations: Formation[];
-  addFormation: (roomId: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
-  updateFormation: (formationId: string, updates: Partial<Formation>) => Promise<void>;
-  deleteFormation: (formationId: string) => Promise<void>;
+  addFormation: (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
+  updateFormation: (fid: string, updates: Partial<Formation>) => Promise<void>;
+  deleteFormation: (fid: string) => Promise<void>;
   publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
-  setThemeType: (theme: ThemeType) => void;
+  setThemeType: (type: ThemeType) => Promise<void>;
   customColor: string;
-  setCustomColor: (color: string) => void;
+  setCustomColor: (color: string) => Promise<void>;
   customBackgroundColor: string;
-  setCustomBackgroundColor: (color: string) => void;
+  setCustomBackgroundColor: (color: string) => Promise<void>;
   theme: any;
   updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null) => Promise<void>;
-  getRoomUserProfile: (roomId: string, userId: string) => { name?: string, profileImage?: string } | null;
-  roomProfiles: Record<string, any>;
-};
+  getRoomUserProfile: (roomId: string, userId: string) => { name: string, profileImage: string | null } | null;
+  roomProfiles: Record<string, { name: string, profileImage: string | null }>;
+}
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -92,17 +89,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [themeType, setThemeTypeState] = useState<ThemeType>('dark');
-  const [customColor, setCustomColorState] = useState('#5E5CE6');
-  const [customBackgroundColor, setCustomBackgroundColorState] = useState('#000000');
-  const [roomProfiles, setRoomProfiles] = useState<Record<string, any>>({});
+  const [themeType, setThemeTypeState] = useState<ThemeType>('light');
+  const [customColor, setCustomColorState] = useState('#6366F1');
+  const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
+  const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
+  const [queryVersion, setQueryVersion] = useState(0);
 
   useEffect(() => {
-    // Load theme settings
     AsyncStorage.getItem('theme_type').then(val => { if (val) setThemeTypeState(val as ThemeType); });
     AsyncStorage.getItem('theme_custom_color').then(val => { if (val) setCustomColorState(val); });
     AsyncStorage.getItem('theme_custom_bg_color').then(val => { if (val) setCustomBackgroundColorState(val); });
-    // Load room profiles
     AsyncStorage.getItem('room_profiles').then(val => { if (val) setRoomProfiles(JSON.parse(val)); });
   }, []);
 
@@ -148,11 +144,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) fetchMyProfile(session.user.id);
+      if (session) fetchMyProfile(session.user.id);
       setIsLoadingUser(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchMyProfile(session.user.id);
+      if (session) fetchMyProfile(session.user.id);
       else setCurrentUser(null);
       setIsLoadingUser(false);
     });
@@ -160,7 +156,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const { data: allUsers = [] } = useQuery({
-    queryKey: ['profiles'],
+    queryKey: ['profiles', queryVersion],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('id, name, profile_image');
       return (data || []).map(u => ({ id: u.id, name: u.name, profileImage: u.profile_image }));
@@ -169,59 +165,59 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
-  const refreshAllData = async () => { 
+  const refreshAllData = useCallback(async () => {
+    setQueryVersion(v => v + 1);
     await queryClient.invalidateQueries();
     await queryClient.refetchQueries();
-  };
+  }, [queryClient]);
 
   useEffect(() => {
     if (!currentUser) return;
     const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser]);
+  }, [currentUser, refreshAllData]);
 
-  // --- Queries ---
   const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
-    queryKey: ['rooms', currentUser?.id],
+    queryKey: ['rooms', currentUser?.id, queryVersion],
     queryFn: async () => currentUser ? await roomService.getMyRooms(currentUser.id) : [],
     enabled: !!currentUser,
   });
 
-  const roomIds = roomsData.map(r => r.id);
+  const roomIds = useMemo(() => roomsData.map(r => r.id), [roomsData]);
 
-  const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
+  const videosQuery = useQuery({ queryKey: ['videos', roomIds, queryVersion], queryFn: async () => {
     const { data: v } = await supabase.from('videos').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: c } = await supabase.from('video_comments').select('*').in('video_id', (v || []).map(x => x.id)).order('created_at', { ascending: true });
     return (v || []).map(video => ({ ...video, video_comments: (c || []).filter(comment => comment.video_id === video.id) }));
   }, enabled: roomIds.length > 0 });
 
-  const photosQuery = useQuery({ queryKey: ['photos', roomIds], queryFn: async () => {
+  const photosQuery = useQuery({ queryKey: ['photos', roomIds, queryVersion], queryFn: async () => {
     const { data: p } = await supabase.from('gallery_items').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: c } = await supabase.from('gallery_comments').select('*').in('gallery_item_id', (p || []).map(x => x.id)).order('created_at', { ascending: true });
     return (p || []).map(photo => ({ ...photo, gallery_comments: (c || []).filter(comment => comment.gallery_item_id === photo.id) }));
   }, enabled: roomIds.length > 0 });
 
-  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
+  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds, queryVersion], queryFn: async () => {
     const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
     return (s || []).map(sch => ({ ...sch, schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({ ...opt, schedule_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
   }, enabled: roomIds.length > 0 });
 
-  const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
+  const votesQuery = useQuery({ queryKey: ['votes', roomIds, queryVersion], queryFn: async () => {
     const { data: v } = await supabase.from('votes').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o = [] } = await supabase.from('vote_options').select('*').in('vote_id', (v || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
     return (v || []).map(vote => ({ ...vote, vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({ ...opt, vote_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
   }, enabled: roomIds.length > 0 });
 
-  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds, queryVersion], queryFn: async () => {
     const { data: n } = await supabase.from('notices').select('*').in('room_id', roomIds);
     const { data: c = [] } = await supabase.from('notice_comments').select('*').in('notice_id', (n || []).map(x => x.id)).order('created_at', { ascending: true });
     return (n || []).map(notice => ({ ...notice, notice_comments: (c || []).filter(comment => comment.notice_id === notice.id) }));
   }, enabled: roomIds.length > 0 });
 
-  const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
+  const formationsQuery = useQuery({ queryKey: ['formations', roomIds, queryVersion], queryFn: async () => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const localRaw = await AsyncStorage.getItem('local_formations');
     const local = localRaw ? JSON.parse(localRaw) : [];
@@ -230,7 +226,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return [...filteredLocal, ...mappedRemote] as Formation[];
   }, enabled: roomIds.length > 0 });
 
-  // --- Mappings ---
   const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content, isPinned: n.is_pinned, useNotification: n.use_notification, imageUrls: n.image_urls || [], viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime(),
     comments: (n.notice_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() }))
@@ -243,18 +238,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return { id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})), responses: resp, viewedBy: s.viewed_by || [], useNotification: s.use_notification, reminderMinutes: s.reminder_before, deadline: s.deadline ? new Date(s.deadline).getTime() : undefined, createdAt: new Date(s.created_at).getTime() };
   });
   const votesMapped: Vote[] = (votesQuery.data || []).map(v => {
-    const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (o.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
+    const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (v.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
     return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
   });
 
-  // --- Handlers ---
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
   const updateUserProfile = async (n: string, i?: string) => { 
     let final = i; 
     if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); 
     await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); 
-    // Optimistic update of currentUser
     setCurrentUser(prev => prev ? { ...prev, name: n, profileImage: final || null } : null);
     await refreshAllData(); 
   };
@@ -275,7 +268,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteVideo = async (id: string) => { await contentService.deleteVideo(id); await refreshAllData(); };
   const addComment = async (vid: string, t: string, ts: number, pid?: string) => { await contentService.addVideoComment(vid, currentUser!.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUser!.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); };
   const updateComment = async (id: string, t: string) => { await contentService.updateVideoComment(id, t); await refreshAllData(); };
-  const deleteComment = async (id: string) => { await contentService.deleteVideoComment(id); refreshAllData(); };
+  const deleteComment = async (id: string) => { await contentService.deleteVideoComment(id); await refreshAllData(); };
 
   const addPhoto = async (rid: string, url: string, d?: string, useNoti = true) => { await storageService.uploadToGallery(rid, currentUser!.id, url, d); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 아카이브', d || '새로운 사진'); await refreshAllData(); };
   const updatePhoto = async (id: string, d: string) => { await contentService.updatePhoto(id, d); await refreshAllData(); };
@@ -284,13 +277,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updatePhotoComment = async (id: string, t: string) => { await contentService.updatePhotoComment(id, t); await refreshAllData(); };
   const deletePhotoComment = async (id: string) => { await contentService.deletePhotoComment(id); await refreshAllData(); };
 
-  const addVote = async (rid: string, q: string, opts: string[], s: any) => { const { data: v } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); if (v) await contentService.addVoteOptions(v.id, opts); if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); await refreshAllData(); };
+  const addVote = async (rid: string, q: string, opts: string[], s: any) => { 
+    const { data: v, error } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); 
+    if (error) throw error;
+    if (v) {
+      const { error: oError } = await contentService.addVoteOptions(v.id, opts);
+      if (oError) throw oError;
+    }
+    if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); 
+    await refreshAllData(); 
+  };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
   const respondToVote = async (vid: string, oids: string[]) => { await contentService.respondToVote(vid, currentUser!.id, oids); await refreshAllData(); };
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); };
 
-  const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { const { data: s } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes); if (s) await contentService.addScheduleOptions(s.id, opts); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 조율', t); await refreshAllData(); };
+  const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { 
+    const { data: s, error } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes); 
+    if (error) throw error;
+    if (s) {
+      const { error: oError } = await contentService.addScheduleOptions(s.id, opts);
+      if (oError) throw oError;
+    }
+    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 조율', t); 
+    await refreshAllData(); 
+  };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
   const respondToSchedule = async (sid: string, oids: string[]) => { await contentService.respondToSchedule(sid, currentUser!.id, oids); await refreshAllData(); };
