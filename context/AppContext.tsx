@@ -312,7 +312,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => { if (!currentUser?.id) throw new Error('로그인이 필요합니다.'); const newId = Math.random().toString(36).substr(2, 9); const newFormation: Formation = { id: newId, roomId: rid, userId: currentUser.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; const localRaw = await AsyncStorage.getItem('local_formations'); const local = localRaw ? JSON.parse(localRaw) : []; await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); await refreshAllData(); return newId; };
   const updateFormation = async (fid: string, updates: Partial<Formation>) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.map((f: any) => f.id === fid ? { ...f, ...updates } : f))); await refreshAllData(); return; } } await contentService.updateRemoteFormation(fid, updates); await refreshAllData(); };
   const deleteFormation = async (fid: string) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid))); await refreshAllData(); return; } } await contentService.deleteRemoteFormation(fid); await refreshAllData(); };
-  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => { let formation = formationsQuery.data?.find(f => f.id === formationId); const finalData = currentData?.data || formation?.data; const finalSettings = currentData?.settings || formation?.settings; const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl; if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.'); const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl, finalSettings, finalData); if (error) throw error; await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`); await refreshAllData(); };
+  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
+    let formation = formationsQuery.data?.find(f => f.id === formationId);
+    const finalData = currentData?.data || formation?.data;
+    const finalSettings = currentData?.settings || formation?.settings;
+    const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
+    if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
+
+    let remoteId = formationId;
+
+    if (formation?.isLocal) {
+      // 1. Upload to server
+      const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData);
+      if (error) throw error;
+      remoteId = remote.id;
+
+      // 2. Delete local formation to avoid redundancy
+      const localRaw = await AsyncStorage.getItem('local_formations');
+      if (localRaw) {
+        const local = JSON.parse(localRaw);
+        await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== formationId)));
+      }
+    } else {
+      // It's already a remote formation, just update it with current editor state
+      await updateFormation(formationId, { title, audioUrl: finalAudioUrl, settings: finalSettings, data: finalData });
+    }
+
+    // 3. Link to video feedback
+    await addVideo(roomId, `formation://${remoteId}`, `[동선] ${title}`);
+    await refreshAllData();
+  };
 
   return (
     <AppContext.Provider value={{
