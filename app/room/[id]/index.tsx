@@ -114,7 +114,11 @@ export default function RoomMainScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         <View style={styles.headerHero}>
-          <Image source={{ uri: room.imageUri || 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=1000' }} style={styles.heroBg} blurRadius={Platform.OS === 'ios' ? 40 : 20} />
+          {room.imageUri ? (
+            <Image source={{ uri: room.imageUri }} style={styles.heroBg} blurRadius={Platform.OS === 'ios' ? 40 : 20} />
+          ) : (
+            <LinearGradient colors={[theme.primary, theme.primary + '66']} style={styles.heroBg} />
+          )}
           <LinearGradient colors={['transparent', theme.background]} style={styles.heroOverlay} />
           
           <View style={[styles.heroContent, { paddingTop: insets.top + 20 }]}>
