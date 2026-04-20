@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,6 +28,24 @@ export default function ArchiveScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [newComment, setNewComment] = useState('');
+
+  // Video state
+  const isVideoItem = useMemo(() => {
+    if (!selectedPhoto) return false;
+    return selectedPhoto.photoUrl.toLowerCase().match(/\.(mp4|mov|m4v)$/) || selectedPhoto.description?.includes('[VIDEO]');
+  }, [selectedPhoto]);
+
+  const player = useVideoPlayer(isVideoItem ? selectedPhoto.photoUrl : '', p => {
+    p.loop = true;
+    if (selectedPhoto && isVideoItem) p.play();
+  });
+
+  useEffect(() => {
+    if (selectedPhoto && isVideoItem && player) {
+      player.replace(selectedPhoto.photoUrl);
+      player.play();
+    }
+  }, [selectedPhoto, isVideoItem, player]);
 
   // Edit states
   const [isEditingPhoto, setIsEditingPhoto] = useState(false);
@@ -262,7 +281,11 @@ export default function ArchiveScreen() {
                 </View>
 
                 <View style={{ width: '100%', height: width * 1.1, backgroundColor: '#000', borderRadius: 28, overflow: 'hidden', ...Shadows.soft }}>
-                  <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                  {isVideoItem ? (
+                    <VideoView style={{ width: '100%', height: '100%' }} player={player} contentFit="contain" />
+                  ) : (
+                    <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                  )}
                 </View>
                 
                 <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
