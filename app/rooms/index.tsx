@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,13 +7,39 @@ import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
 
 export default function RoomsScreen() {
-  const { rooms, currentUser, logout, updateUserProfile, theme, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
+  const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
   const router = useRouter();
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newName, setNewName] = useState(currentUser?.name || '');
   const [newImage, setNewImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // 취소를 위한 이전 테마 상태 저장
+  const originalTheme = useRef({
+    type: themeType,
+    primary: customColor,
+    bg: customBackgroundColor
+  });
+
+  const handleOpenSettings = () => {
+    setNewName(currentUser?.name || '');
+    setNewImage(null);
+    originalTheme.current = {
+      type: themeType,
+      primary: customColor,
+      bg: customBackgroundColor
+    };
+    setShowProfileModal(true);
+  };
+
+  const handleCancel = async () => {
+    // 테마 상태 원복
+    await setCustomColor(originalTheme.current.primary);
+    await setCustomBackgroundColor(originalTheme.current.bg);
+    await setThemeType(originalTheme.current.type);
+    setShowProfileModal(false);
+  };
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -31,7 +57,7 @@ export default function RoomsScreen() {
     try {
       await updateUserProfile(newName, newImage || currentUser?.profileImage);
       setShowProfileModal(false);
-      Alert.alert('성공', '프로필이 업데이트되었습니다.');
+      Alert.alert('성공', '프로필과 테마가 저장되었습니다.');
     } catch (e: any) {
       Alert.alert('실패', e.message);
     } finally {
@@ -53,7 +79,6 @@ export default function RoomsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 상단 헤더 */}
       <View style={styles.header}>
         <View style={styles.profileSection}>
           {currentUser?.profileImage ? (
@@ -72,10 +97,7 @@ export default function RoomsScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} 
-            onPress={() => {
-              setNewName(currentUser?.name || '');
-              setShowProfileModal(true);
-            }}
+            onPress={handleOpenSettings}
           >
             <Ionicons name="settings-outline" size={20} color={theme.text} />
             <Text style={[styles.actionIconText, { color: theme.text }]}>설정</Text>
@@ -135,32 +157,55 @@ export default function RoomsScreen() {
 
       <AdBanner />
 
-      {/* 설정 모달 */}
-      <Modal visible={showProfileModal} animationType="slide" transparent>
+      <Modal 
+        visible={showProfileModal} 
+        animationType="slide" 
+        transparent 
+        onRequestClose={handleCancel}
+      >
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>프로필 및 테마 설정</Text>
+            <ScrollView 
+              style={{ width: '100%' }} 
+              contentContainerStyle={{ alignItems: 'center', paddingVertical: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.modalHeaderBalance}>
+                <Text style={[styles.modalTitleBalance, { color: theme.text }]}>프로필 및 테마 설정</Text>
+                <TouchableOpacity onPress={handleCancel}>
+                  <Ionicons name="close-circle" size={28} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
               
-              <TouchableOpacity style={styles.avatarPicker} onPress={handlePickImage}>
-                {newImage || currentUser?.profileImage ? (
-                  <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.largeAvatar} />
-                ) : (
-                  <View style={[styles.largeAvatar, { backgroundColor: theme.primary }]}>
-                    <Ionicons name="camera" size={30} color={theme.background} />
-                  </View>
-                )}
-              </TouchableOpacity>
-              
-              <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder="이름을 입력하세요" placeholderTextColor={theme.textSecondary} />
+              <View style={styles.profileSectionBalance}>
+                <TouchableOpacity style={styles.avatarPickerBalance} onPress={handlePickImage}>
+                  {newImage || currentUser?.profileImage ? (
+                    <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.avatarBalance} />
+                  ) : (
+                    <View style={[styles.avatarBalance, { backgroundColor: theme.primary }]}>
+                      <Ionicons name="camera" size={24} color={theme.background} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>사용자 이름</Text>
+                  <TextInput 
+                    style={[styles.inputBalance, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
+                    value={newName} 
+                    onChangeText={setNewName} 
+                    placeholder="이름" 
+                    placeholderTextColor={theme.textSecondary} 
+                  />
+                </View>
+              </View>
 
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>포인트 색상</Text>
-              <View style={styles.colorPalette}>
+              <Text style={[styles.sectionTitleBalance, { color: theme.text }]}>포인트 색상</Text>
+              <View style={styles.colorPaletteBalance}>
                 {primaryPresetColors.map((color) => (
                   <TouchableOpacity 
                     key={color} 
                     style={[
-                      styles.colorOption, 
+                      styles.colorOptionBalance, 
                       { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
                     ]} 
                     onPress={() => setCustomColor(color)} 
@@ -168,18 +213,17 @@ export default function RoomsScreen() {
                 ))}
               </View>
 
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>배경 색상</Text>
-              <View style={styles.colorPalette}>
+              <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>배경 색상</Text>
+              <View style={styles.colorPaletteBalance}>
                 {bgPresetColors.map((color) => (
                   <TouchableOpacity 
                     key={color} 
                     style={[
-                      styles.colorOption, 
+                      styles.colorOptionBalance, 
                       { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }
                     ]} 
                     onPress={() => {
                       setCustomBackgroundColor(color);
-                      // 배경색이 어두우면 자동으로 다크모드 속성 부여
                       const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212');
                       setThemeType(isDark ? 'dark' : 'light');
                     }} 
@@ -187,10 +231,12 @@ export default function RoomsScreen() {
                 ))}
               </View>
 
-              <View style={styles.modalBtns}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowProfileModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateProfile} disabled={isUpdating}>
-                  {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>저장</Text>}
+              <View style={styles.modalBtnsBalance}>
+                <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}>
+                  <Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.submitBtnBalance, { backgroundColor: theme.primary }]} onPress={handleUpdateProfile} disabled={isUpdating}>
+                  {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>변경사항 저장</Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -223,16 +269,20 @@ const styles = StyleSheet.create({
   roomMeta: { fontSize: 12, marginTop: 2 },
   emptyContainer: { alignItems: 'center', marginTop: 100 },
   emptyText: { marginTop: 15, textAlign: 'center', fontSize: 14 },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-  modalContent: { padding: 30, borderRadius: 30, alignItems: 'center', maxHeight: '80%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 25 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', alignSelf: 'flex-start', marginBottom: 15, marginTop: 10 },
-  avatarPicker: { marginBottom: 25 },
-  largeAvatar: { width: 100, height: 100, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  input: { width: '100%', padding: 15, borderRadius: 12, marginBottom: 25, textAlign: 'center' },
-  colorPalette: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', marginBottom: 20 },
-  colorOption: { width: 36, height: 36, borderRadius: 18, margin: 6, borderWidth: 3 },
-  modalBtns: { flexDirection: 'row', width: '100%', marginTop: 10 },
-  cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },
-  submitBtn: { flex: 2, padding: 15, borderRadius: 12, alignItems: 'center' }
+  modalContent: { padding: 24, borderRadius: 32, alignItems: 'center', maxHeight: '92%' },
+  modalHeaderBalance: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 24 },
+  modalTitleBalance: { fontSize: 20, fontWeight: 'bold' },
+  profileSectionBalance: { flexDirection: 'row', width: '100%', alignItems: 'center', gap: 20, marginBottom: 24 },
+  avatarPickerBalance: { },
+  avatarBalance: { width: 72, height: 72, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  inputLabel: { fontSize: 12, fontWeight: 'bold', marginBottom: 6, marginLeft: 4 },
+  inputBalance: { width: '100%', padding: 14, borderRadius: 14, fontSize: 16 },
+  sectionTitleBalance: { fontSize: 15, fontWeight: 'bold', alignSelf: 'flex-start', marginBottom: 12 },
+  colorPaletteBalance: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', marginBottom: 20 },
+  colorOptionBalance: { width: 34, height: 34, borderRadius: 17, margin: 5, borderWidth: 2.5 },
+  modalBtnsBalance: { flexDirection: 'row', width: '100%', gap: 12, marginTop: 10 },
+  cancelBtnBalance: { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)' },
+  submitBtnBalance: { flex: 2, padding: 16, borderRadius: 14, alignItems: 'center' }
 });
