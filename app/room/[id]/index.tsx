@@ -157,10 +157,21 @@ export default function RoomMainScreen() {
               </View>
               <Text style={[styles.roomHeroName, {color: theme.text}]}>{room.name}</Text>
               <View style={styles.secureInfoRow}>
-                <View style={[styles.idBadgeRow, {backgroundColor: theme.primary + '20'}]}>
-                  <Text style={[styles.idBadgeText, {color: theme.primary}]}>CODE: {room.passcode}</Text>
-                  <TouchableOpacity onPress={() => { Clipboard.setStringAsync(room.passcode); Alert.alert('복사완료', '참여 코드가 복사되었습니다.'); }} style={{marginLeft: 8}}><Ionicons name="copy-outline" size={14} color={theme.primary} /></TouchableOpacity>
+                <View style={[styles.idBadgeRow, {backgroundColor: theme.textSecondary + '20', marginRight: 8}]}>
+                  <Text style={[styles.idBadgeText, {color: theme.textSecondary}]}>ID: {room.id.slice(0, 8)}...</Text>
+                  <TouchableOpacity onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사완료', '방 ID가 복사되었습니다.'); }} style={{marginLeft: 8}}><Ionicons name="copy-outline" size={14} color={theme.textSecondary} /></TouchableOpacity>
                 </View>
+
+                <TouchableOpacity 
+                  activeOpacity={0.8}
+                  onPress={() => setShowPasscode(!showPasscode)}
+                  style={[styles.idBadgeRow, {backgroundColor: theme.textSecondary + '20'}]}
+                >
+                  <Text style={[styles.idBadgeText, {color: theme.textSecondary, letterSpacing: showPasscode ? 0 : 3}]}>
+                    CODE: {showPasscode ? room.passcode : '****'}
+                  </Text>
+                  <Ionicons name={showPasscode ? "eye-off-outline" : "eye-outline"} size={14} color={theme.textSecondary} style={{marginLeft: 8}} />
+                </TouchableOpacity>
               </View>
             </View>
           </View>
