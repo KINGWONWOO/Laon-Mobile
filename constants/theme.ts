@@ -1,99 +1,57 @@
-export const Colors = {
-  primary: '#5E5CE6', // Default blue
-  background: '#000000',
-  card: '#1C1C1E',
-  text: '#FFFFFF',
-  textSecondary: '#8E8E93',
-  border: '#38383A',
-  error: '#FF453A',
-  success: '#32D74B',
-};
-
-export type ThemeType = 'dark' | 'light' | 'pink' | 'custom';
-
-const getContrastColor = (hexcolor: string) => {
-  if (!hexcolor) return '#FFFFFF';
-  const r = parseInt(hexcolor.slice(1, 3), 16);
-  const g = parseInt(hexcolor.slice(3, 5), 16);
-  const b = parseInt(hexcolor.slice(5, 7), 16);
-  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-  return (yiq >= 128) ? '#000000' : '#FFFFFF';
-};
-
-export const getThemeColors = (type: ThemeType, customColor?: string, customBgColor?: string) => {
-  const primary = customColor || Colors.primary;
-
-  switch (type) {
-    case 'light':
-      return {
-        primary,
-        background: '#F2F2F7',
-        card: '#FFFFFF',
-        text: '#000000',
-        textSecondary: '#8E8E93',
-        border: '#C6C6C8',
-        error: '#FF3B30',
-        success: '#34C759',
-      };
-    case 'pink':
-      return {
-        primary: '#FF2D55',
-        background: '#FFF5F8',
-        card: '#FFFFFF',
-        text: '#1C1C1E',
-        textSecondary: '#8E8E93',
-        border: '#FFD1DC',
-        error: '#FF3B30',
-        success: '#34C759',
-      };
-    case 'custom':
-      const bgColor = customBgColor || '#000000';
-      const textColor = getContrastColor(bgColor);
-      return {
-        primary,
-        background: bgColor,
-        card: textColor === '#FFFFFF' ? '#1C1C1E' : '#FFFFFF',
-        text: textColor,
-        textSecondary: textColor === '#FFFFFF' ? '#8E8E93' : '#636366',
-        border: textColor === '#FFFFFF' ? '#38383A' : '#C6C6C8',
-        error: '#FF453A',
-        success: '#32D74B',
-      };
-    case 'dark':
-    default:
-      return {
-        primary,
-        background: '#000000',
-        card: '#1C1C1E',
-        text: '#FFFFFF',
-        textSecondary: '#8E8E93',
-        border: '#38383A',
-        error: '#FF453A',
-        success: '#32D74B',
-      };
-  }
-};
+import { ColorSchemeName } from 'react-native';
 
 export const Shadows = {
   soft: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 2,
   },
   medium: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
     elevation: 5,
   },
   glow: {
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 10,
   }
+};
+
+export const Colors = {
+  primary: '#6366F1',
+  background: '#F8FAFC',
+  card: '#FFFFFF',
+  text: '#0F172A',
+  textSecondary: '#64748B',
+  border: '#E2E8F0',
+  error: '#EF4444',
+  success: '#10B981',
+};
+
+export const getThemeColors = (type: string, primary?: string, background?: string) => {
+  // Use custom colors if provided, otherwise fallback to defaults
+  const finalPrimary = primary || '#6366F1';
+  const finalBackground = background || (type === 'dark' ? '#0F172A' : '#F8FAFC');
+  
+  // Simple heuristic to determine if background is dark
+  const isDark = type === 'dark' || (finalBackground.startsWith('#') && parseInt(finalBackground.slice(1, 3), 16) < 100);
+
+  return {
+    primary: finalPrimary,
+    background: finalBackground,
+    card: isDark ? '#1E293B' : '#FFFFFF',
+    text: isDark ? '#F8FAFC' : '#0F172A',
+    textSecondary: isDark ? '#94A3B8' : '#64748B',
+    border: isDark ? '#334155' : '#E2E8F0',
+    error: '#EF4444',
+    success: '#10B981',
+    isDark
+  };
 };

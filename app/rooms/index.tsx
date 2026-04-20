@@ -3,12 +3,11 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextI
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
-import { Colors } from '../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
 
 export default function RoomsScreen() {
-  const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
+  const { rooms, currentUser, logout, updateUserProfile, theme, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
   const router = useRouter();
 
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -40,20 +39,21 @@ export default function RoomsScreen() {
     }
   };
 
-  const presetColors = [
-    '#5E5CE6', '#32D74B', '#64D2FF', '#BF5AF2', 
-    '#FF375F', '#AC8E68', '#FF6B6B', '#4ECDC4', 
-    '#A06CD5', '#FF9F43', '#00D2FF', '#FDCB6E'
+  const primaryPresetColors = [
+    '#AEC6CF', '#FFB7B2', '#B2E2F2', '#B19CD9', 
+    '#FFDAC1', '#E2F0CB', '#FF9AA2', '#C5E1A5',
+    '#F48FB1', '#90CAF9', '#CE93D8', '#B39DDB'
   ];
 
   const bgPresetColors = [
-    '#1C1C1E', '#2C2C2E', '#3A3A3C', '#121212',
-    '#FFFFFF', '#F2F2F7', '#E5E5EA', '#D1D1D6',
-    '#FEF1F2', '#F0F9FF', '#F5F5F5', '#1A1A1A'
+    '#FFFFFF', '#F8FAFC', '#FFF5F5', '#F0F9FF', 
+    '#F5F3FF', '#F0FDF4', '#FEFCE8', '#F0FDFA',
+    '#FDF2F8', '#FAF5FF', '#F9FAFB', '#0F172A'
   ];
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 상단 헤더: 프로필 정보 및 액션 버튼 */}
+      {/* 상단 헤더 */}
       <View style={styles.header}>
         <View style={styles.profileSection}>
           {currentUser?.profileImage ? (
@@ -135,12 +135,12 @@ export default function RoomsScreen() {
 
       <AdBanner />
 
-      {/* 프로필 설정 모달 */}
+      {/* 설정 모달 */}
       <Modal visible={showProfileModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center' }}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>프로필 설정</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>프로필 및 테마 설정</Text>
               
               <TouchableOpacity style={styles.avatarPicker} onPress={handlePickImage}>
                 {newImage || currentUser?.profileImage ? (
@@ -154,35 +154,34 @@ export default function RoomsScreen() {
               
               <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder="이름을 입력하세요" placeholderTextColor={theme.textSecondary} />
 
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>사용자 설정 (메인 색상)</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>포인트 색상</Text>
               <View style={styles.colorPalette}>
-                {presetColors.map((color) => (
+                {primaryPresetColors.map((color) => (
                   <TouchableOpacity 
                     key={color} 
                     style={[
                       styles.colorOption, 
                       { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
                     ]} 
-                    onPress={() => {
-                      setThemeType('custom');
-                      setCustomColor(color);
-                    }} 
+                    onPress={() => setCustomColor(color)} 
                   />
                 ))}
               </View>
 
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>사용자 설정 (배경 색상)</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>배경 색상</Text>
               <View style={styles.colorPalette}>
                 {bgPresetColors.map((color) => (
                   <TouchableOpacity 
                     key={color} 
                     style={[
                       styles.colorOption, 
-                      { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.text : 'transparent' }
+                      { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }
                     ]} 
                     onPress={() => {
-                      setThemeType('custom');
                       setCustomBackgroundColor(color);
+                      // 배경색이 어두우면 자동으로 다크모드 속성 부여
+                      const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212');
+                      setThemeType(isDark ? 'dark' : 'light');
                     }} 
                   />
                 ))}
@@ -231,11 +230,8 @@ const styles = StyleSheet.create({
   avatarPicker: { marginBottom: 25 },
   largeAvatar: { width: 100, height: 100, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
   input: { width: '100%', padding: 15, borderRadius: 12, marginBottom: 25, textAlign: 'center' },
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', width: '100%', marginBottom: 25 },
-  themeItem: { width: '48%', padding: 15, borderRadius: 12, borderWidth: 2, alignItems: 'center', marginBottom: 10, flexDirection: 'row', justifyContent: 'center' },
-  themeLabel: { marginLeft: 8, fontSize: 14, fontWeight: 'bold' },
   colorPalette: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', marginBottom: 20 },
-  colorOption: { width: 40, height: 40, borderRadius: 20, margin: 8, borderWidth: 3 },
+  colorOption: { width: 36, height: 36, borderRadius: 18, margin: 6, borderWidth: 3 },
   modalBtns: { flexDirection: 'row', width: '100%', marginTop: 10 },
   cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },
   submitBtn: { flex: 2, padding: 15, borderRadius: 12, alignItems: 'center' }

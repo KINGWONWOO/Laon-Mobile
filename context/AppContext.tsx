@@ -126,7 +126,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getRoomUserProfile = (roomId: string, userId: string) => roomProfiles[`${roomId}_${userId}`] || null;
 
-  const theme = getThemeColors(themeType, customColor, customBackgroundColor);
+  const theme = useMemo(() => getThemeColors(themeType, customColor, customBackgroundColor), [themeType, customColor, customBackgroundColor]);
 
   const sendPushNotification = async (userIds: string[], title: string, body: string, data?: any) => {
     if (!userIds || userIds.length === 0) return;
