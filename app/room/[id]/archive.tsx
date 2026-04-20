@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
+import { Image } from 'expo-image';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -217,7 +218,11 @@ export default function ArchiveScreen() {
         style={[styles.gridItem, { backgroundColor: '#000' }, Shadows.soft]} 
         onPress={() => { setSelectedPhoto(item); markItemAsAccessed('photo', item.id); }}
       >
-        <Image source={{ uri: item.photoUrl }} style={styles.gridImage} resizeMode="contain" />
+        <Image 
+          source={{ uri: item.photoUrl }} 
+          style={styles.gridImage} 
+          contentFit="cover"
+        />
         {isVideo && (
           <View style={styles.videoBadge}>
             <Ionicons name="play" size={16} color="#fff" />
@@ -284,7 +289,7 @@ export default function ArchiveScreen() {
                   {isVideoItem ? (
                     <VideoView style={{ width: '100%', height: '100%' }} player={player} contentFit="contain" />
                   ) : (
-                    <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                    <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
                   )}
                 </View>
                 
@@ -395,7 +400,7 @@ export default function ArchiveScreen() {
             <View style={[styles.uploadPreview, { backgroundColor: '#000', height: 200, justifyContent: 'center', alignItems: 'center', borderRadius: 15, overflow: 'hidden' }]}>
               {selectedContent ? (
                 <View style={{position:'relative', width: '100%', height: '100%'}}>
-                  <Image source={{ uri: selectedContent.uri }} style={{width:'100%', height:'100%'}} resizeMode="contain" />
+                  <Image source={{ uri: selectedContent.uri }} style={{width:'100%', height:'100%'}} contentFit="contain" />
                   <TouchableOpacity style={styles.removePreview} onPress={() => setSelectedContent(null)}>
                     <Ionicons name="close-circle" size={24} color="#fff" />
                   </TouchableOpacity>
