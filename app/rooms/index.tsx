@@ -3,19 +3,20 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextI
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
 
 export default function RoomsScreen() {
   const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [newName, setNewName] = useState(currentUser?.name || '');
   const [newImage, setNewImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // 취소를 위한 이전 테마 상태 저장
   const originalTheme = useRef({
     type: themeType,
     primary: customColor,
@@ -34,7 +35,6 @@ export default function RoomsScreen() {
   };
 
   const handleCancel = async () => {
-    // 테마 상태 원복
     await setCustomColor(originalTheme.current.primary);
     await setCustomBackgroundColor(originalTheme.current.bg);
     await setThemeType(originalTheme.current.type);
@@ -65,20 +65,11 @@ export default function RoomsScreen() {
     }
   };
 
-  const primaryPresetColors = [
-    '#AEC6CF', '#FFB7B2', '#B2E2F2', '#B19CD9', 
-    '#FFDAC1', '#E2F0CB', '#FF9AA2', '#C5E1A5',
-    '#F48FB1', '#90CAF9', '#CE93D8', '#B39DDB'
-  ];
-
-  const bgPresetColors = [
-    '#FFFFFF', '#F8FAFC', '#FFF5F5', '#F0F9FF', 
-    '#F5F3FF', '#F0FDF4', '#FEFCE8', '#F0FDFA',
-    '#FDF2F8', '#FAF5FF', '#F9FAFB', '#0F172A'
-  ];
+  const primaryPresetColors = ['#AEC6CF', '#FFB7B2', '#B2E2F2', '#B19CD9', '#FFDAC1', '#E2F0CB', '#FF9AA2', '#C5E1A5', '#F48FB1', '#90CAF9', '#CE93D8', '#B39DDB'];
+  const bgPresetColors = ['#FFFFFF', '#F8FAFC', '#FFF5F5', '#F0F9FF', '#F5F3FF', '#F0FDF4', '#FEFCE8', '#F0FDFA', '#FDF2F8', '#FAF5FF', '#F9FAFB', '#0F172A'];
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 20 }]}>
       <View style={styles.header}>
         <View style={styles.profileSection}>
           {currentUser?.profileImage ? (
@@ -95,18 +86,11 @@ export default function RoomsScreen() {
         </View>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} 
-            onPress={handleOpenSettings}
-          >
+          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} onPress={handleOpenSettings}>
             <Ionicons name="settings-outline" size={20} color={theme.text} />
             <Text style={[styles.actionIconText, { color: theme.text }]}>설정</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionIconButton, { backgroundColor: theme.error + '22', marginLeft: 8 }]} 
-            onPress={logout}
-          >
+          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.error + '22', marginLeft: 8 }]} onPress={logout}>
             <Ionicons name="log-out-outline" size={20} color={theme.error} />
             <Text style={[styles.actionIconText, { color: theme.error }]}>로그아웃</Text>
           </TouchableOpacity>
@@ -129,10 +113,7 @@ export default function RoomsScreen() {
         data={rooms}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={[styles.roomCard, { backgroundColor: theme.card, borderColor: theme.border }]} 
-            onPress={() => router.push(`/room/${item.id}`)}
-          >
+          <TouchableOpacity style={[styles.roomCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => router.push(`/room/${item.id}`)}>
             {item.imageUri && item.imageUri.trim() !== '' ? (
               <Image source={{ uri: item.imageUri }} style={styles.roomImage} />
             ) : (
@@ -150,91 +131,34 @@ export default function RoomsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={60} color={theme.border} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>참여 중인 방이 없습니다.{"\n"}방을 만들거나 참여해 보세요!</Text>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>참여 중인 방이 없습니다.</Text>
           </View>
         }
       />
 
-      <AdBanner />
-
-      <Modal 
-        visible={showProfileModal} 
-        animationType="slide" 
-        transparent 
-        onRequestClose={handleCancel}
-      >
+      <Modal visible={showProfileModal} animationType="slide" transparent onRequestClose={handleCancel}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <ScrollView 
-              style={{ width: '100%' }} 
-              contentContainerStyle={{ alignItems: 'center', paddingVertical: 10 }}
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingVertical: 10 }} showsVerticalScrollIndicator={false}>
               <View style={styles.modalHeaderBalance}>
                 <Text style={[styles.modalTitleBalance, { color: theme.text }]}>프로필 및 테마 설정</Text>
-                <TouchableOpacity onPress={handleCancel}>
-                  <Ionicons name="close-circle" size={28} color={theme.textSecondary} />
-                </TouchableOpacity>
+                <TouchableOpacity onPress={handleCancel}><Ionicons name="close-circle" size={28} color={theme.textSecondary} /></TouchableOpacity>
               </View>
-              
               <View style={styles.profileSectionBalance}>
                 <TouchableOpacity style={styles.avatarPickerBalance} onPress={handlePickImage}>
-                  {newImage || currentUser?.profileImage ? (
-                    <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.avatarBalance} />
-                  ) : (
-                    <View style={[styles.avatarBalance, { backgroundColor: theme.primary }]}>
-                      <Ionicons name="camera" size={24} color={theme.background} />
-                    </View>
-                  )}
+                  {newImage || currentUser?.profileImage ? ( <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.avatarBalance} /> ) : ( <View style={[styles.avatarBalance, { backgroundColor: theme.primary }]}> <Ionicons name="camera" size={24} color={theme.background} /> </View> )}
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>사용자 이름</Text>
-                  <TextInput 
-                    style={[styles.inputBalance, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
-                    value={newName} 
-                    onChangeText={setNewName} 
-                    placeholder="이름" 
-                    placeholderTextColor={theme.textSecondary} 
-                  />
+                  <TextInput style={[styles.inputBalance, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder="이름" placeholderTextColor={theme.textSecondary} />
                 </View>
               </View>
-
               <Text style={[styles.sectionTitleBalance, { color: theme.text }]}>포인트 색상</Text>
-              <View style={styles.colorPaletteBalance}>
-                {primaryPresetColors.map((color) => (
-                  <TouchableOpacity 
-                    key={color} 
-                    style={[
-                      styles.colorOptionBalance, 
-                      { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }
-                    ]} 
-                    onPress={() => setCustomColor(color)} 
-                  />
-                ))}
-              </View>
-
+              <View style={styles.colorPaletteBalance}>{primaryPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }]} onPress={() => setCustomColor(color)} /> ))}</View>
               <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>배경 색상</Text>
-              <View style={styles.colorPaletteBalance}>
-                {bgPresetColors.map((color) => (
-                  <TouchableOpacity 
-                    key={color} 
-                    style={[
-                      styles.colorOptionBalance, 
-                      { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }
-                    ]} 
-                    onPress={() => {
-                      setCustomBackgroundColor(color);
-                      const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212');
-                      setThemeType(isDark ? 'dark' : 'light');
-                    }} 
-                  />
-                ))}
-              </View>
-
+              <View style={styles.colorPaletteBalance}>{bgPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }]} onPress={() => { setCustomBackgroundColor(color); const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212'); setThemeType(isDark ? 'dark' : 'light'); }} /> ))}</View>
               <View style={styles.modalBtnsBalance}>
-                <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}>
-                  <Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>취소</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}><Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>취소</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.submitBtnBalance, { backgroundColor: theme.primary }]} onPress={handleUpdateProfile} disabled={isUpdating}>
                   {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>변경사항 저장</Text>}
                 </TouchableOpacity>
@@ -243,12 +167,16 @@ export default function RoomsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <View style={{ paddingBottom: Math.max(insets.bottom, 15) }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 60 },
+  container: { flex: 1, paddingHorizontal: 24 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   profileSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerAvatar: { width: 45, height: 45, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
@@ -269,7 +197,6 @@ const styles = StyleSheet.create({
   roomMeta: { fontSize: 12, marginTop: 2 },
   emptyContainer: { alignItems: 'center', marginTop: 100 },
   emptyText: { marginTop: 15, textAlign: 'center', fontSize: 14 },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { padding: 24, borderRadius: 32, alignItems: 'center', maxHeight: '92%' },
   modalHeaderBalance: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 24 },

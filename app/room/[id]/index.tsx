@@ -110,7 +110,7 @@ export default function RoomMainScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView 
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         <View style={styles.headerHero}>
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   gridCard: { width: '48%', padding: 20, borderRadius: 28, marginBottom: 16, alignItems: 'center', ...Shadows.soft },
   gridIconCircle: { width: 48, height: 48, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   gridCardTitle: { fontSize: 14, fontWeight: '800' },
-  roomDeleteLink: { marginTop: 40, alignItems: 'center', paddingBottom: 60 },
+  roomDeleteLink: { marginTop: 40, alignItems: 'center', paddingBottom: 20 },
   roomDeleteText: { color: '#ff4444', fontSize: 13, fontWeight: '600', opacity: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   addModalMain: { flex: 1, borderTopLeftRadius: 40, borderTopRightRadius: 40, marginTop: 60 },
