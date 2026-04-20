@@ -121,8 +121,12 @@ export default function RoomMainScreen() {
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <TouchableOpacity style={[styles.userProfileBtn, {borderColor: theme.primary}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
-                  <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage || 'https://placeholder.com/150' }} style={styles.userAvatarSmall} />
+                <TouchableOpacity style={[styles.userProfileBtn, {borderColor: theme.primary, backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center'}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
+                  {myRoomProfile?.profileImage || currentUser?.profileImage ? (
+                    <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.userAvatarSmall} />
+                  ) : (
+                    <Text style={{ color: theme.background, fontWeight: '900', fontSize: 16 }}>{(myRoomProfile?.name || currentUser?.name || '?')[0]}</Text>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginLeft: 10}]} onPress={() => router.push(`/room/${id}/members`)}>
                   <Ionicons name="people" size={16} color="#fff" />
