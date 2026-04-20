@@ -481,7 +481,27 @@ export default function FormationEditorScreen() {
     if (!uri) return;
     setIsAnalyzing(true);
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      let targetUri = uri;
+      
+      // 1. 원격 URL인 경우 로컬로 다운로드 (readAsStringAsync는 원격 URL을 지원하지 않음)
+      if (uri.startsWith('http')) {
+        const fileExt = uri.split('.').pop()?.split('?')[0] || 'mp3';
+        targetUri = `${FileSystem.cacheDirectory}temp_analysis.${fileExt}`;
+        const downloadRes = await FileSystem.downloadAsync(uri, targetUri);
+        targetUri = downloadRes.uri;
+      }
+
+      // 2. URI에 특수문자(한글, 대괄호 등)가 포함된 경우를 대비해 인코딩 처리
+      // 단, 이미 인코딩된 경우를 방지하기 위해 중복 처리에 주의하거나 getInfoAsync로 확인
+      const fileInfo = await FileSystem.getInfoAsync(targetUri);
+      if (!fileInfo.exists) {
+        // 인코딩된 상태로 다시 시도
+        const encoded = encodeURI(targetUri);
+        const encodedInfo = await FileSystem.getInfoAsync(encoded);
+        if (encodedInfo.exists) targetUri = encoded;
+      }
+
+      const base64 = await FileSystem.readAsStringAsync(targetUri, { encoding: FileSystem.EncodingType.Base64 });
       const analysisScript = `
         (async () => {
           try {
