@@ -138,7 +138,13 @@ export default function RoomMainScreen() {
 
             <View style={styles.roomBrand}>
               <View style={styles.roomImageWrapper}>
-                <Image source={{ uri: room.imageUri || 'https://placeholder.com/150' }} style={styles.mainRoomImg} />
+                {room.imageUri ? (
+                  <Image source={{ uri: room.imageUri }} style={styles.mainRoomImg} />
+                ) : (
+                  <View style={[styles.mainRoomImg, { backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: theme.background, fontSize: 48, fontWeight: 'bold' }}>{room.name[0].toUpperCase()}</Text>
+                  </View>
+                )}
                 {isLeader && (
                   <TouchableOpacity style={[styles.roomSettingsBtn, {backgroundColor: theme.card}]} onPress={() => { setRoomName(room.name); setRoomImage(null); setShowRoomEditModal(true); }}>
                     <Ionicons name="settings" size={16} color={theme.text} />

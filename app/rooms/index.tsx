@@ -111,8 +111,8 @@ export default function RoomsScreen() {
             style={[styles.roomCard, { backgroundColor: theme.card, borderColor: theme.border }]} 
             onPress={() => router.push(`/room/${item.id}`)}
           >
-            {item.image_uri ? (
-              <Image source={{ uri: item.image_uri }} style={styles.roomImage} />
+            {item.imageUri && item.imageUri.trim() !== '' ? (
+              <Image source={{ uri: item.imageUri }} style={styles.roomImage} />
             ) : (
               <View style={[styles.roomImage, { backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ color: theme.background, fontSize: 24, fontWeight: 'bold' }}>{item.name[0].toUpperCase()}</Text>
