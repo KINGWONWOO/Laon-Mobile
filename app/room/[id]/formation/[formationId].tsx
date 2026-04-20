@@ -491,17 +491,28 @@ export default function FormationEditorScreen() {
         targetUri = downloadRes.uri;
       }
 
-      // 2. URI에 특수문자(한글, 대괄호 등)가 포함된 경우를 대비해 인코딩 처리
-      // 단, 이미 인코딩된 경우를 방지하기 위해 중복 처리에 주의하거나 getInfoAsync로 확인
-      const fileInfo = await FileSystem.getInfoAsync(targetUri);
-      if (!fileInfo.exists) {
-        // 인코딩된 상태로 다시 시도
-        const encoded = encodeURI(targetUri);
-        const encodedInfo = await FileSystem.getInfoAsync(encoded);
-        if (encodedInfo.exists) targetUri = encoded;
+      // 2. 파일 읽기 시도 (특수문자 및 대괄호 처리)
+      // Android의 readAsStringAsync는 대괄호([])나 한글이 포함된 경로를 읽지 못하는 경우가 있어 다각도로 시도함
+      let base64;
+      try {
+        // 상황 1: 현재 경로 그대로 읽기
+        base64 = await FileSystem.readAsStringAsync(targetUri, { encoding: FileSystem.EncodingType.Base64 });
+      } catch (e) {
+        try {
+          // 상황 2: 대괄호 및 특수문자 강제 인코딩 후 시도
+          const encoded = encodeURI(decodeURI(targetUri)).replace(/\[/g, '%5B').replace(/\]/g, '%5D');
+          base64 = await FileSystem.readAsStringAsync(encoded, { encoding: FileSystem.EncodingType.Base64 });
+        } catch (e2) {
+          // 상황 3: 파일 시스템에서 인식 가능한 다른 포맷으로의 마지막 시도 (원시 경로 등)
+          const fileInfo = await FileSystem.getInfoAsync(targetUri);
+          if (!fileInfo.exists) throw new Error('파일을 찾을 수 없습니다.');
+          // 만약 정보는 있는데 읽기만 실패한다면, 안전한 임시 위치로 복사 후 읽기 시도
+          const safeUri = `${FileSystem.cacheDirectory}analysis_fix_${Date.now()}.mp3`;
+          await FileSystem.copyAsync({ from: targetUri, to: safeUri });
+          base64 = await FileSystem.readAsStringAsync(safeUri, { encoding: FileSystem.EncodingType.Base64 });
+          await FileSystem.deleteAsync(safeUri, { idempotent: true });
+        }
       }
-
-      const base64 = await FileSystem.readAsStringAsync(targetUri, { encoding: FileSystem.EncodingType.Base64 });
       const analysisScript = `
         (async () => {
           try {
