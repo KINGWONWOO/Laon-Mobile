@@ -6,6 +6,7 @@ import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import AdBanner from '../../../../components/ui/AdBanner';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -199,6 +200,9 @@ export default function FormationListScreen() {
           </View>
         </View>
       </Modal>
+      <View style={{ paddingHorizontal: 24 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

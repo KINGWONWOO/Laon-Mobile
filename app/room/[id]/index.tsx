@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { storageService } from '../../../services/storageService';
 import { RoomActionBtn, NoticeItem, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
+import AdBanner from '../../../components/ui/AdBanner';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -275,6 +276,9 @@ export default function RoomMainScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <View style={{ paddingHorizontal: 24 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
 import { Colors } from '../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
+import AdBanner from '../../components/ui/AdBanner';
 
 export default function RoomsScreen() {
   const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
@@ -132,6 +133,8 @@ export default function RoomsScreen() {
         }
       />
 
+      <AdBanner />
+
       {/* 프로필 설정 모달 */}
       <Modal visible={showProfileModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -200,7 +203,7 @@ export default function RoomsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
+  container: { flex: 1, paddingHorizontal: 24, paddingVertical: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   profileSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerAvatar: { width: 45, height: 45, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },

@@ -5,6 +5,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../../../constants/theme';
+import AdBanner from '../../../components/ui/AdBanner';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -99,6 +100,9 @@ export default function MembersScreen() {
         }}
         ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>참여 중인 멤버가 없습니다.</Text>}
       />
+      <View style={{ paddingHorizontal: 24 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

@@ -1,15 +1,31 @@
+import 'expo-dev-client';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider, useAppContext } from '../context/AppContext';
 import { initSentry, withSentry } from '../services/logger';
 import { registerForPushNotificationsAsync } from '../services/NotificationService';
+
+// Google Mobile Ads initialization
+if (Platform.OS !== 'web') {
+  try {
+    const mobileAds = require('react-native-google-mobile-ads').default;
+    mobileAds()
+      .initialize()
+      .then((adapterStatuses: any) => {
+        console.log('[AdMob] Initialization complete!', adapterStatuses);
+      })
+      .catch((err: any) => console.warn('[AdMob] Init error:', err));
+  } catch (e) {
+    console.log('[AdMob] Not available in this environment');
+  }
+}
 
 initSentry();
 const queryClient = new QueryClient();

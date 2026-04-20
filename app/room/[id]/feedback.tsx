@@ -14,6 +14,7 @@ import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import AdBanner from '../../../components/ui/AdBanner';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -464,6 +465,9 @@ export default function FeedbackScreen() {
           </View>
         </View>
       </Modal>
+      <View style={{ paddingHorizontal: 24 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NoticeItem } from '../../../components/ui/RoomComponents';
+import AdBanner from '../../../components/ui/AdBanner';
 
 export default function NoticesFullListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -59,6 +60,9 @@ export default function NoticesFullListScreen() {
           </View>
         }
       />
+      <View style={{ paddingHorizontal: 24 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

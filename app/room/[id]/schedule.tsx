@@ -6,6 +6,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
+import AdBanner from '../../../components/ui/AdBanner';
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -480,6 +481,7 @@ export default function ScheduleScreen() {
             </ScrollView></View></View>
         </KeyboardAvoidingView>
       </Modal>
+      <AdBanner />
     </View>
   );
 }

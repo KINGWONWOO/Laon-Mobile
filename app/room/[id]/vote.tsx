@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import { contentService } from '../../../services/contentService';
+import AdBanner from '../../../components/ui/AdBanner';
 
 const { width } = Dimensions.get('window');
 
@@ -402,6 +403,7 @@ export default function VoteScreen() {
           </View></View>
         </KeyboardAvoidingView>
       </Modal>
+      <AdBanner />
     </View>
   );
 }
