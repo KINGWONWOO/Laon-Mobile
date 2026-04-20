@@ -491,28 +491,52 @@ export default function FormationEditorScreen() {
         targetUri = downloadRes.uri;
       }
 
-      // 2. 파일 읽기 시도 (특수문자 및 대괄호 처리)
-      // Android의 readAsStringAsync는 대괄호([])나 한글이 포함된 경로를 읽지 못하는 경우가 있어 다각도로 시도함
-      let base64;
-      try {
-        // 상황 1: 현재 경로 그대로 읽기
-        base64 = await FileSystem.readAsStringAsync(targetUri, { encoding: FileSystem.EncodingType.Base64 });
-      } catch (e) {
+      // 2. 다각도 파일 읽기 시도 (Resilient Reading)
+      // Android 시스템 및 Expo FileSystem의 특수문자([]) 및 한글 처리 버그를 해결하기 위해 여러 조합 시도
+      let base64 = null;
+      const candidates = [
+        targetUri,                                                          // 원본
+        decodeURI(targetUri),                                               // 디코딩 상태
+        encodeURI(decodeURI(targetUri)).replace(/\[/g, '%5B').replace(/\]/g, '%5D'), // 표준 인코딩 + 대괄호 강제 처리
+        targetUri.replace(/\[/g, '%5B').replace(/\]/g, '%5D'),              // 원본에서 대괄호만 처리
+      ];
+
+      for (const candidate of candidates) {
         try {
-          // 상황 2: 대괄호 및 특수문자 강제 인코딩 후 시도
-          const encoded = encodeURI(decodeURI(targetUri)).replace(/\[/g, '%5B').replace(/\]/g, '%5D');
-          base64 = await FileSystem.readAsStringAsync(encoded, { encoding: FileSystem.EncodingType.Base64 });
-        } catch (e2) {
-          // 상황 3: 파일 시스템에서 인식 가능한 다른 포맷으로의 마지막 시도 (원시 경로 등)
-          const fileInfo = await FileSystem.getInfoAsync(targetUri);
-          if (!fileInfo.exists) throw new Error('파일을 찾을 수 없습니다.');
-          // 만약 정보는 있는데 읽기만 실패한다면, 안전한 임시 위치로 복사 후 읽기 시도
-          const safeUri = `${FileSystem.cacheDirectory}analysis_fix_${Date.now()}.mp3`;
-          await FileSystem.copyAsync({ from: targetUri, to: safeUri });
-          base64 = await FileSystem.readAsStringAsync(safeUri, { encoding: FileSystem.EncodingType.Base64 });
-          await FileSystem.deleteAsync(safeUri, { idempotent: true });
+          base64 = await FileSystem.readAsStringAsync(candidate, { encoding: FileSystem.EncodingType.Base64 });
+          if (base64) break;
+        } catch (e) {
+          // 실패 시 다음 후보로 진행
         }
       }
+
+      // 만약 여전히 실패한다면, getInfoAsync로 존재 여부 확인 후 최후의 수단(복사) 사용
+      if (!base64) {
+        let exists = false;
+        let finalPath = targetUri;
+        for (const candidate of candidates) {
+          const info = await FileSystem.getInfoAsync(candidate);
+          if (info.exists) {
+            exists = true;
+            finalPath = candidate;
+            break;
+          }
+        }
+
+        if (!exists) {
+          setIsAnalyzing(false);
+          // UI를 건드리지 않기 위해 에러는 콘솔에만 기록하고 분석 중단
+          console.warn('Audio file not found for analysis even after multiple attempts.');
+          return;
+        }
+
+        // 파일은 존재하는데 읽기만 안되는 경우: 안전한 이름으로 복사 후 읽기
+        const safeUri = `${FileSystem.cacheDirectory}analysis_fix_${Date.now()}.mp3`;
+        await FileSystem.copyAsync({ from: finalPath, to: safeUri });
+        base64 = await FileSystem.readAsStringAsync(safeUri, { encoding: FileSystem.EncodingType.Base64 });
+        await FileSystem.deleteAsync(safeUri, { idempotent: true });
+      }
+
       const analysisScript = `
         (async () => {
           try {
