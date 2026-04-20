@@ -125,14 +125,11 @@ export default function RoomMainScreen() {
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <TouchableOpacity style={[styles.userProfileBtn, {borderColor: theme.primary, backgroundColor: theme.primary, justifyContent: 'center', alignItems: 'center'}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
-                  {myRoomProfile?.profileImage || currentUser?.profileImage ? (
-                    <Image source={{ uri: myRoomProfile?.profileImage || currentUser?.profileImage }} style={styles.userAvatarSmall} />
-                  ) : (
-                    <Text style={{ color: theme.background, fontWeight: '900', fontSize: 16 }}>{(myRoomProfile?.name || currentUser?.name || '?')[0]}</Text>
-                  )}
+                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginRight: 8}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
+                  <Ionicons name="person-circle-outline" size={16} color="#fff" />
+                  <Text style={styles.smallMemberText}>프로필 변경</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginLeft: 10}]} onPress={() => router.push(`/room/${id}/members`)}>
+                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary + 'CC'}]} onPress={() => router.push(`/room/${id}/members`)}>
                   <Ionicons name="people" size={16} color="#fff" />
                   <Text style={styles.smallMemberText}>멤버</Text>
                 </TouchableOpacity>
@@ -237,7 +234,6 @@ export default function RoomMainScreen() {
 
       <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title="방을 삭제하시겠습니까?" theme={theme} />
 
-      {/* Modals are unchanged in functionality */}
       <Modal visible={showRoomEditModal} animationType="fade" transparent onRequestClose={() => setShowRoomEditModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
@@ -261,6 +257,10 @@ export default function RoomMainScreen() {
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
             <Text style={[styles.polishedModalTitle, { color: theme.text }]}>나의 방 프로필 설정</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 20, textAlign: 'center', lineHeight: 18 }}>
+              여기서 설정하는 이름과 사진은{"\n"}
+              <Text style={{ color: theme.primary, fontWeight: '700' }}>현재 방({room.name})</Text>에서만 사용됩니다.
+            </Text>
             <TouchableOpacity style={styles.avatarPicker} onPress={async () => { const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 }); if(!res.canceled) setUserImage(res.assets[0].uri); }}>
               <Image source={{ uri: userImage || myRoomProfile?.profileImage || currentUser?.profileImage || 'https://placeholder.com/150' }} style={styles.avatarLarge} />
               <View style={[styles.avatarCamera, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={16} color="#fff" /></View>
