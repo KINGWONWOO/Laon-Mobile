@@ -18,7 +18,6 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   
-  // 테마 관리
   const { themeType, setThemeType, theme } = useAppContext();
 
   const handleLogin = async () => {
@@ -41,7 +40,7 @@ export default function LoginScreen() {
         }
         setErrorMsg(msg);
       } else if (data?.session) {
-        // 성공 시 root layout의 guard가 /rooms로 보낼 것이나, 확실히 하기 위해 명시적으로 이동
+        // 성공 시 root layout의 guard가 처리하므로 별도 replace 생략 가능하나, 명시적으로 이동 시도
         router.replace('/rooms');
       } else {
         setErrorMsg('로그인 정보가 올바르지 않습니다.');

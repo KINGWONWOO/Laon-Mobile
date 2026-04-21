@@ -36,8 +36,6 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-  
-  // 💡 현재 리디렉션 중인지 확인하여 중복 실행 방지
   const isProcessing = useRef(false);
 
   useEffect(() => {
@@ -50,27 +48,24 @@ function RootLayoutNav() {
 
     const currentSegment = segments[0];
     const isLoggedIn = !!currentUser;
-    const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
+    const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth', 'register'].includes(currentSegment ?? '');
     const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
 
-    console.log(`[Guard] User: ${isLoggedIn ? 'Yes' : 'No'}, Path: /${segments.join('/')}`);
+    console.log(`[Guard] isLoggedIn: ${isLoggedIn}, Path: /${segments.join('/')}, isPublic: ${isPublicPath}`);
 
     if (isLoggedIn) {
-      // 💡 로그인 상태인데 '로그인 화면'이나 '루트'에 있다면 /rooms로 이동
       if (isRoot || isPublicPath) {
         isProcessing.current = true;
-        console.log('[Guard] Redirecting to /rooms');
+        console.log('[Guard] SUCCESS -> Redirecting to /rooms');
         router.replace('/rooms');
-        // 내비게이션 완료 후 플래그 해제
-        setTimeout(() => { isProcessing.current = false; }, 500);
+        setTimeout(() => { isProcessing.current = false; }, 1000);
       }
     } else {
-      // 비로그인 상태인데 비공개 경로에 있다면 루트(/) 로그인 화면으로
       if (!isPublicPath && !isRoot) {
         isProcessing.current = true;
-        console.log('[Guard] Redirecting to root');
+        console.log('[Guard] UNAUTH -> Redirecting to root (login)');
         router.replace('/');
-        setTimeout(() => { isProcessing.current = false; }, 500);
+        setTimeout(() => { isProcessing.current = false; }, 1000);
       }
     }
   }, [currentUser, segments, isMounted, isLoadingUser]);
