@@ -218,7 +218,11 @@ export default function RoomsScreen() {
               </View>
               <View style={styles.profileSectionBalance}>
                 <TouchableOpacity style={styles.avatarPickerBalance} onPress={handlePickImage}>
-                  {newImage || currentUser?.profileImage ? ( <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.avatarBalance} /> ) : ( <View style={[styles.avatarBalance, { backgroundColor: theme.primary }]}> <Ionicons name="camera" size={24} color={theme.background} /> </View> )}
+                  {newImage || currentUser?.profileImage ? (
+                    <Image source={{ uri: newImage || currentUser?.profileImage }} style={styles.avatarBalance} />
+                  ) : (
+                    <View style={[styles.avatarBalance, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={24} color={theme.background} /></View>
+                  )}
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>사용자 이름</Text>
