@@ -105,25 +105,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMyProfile = async (userId: string) => {
     try {
+      // 💡 우선 기본 정보를 설정하여 가드가 리디렉션을 즉시 실행하게 합니다.
+      setCurrentUser(prev => prev || { id: userId, name: '댄서', profileImage: null, subscription: { tier: 'free', isTrialUsed: false } });
+
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (error || !data) {
-        setCurrentUser({ id: userId, name: '댄서', profileImage: null, subscription: { tier: 'free', isTrialUsed: false } });
-        return;
+      if (data) {
+        setCurrentUser({ 
+          id: data.id, 
+          name: data.name || '댄서', 
+          profileImage: data.profile_image,
+          subscription: data.subscription_tier ? {
+            tier: data.subscription_tier,
+            startDate: data.subscription_start ? new Date(data.subscription_start).getTime() : undefined,
+            expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
+            isTrialUsed: data.is_trial_used || false
+          } : { tier: 'free', isTrialUsed: false }
+        });
       }
-      setCurrentUser({ 
-        id: data.id, 
-        name: data.name || '댄서', 
-        profileImage: data.profile_image,
-        subscription: data.subscription_tier ? {
-          tier: data.subscription_tier,
-          startDate: data.subscription_start ? new Date(data.subscription_start).getTime() : undefined,
-          expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
-          isTrialUsed: data.is_trial_used || false
-        } : { tier: 'free', isTrialUsed: false }
-      });
     } catch (e) {
       console.error('[fetchMyProfile] Error:', e);
-      setCurrentUser({ id: userId, name: '댄서', profileImage: null, subscription: { tier: 'free', isTrialUsed: false } });
     }
   };
 
@@ -131,12 +131,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     let mounted = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+      console.log(`[AuthEvent] ${event}`);
       
       if (session) {
-        setIsLoadingUser(true);
-        try {
-          await fetchMyProfile(session.user.id);
-        } finally {
+        // 이미 유저가 있고 세션 이벤트가 온 거라면 중복 호출 방지
+        if (!currentUser || currentUser.id !== session.user.id) {
+          setIsLoadingUser(true);
+          try {
+            await fetchMyProfile(session.user.id);
+          } finally {
+            setIsLoadingUser(false);
+          }
+        } else {
           setIsLoadingUser(false);
         }
       } else {
@@ -149,7 +155,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [currentUser]);
 
   const blockUser = async (userId: string) => {
     const newList = [...blockedUsers, userId];
