@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
-import { useGlobalSearchParams } from 'expo-router';
+import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,14 +10,16 @@ import AdBanner from '../../../components/ui/AdBanner';
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, theme, currentUser, refreshAllData, rooms, getUserById } = useAppContext();
+  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, theme, currentUser, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder } = useAppContext();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isSendingReminder, setIsSendingReminder] = useState(false);
   
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
@@ -116,7 +118,33 @@ export default function ScheduleScreen() {
     ]);
   };
 
+  const handleSendReminder = async () => {
+    if (!selectedScheduleId) return;
+    const access = checkProAccess('reminder');
+    if (!access.canAccess) {
+      return Alert.alert(
+        'Pro 전용 기능',
+        '미응답자에게 리마인드 알림을 보내는 기능은 Pro 멤버십 전용입니다.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+
+    setIsSendingReminder(true);
+    try {
+      await sendProReminder(id!, 'schedule', selectedScheduleId);
+      Alert.alert('알림 전송', '미응답자에게 리마인드 푸시 알림을 보냈습니다.');
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setIsSendingReminder(false);
+    }
+  };
+
   const scheduleOptions = [
+    { label: '미응답자에게 알림 보내기', icon: 'notifications-outline', onPress: handleSendReminder },
     { label: '제목/기한 수정', icon: 'create-outline', onPress: openEditModal },
     { label: selectedSchedule?.deadline && new Date(selectedSchedule.deadline) < new Date() ? '종료됨' : '지금 즉시 종료', 
       icon: 'stop-circle-outline', 
@@ -310,6 +338,23 @@ export default function ScheduleScreen() {
                   ))}
                 </ScrollView>
               </View>
+
+              {!isClosed && isOwner && nonParticipants.length > 0 && (
+                <TouchableOpacity 
+                  style={[styles.manualReminderBtn, {backgroundColor: theme.primary + '15'}]}
+                  onPress={handleSendReminder}
+                  disabled={isSendingReminder}
+                >
+                  {isSendingReminder ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name="notifications" size={16} color={theme.primary} />
+                      <Text style={{color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 13}}>미응답자에게 재촉 알림 보내기 (PRO)</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
@@ -563,5 +608,6 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontWeight: '600', marginTop: 16 },
   settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 12 },
   settingLabel: { fontSize: 16, fontWeight: '700' },
-  reminderOpt: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, marginRight: 8, borderWidth: 1 }
+  reminderOpt: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, marginRight: 8, borderWidth: 1 },
+  manualReminderBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, marginTop: 16, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' }
 });

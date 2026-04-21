@@ -19,7 +19,7 @@ import AdBanner from '../../../components/ui/AdBanner';
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations } = useAppContext();
+  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro } = useAppContext();
 
   const insets = useSafeAreaInsets();
   
@@ -177,6 +177,18 @@ export default function FeedbackScreen() {
   }, [showCommentInput]);
 
   const handlePickVideo = async () => {
+    const access = checkProAccess('feedback_limit');
+    if (!access.canAccess && roomVideos.length >= (access.limit || 10)) {
+      return Alert.alert(
+        '영상 업로드 제한',
+        `Free 플랜은 방당 최대 ${access.limit}개까지 영상을 업로드할 수 있습니다.\nPro 멤버십으로 100개까지 업로드해보세요!`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
     if (!result.canceled && result.assets && result.assets.length > 0) {
       if (!videoTitle.trim()) return Alert.alert('오류', '영상 제목을 입력해주세요.');
@@ -396,7 +408,10 @@ export default function FeedbackScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
+        <View style={{alignItems: 'center'}}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
+          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomVideos.length} / {isPro ? '100' : '10'}</Text>
+        </View>
         <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
       </View>
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,9 +10,23 @@ import AdBanner from '../../../../components/ui/AdBanner';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { formations, addFormation, updateFormation, deleteFormation, theme } = useAppContext();
+  const { formations, addFormation, updateFormation, deleteFormation, theme, checkProAccess } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const access = checkProAccess('formation');
+    if (!access.canAccess) {
+      Alert.alert(
+        'Pro 멤버십 기능',
+        '동선 제작 기능은 Pro 멤버십 전용입니다.\nPro 멤버십으로 업그레이드하고 동선을 제작해보세요!',
+        [
+          { text: '뒤로가기', onPress: () => router.back() },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+  }, []);
 
   const roomFormations = useMemo(() => 
     formations.filter(f => f.roomId === id).sort((a, b) => b.createdAt - a.createdAt), 
@@ -43,6 +57,18 @@ export default function FormationListScreen() {
   };
 
   const handleImportFile = async () => {
+    const access = checkProAccess('formation');
+    if (!access.canAccess) {
+      return Alert.alert(
+        'Pro 멤버십 기능',
+        '동선 가져오기 기능은 Pro 멤버십 전용입니다.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/json',

@@ -6,9 +6,25 @@ import { useAppContext } from '../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Shadows } from '../../constants/theme';
 
 export default function RoomsScreen() {
-  const { rooms, currentUser, logout, updateUserProfile, theme, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor } = useAppContext();
+  const { 
+    rooms, 
+    currentUser, 
+    logout, 
+    updateUserProfile, 
+    theme, 
+    themeType, 
+    setThemeType, 
+    customColor, 
+    setCustomColor, 
+    customBackgroundColor, 
+    setCustomBackgroundColor,
+    isPro,
+    checkProAccess
+  } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -65,6 +81,21 @@ export default function RoomsScreen() {
     }
   };
 
+  const handleCreateRoom = () => {
+    const access = checkProAccess('room_count');
+    if (!access.canAccess) {
+      return Alert.alert(
+        '방 생성 제한',
+        `Free 플랜은 최대 ${access.limit}개까지 방을 만들 수 있습니다.\n무제한으로 방을 만들고 싶으신가요?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+    router.push('/rooms/create');
+  };
+
   const primaryPresetColors = ['#AEC6CF', '#FFB7B2', '#B2E2F2', '#B19CD9', '#FFDAC1', '#E2F0CB', '#FF9AA2', '#C5E1A5', '#F48FB1', '#90CAF9', '#CE93D8', '#B39DDB'];
   const bgPresetColors = ['#FFFFFF', '#F8FAFC', '#FFF5F5', '#F0F9FF', '#F5F3FF', '#F0FDF4', '#FEFCE8', '#F0FDFA', '#FDF2F8', '#FAF5FF', '#F9FAFB', '#0F172A'];
 
@@ -81,7 +112,22 @@ export default function RoomsScreen() {
           )}
           <View style={styles.headerTextInfo}>
             <Text style={[styles.welcomeText, { color: theme.textSecondary }]}>반가워요!</Text>
-            <Text style={[styles.userName, { color: theme.text }]}>{currentUser?.name} 님</Text>
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              onPress={() => router.push('/subscription')}
+              style={styles.membershipRow}
+            >
+              <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>{currentUser?.name} 님</Text>
+              <View style={[
+                styles.tierBadge, 
+                { backgroundColor: isPro ? theme.primary : theme.textSecondary + '22' }
+              ]}>
+                <Text style={[
+                  styles.tierText, 
+                  { color: isPro ? '#fff' : theme.textSecondary }
+                ]}>{isPro ? 'PRO' : 'FREE'}</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
         
@@ -103,7 +149,7 @@ export default function RoomsScreen() {
           <TouchableOpacity style={[styles.actionBtn, { marginRight: 10, backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
             <Ionicons name="enter-outline" size={24} color={theme.background} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/create')}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={handleCreateRoom}>
             <Ionicons name="add" size={24} color={theme.background} />
           </TouchableOpacity>
         </View>
@@ -181,9 +227,12 @@ const styles = StyleSheet.create({
   profileSection: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   headerAvatar: { width: 45, height: 45, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontWeight: 'bold', fontSize: 18 },
-  headerTextInfo: { marginLeft: 12 },
+  headerTextInfo: { marginLeft: 12, flex: 1 },
   welcomeText: { fontSize: 12 },
-  userName: { fontSize: 16, fontWeight: 'bold' },
+  userName: { fontSize: 16, fontWeight: 'bold', maxWidth: '65%' },
+  membershipRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  tierBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 6 },
+  tierText: { fontSize: 10, fontWeight: '900' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   actionIconButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10 },
   actionIconText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },

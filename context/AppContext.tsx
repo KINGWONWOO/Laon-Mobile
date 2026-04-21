@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo } from 'react';
-import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, FormationScene, TimelineEntry, Dancer, Position, FormationSettings } from '../types';
+import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, FormationScene, TimelineEntry, Dancer, Position, FormationSettings, UserSubscription } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { roomService } from '../services/roomService';
@@ -81,6 +81,12 @@ interface AppContextType {
   updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null) => Promise<void>;
   getRoomUserProfile: (roomId: string, userId: string) => { name: string, profileImage: string | null } | null;
   roomProfiles: Record<string, { name: string, profileImage: string | null }>;
+
+  // Subscription
+  isPro: boolean;
+  purchasePro: () => Promise<void>;
+  checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
+  sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -139,7 +145,109 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMyProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) setCurrentUser({ id: data.id, name: data.name || '댄서', profileImage: data.profile_image });
+    if (data) {
+      setCurrentUser({ 
+        id: data.id, 
+        name: data.name || '댄서', 
+        profileImage: data.profile_image,
+        subscription: data.subscription_tier ? {
+          tier: data.subscription_tier,
+          startDate: data.subscription_start ? new Date(data.subscription_start).getTime() : undefined,
+          expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
+          isTrialUsed: data.is_trial_used || false
+        } : { tier: 'free', isTrialUsed: false }
+      });
+    }
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) fetchMyProfile(session.user.id);
+      setIsLoadingUser(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) fetchMyProfile(session.user.id);
+      else setCurrentUser(null);
+      setIsLoadingUser(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // --- Subscription Helpers ---
+  const isPro = useMemo(() => {
+    if (!currentUser?.subscription) return false;
+    const { tier, expiryDate } = currentUser.subscription;
+    if (tier !== 'pro') return false;
+    if (expiryDate && expiryDate < Date.now()) return false;
+    return true;
+  }, [currentUser]);
+
+  const purchasePro = async () => {
+    if (!currentUser) return;
+    const now = Date.now();
+    const nextMonth = now + (30 * 24 * 60 * 60 * 1000);
+    
+    // Remote update
+    const { error } = await supabase.from('profiles').update({
+      subscription_tier: 'pro',
+      subscription_start: new Date(now).toISOString(),
+      subscription_expiry: new Date(nextMonth).toISOString(),
+      is_trial_used: true
+    }).eq('id', currentUser.id);
+
+    if (error) throw error;
+    await fetchMyProfile(currentUser.id);
+  };
+
+  const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => {
+    if (isPro) return { canAccess: true };
+
+    switch (type) {
+      case 'room_count': {
+        const count = roomsData.length;
+        return { canAccess: count < 3, limit: 3, current: count };
+      }
+      case 'archive_limit':
+        return { canAccess: false, limit: 20 }; // Per room check logic would go here
+      case 'formation':
+        return { canAccess: false };
+      case 'feedback_limit':
+        return { canAccess: false, limit: 10 };
+      case 'reminder':
+        return { canAccess: false };
+      default:
+        return { canAccess: true };
+    }
+  };
+
+  const sendProReminder = async (roomId: string, type: 'vote' | 'schedule', targetId: string) => {
+    if (!isPro) throw new Error('Pro 멤버십 전용 기능입니다.');
+    
+    const room = roomsData.find(r => r.id === roomId);
+    if (!room) return;
+
+    let targetTitle = '';
+    let nonResponders: string[] = [];
+
+    if (type === 'vote') {
+      const vote = votesMapped.find(v => v.id === targetId);
+      if (vote) {
+        targetTitle = vote.question;
+        const responders = Object.keys(vote.responses);
+        nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
+      }
+    } else {
+      const sch = schedulesMapped.find(s => s.id === targetId);
+      if (sch) {
+        targetTitle = sch.title;
+        const responders = Object.keys(sch.responses);
+        nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
+      }
+    }
+
+    if (nonResponders.length > 0) {
+      await sendPushNotification(nonResponders, '응답 요청', `"${targetTitle}"에 아직 참여하지 않으셨습니다. 확인 부탁드려요!`);
+    }
   };
 
   useEffect(() => {

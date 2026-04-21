@@ -1,7 +1,17 @@
+export type SubscriptionTier = 'free' | 'pro';
+
+export type UserSubscription = {
+  tier: SubscriptionTier;
+  startDate?: number;
+  expiryDate?: number;
+  isTrialUsed: boolean;
+};
+
 export type User = {
   id: string;
   name: string;
   profileImage?: string;
+  subscription?: UserSubscription;
 };
 
 export type Room = {

@@ -19,7 +19,7 @@ const ITEM_SIZE = (width - 48 - (ITEM_MARGIN * (COLUMN_COUNT - 1))) / COLUMN_COU
 export default function ArchiveScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { photos, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, theme, currentUser, refreshAllData, getUserById, markItemAsAccessed, rooms } = useAppContext();
+  const { photos, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, theme, currentUser, refreshAllData, getUserById, markItemAsAccessed, rooms, checkProAccess } = useAppContext();
   const insets = useSafeAreaInsets();
 
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
@@ -88,6 +88,19 @@ export default function ArchiveScreen() {
 
   const handleUpload = async () => {
     if (!selectedContent || !description.trim()) return;
+
+    const access = checkProAccess('archive_limit');
+    if (!access.canAccess && roomPhotos.length >= (access.limit || 20)) {
+      return Alert.alert(
+        '아카이브 용량 초과',
+        `Free 플랜은 방당 최대 ${access.limit}개까지 아카이브를 저장할 수 있습니다.\n무제한으로 저장하고 싶으신가요?`,
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+        ]
+      );
+    }
+
     setIsLoading(true);
     try {
       await addPhoto(id || '', selectedContent.uri, description.trim());
@@ -236,7 +249,10 @@ export default function ArchiveScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
+        <View style={{alignItems: 'center'}}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
+          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomPhotos.length} / {isPro ? '∞' : '20'}</Text>
+        </View>
         <TouchableOpacity onPress={() => { setShowAddModal(true); setSelectedContent(null); setDescription(''); }}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
       </View>
 
