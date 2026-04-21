@@ -10,7 +10,7 @@ import { Shadows } from '../../../../constants/theme';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
-  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice } = useAppContext();
+  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -35,6 +35,7 @@ export default function NoticeDetailScreen() {
 
   const notice = useMemo(() => notices.find(n => n.id === noticeId), [notices, noticeId]);
   const author = useMemo(() => notice ? getUserById(notice.userId) : null, [notice]);
+  const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
 
   if (!notice) {
     return (
@@ -97,7 +98,7 @@ export default function NoticeDetailScreen() {
     }
   };
 
-  const noticeOptions = [
+  const noticeOptions = notice?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
     { label: notice.isPinned ? '고정 해제' : '상단 고정', icon: 'pin-outline', onPress: async () => {
       try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert('오류', e.message); }
     }},
@@ -108,9 +109,12 @@ export default function NoticeDetailScreen() {
       setShowEditNotice(true);
     }},
     { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
+  ] : [
+    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => reportContent(notice.id, 'notice') },
+    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => blockUser(notice.userId) }
   ];
 
-  const commentOptions = [
+  const commentOptions = selectedComment?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
     { label: '수정', icon: 'create-outline', onPress: () => {
       if (!selectedComment) return;
       setEditingCommentId(selectedComment.id);
@@ -123,6 +127,9 @@ export default function NoticeDetailScreen() {
         { text: '삭제', style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
       ]);
     }}
+  ] : [
+    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(selectedComment) reportContent(selectedComment.id, 'notice_comment'); } },
+    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(selectedComment) blockUser(selectedComment.userId); } }
   ];
 
   return (
@@ -136,11 +143,9 @@ export default function NoticeDetailScreen() {
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>공지 상세</Text>
-        {(notice.userId === currentUser?.id) ? (
-          <TouchableOpacity onPress={() => setShowNoticeOptions(true)} style={styles.deleteBtn}>
-            <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
-          </TouchableOpacity>
-        ) : <View style={{ width: 40 }} />}
+        <TouchableOpacity onPress={() => setShowNoticeOptions(true)} style={styles.deleteBtn}>
+          <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -189,7 +194,7 @@ export default function NoticeDetailScreen() {
               <View style={styles.commentHeader}>
                 <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
                 <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
-                {comment.userId === currentUser?.id && !isEditing && (
+                {!isEditing && (
                   <TouchableOpacity onPress={() => { setSelectedComment(comment); setShowCommentOptions(true); }}>
                     <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
                   </TouchableOpacity>

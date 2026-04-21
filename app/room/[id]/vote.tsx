@@ -13,7 +13,7 @@ const { width } = Dimensions.get('window');
 
 export default function VoteScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, currentUser, theme, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder } = useAppContext();
+  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, currentUser, theme, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, blockUser, reportContent, isPro } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 

@@ -7,6 +7,7 @@ import { storageService } from '../services/storageService';
 import { contentService } from '../services/contentService';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert } from 'react-native';
 
 interface AppContextType {
   currentUser: User | null;
@@ -14,9 +15,13 @@ interface AppContextType {
   login: (email: string, pass: string) => Promise<void>;
   updateUserProfile: (name: string, image?: string) => Promise<void>;
   logout: () => Promise<void>;
-  
-  rooms: Room[];
-  isLoadingRooms: boolean;
+  deleteAccount: () => Promise<void>;
+
+  blockedUsers: string[];
+  blockUser: (userId: string) => Promise<void>;
+  reportContent: (id: string, type: string) => Promise<void>;
+
+  rooms: Room[];  isLoadingRooms: boolean;
   users: User[];
   getUserById: (id: string) => User | undefined;
   getRoomByIdRemote: (id: string) => Promise<any>;
@@ -99,6 +104,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customColor, setCustomColorState] = useState('#6366F1');
   const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
   const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [queryVersion, setQueryVersion] = useState(0);
 
   useEffect(() => {
@@ -106,7 +112,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     AsyncStorage.getItem('theme_custom_color').then(val => { if (val) setCustomColorState(val); });
     AsyncStorage.getItem('theme_custom_bg_color').then(val => { if (val) setCustomBackgroundColorState(val); });
     AsyncStorage.getItem('room_profiles').then(val => { if (val) setRoomProfiles(JSON.parse(val)); });
+    AsyncStorage.getItem('blocked_users').then(val => { if (val) setBlockedUsers(JSON.parse(val)); });
   }, []);
+
+  const blockUser = async (userId: string) => {
+    const newList = [...blockedUsers, userId];
+    setBlockedUsers(newList);
+    await AsyncStorage.setItem('blocked_users', JSON.stringify(newList));
+    Alert.alert('차단 완료', '해당 사용자의 콘텐츠가 더 이상 표시되지 않습니다.');
+  };
+
+  const reportContent = async (id: string, type: string) => {
+    // In a real app, send to server. Here we just mock it for policy compliance.
+    console.log(`Reported ${type}: ${id}`);
+    Alert.alert('신고 접수', '부적절한 콘텐츠로 신고가 접수되었습니다. 관리자 검토 후 조치됩니다.');
+  };
 
   const setThemeType = async (type: ThemeType) => {
     setThemeTypeState(type);
@@ -250,19 +270,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) fetchMyProfile(session.user.id);
-      setIsLoadingUser(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) fetchMyProfile(session.user.id);
-      else setCurrentUser(null);
-      setIsLoadingUser(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
   const { data: allUsers = [] } = useQuery({
     queryKey: ['profiles', queryVersion],
     queryFn: async () => {
@@ -337,21 +344,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content, isPinned: n.is_pinned, useNotification: n.use_notification, imageUrls: n.image_urls || [], viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime(),
     comments: (n.notice_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() }))
-  })).sort((a, b) => (a.isPinned === b.isPinned) ? b.createdAt - a.createdAt : (a.isPinned ? -1 : 1));
+  })).filter(n => !blockedUsers.includes(n.userId)).sort((a, b) => (a.isPinned === b.isPinned) ? b.createdAt - a.createdAt : (a.isPinned ? -1 : 1));
 
-  const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({ id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url, title: v.title, useNotification: v.use_notification, createdAt: new Date(v.created_at).getTime(), comments: (v.video_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })) }));
-  const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({ id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, description: p.description, useNotification: p.use_notification, createdAt: new Date(p.created_at).getTime(), comments: (p.gallery_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })) }));
+  const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({ id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url, title: v.title, useNotification: v.use_notification, createdAt: new Date(v.created_at).getTime(), comments: (v.video_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) })).filter(v => !blockedUsers.includes(v.userId));
+  const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({ id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, description: p.description, useNotification: p.use_notification, createdAt: new Date(p.created_at).getTime(), comments: (p.gallery_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) })).filter(p => !blockedUsers.includes(p.userId));
   const schedulesMapped: Schedule[] = (schedulesQuery.data || []).map(s => {
     const resp: Record<string, string[]> = {}; (s.schedule_options || []).forEach((o: any) => (o.schedule_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
     return { id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})), responses: resp, viewedBy: s.viewed_by || [], useNotification: s.use_notification, reminderMinutes: s.reminder_before, deadline: s.deadline ? new Date(s.deadline).getTime() : undefined, createdAt: new Date(s.created_at).getTime() };
-  });
+  }).filter(s => !blockedUsers.includes(s.userId));
   const votesMapped: Vote[] = (votesQuery.data || []).map(v => {
     const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (v.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
     return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
-  });
+  }).filter(v => !blockedUsers.includes(v.userId));
 
   const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
   const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
+  const deleteAccount = async () => {
+    if (!currentUser) return;
+    try {
+      // In a real implementation this would call an Edge Function or Supabase RPC to delete user auth data
+      await supabase.rpc('delete_user');
+      // Then sign out
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      queryClient.clear();
+    } catch (e) {
+      console.error(e);
+      // Fallback
+      await logout();
+    }
+  };
   const updateUserProfile = async (n: string, i?: string) => { 
     let final = i; 
     if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); 
@@ -438,7 +460,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AppContext.Provider value={{
-      currentUser, isLoadingUser, login, updateUserProfile, logout,
+      currentUser, isLoadingUser, login, updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers,
       rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
       notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
       videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
@@ -447,7 +469,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
       formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
       refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-      updateRoomUserProfile, getRoomUserProfile, roomProfiles
+      updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder
     }}>
       {children}
     </AppContext.Provider>

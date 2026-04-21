@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
@@ -14,6 +14,7 @@ export default function RoomsScreen() {
     rooms, 
     currentUser, 
     logout, 
+    deleteAccount,
     updateUserProfile, 
     theme, 
     themeType, 
@@ -79,6 +80,31 @@ export default function RoomsScreen() {
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '회원 탈퇴',
+      '정말로 탈퇴하시겠습니까? 모든 데이터가 삭제되며 복구할 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        { 
+          text: '탈퇴하기', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              setIsUpdating(true);
+              await deleteAccount();
+              Alert.alert('탈퇴 완료', '회원 탈퇴가 완료되었습니다.');
+            } catch (e: any) {
+              Alert.alert('오류', '탈퇴 처리 중 문제가 발생했습니다.');
+            } finally {
+              setIsUpdating(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleCreateRoom = () => {
@@ -203,12 +229,27 @@ export default function RoomsScreen() {
               <View style={styles.colorPaletteBalance}>{primaryPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }]} onPress={() => setCustomColor(color)} /> ))}</View>
               <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>배경 색상</Text>
               <View style={styles.colorPaletteBalance}>{bgPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }]} onPress={() => { setCustomBackgroundColor(color); const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212'); setThemeType(isDark ? 'dark' : 'light'); }} /> ))}</View>
+              
               <View style={styles.modalBtnsBalance}>
                 <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}><Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>취소</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.submitBtnBalance, { backgroundColor: theme.primary }]} onPress={handleUpdateProfile} disabled={isUpdating}>
                   {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>변경사항 저장</Text>}
                 </TouchableOpacity>
               </View>
+
+              <View style={styles.policyRow}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://laon-dance.netlify.app/privacy-policy')}>
+                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>개인정보 처리방침</Text>
+                </TouchableOpacity>
+                <Text style={{ color: theme.border, marginHorizontal: 8 }}>|</Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://laon-dance.netlify.app/terms')}>
+                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>이용약관</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+                <Text style={styles.deleteAccountText}>회원 탈퇴</Text>
+              </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
         </View>
@@ -260,5 +301,9 @@ const styles = StyleSheet.create({
   colorOptionBalance: { width: 34, height: 34, borderRadius: 17, margin: 5, borderWidth: 2.5 },
   modalBtnsBalance: { flexDirection: 'row', width: '100%', gap: 12, marginTop: 10 },
   cancelBtnBalance: { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)' },
-  submitBtnBalance: { flex: 2, padding: 16, borderRadius: 14, alignItems: 'center' }
+  submitBtnBalance: { flex: 2, padding: 16, borderRadius: 14, alignItems: 'center' },
+  policyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  policyText: { fontSize: 13, textDecorationLine: 'underline' },
+  deleteAccountBtn: { marginTop: 20, padding: 10 },
+  deleteAccountText: { color: '#EF4444', fontSize: 13, fontWeight: 'bold', textDecorationLine: 'underline' }
 });

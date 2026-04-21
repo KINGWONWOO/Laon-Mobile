@@ -372,10 +372,11 @@ interface HistoryState {
 
 export default function FormationEditorScreen() {
   const { id, formationId } = useGlobalSearchParams<{ id: string, formationId: string }>();
-  const { formations, updateFormation, publishFormationAsFeedback, theme } = useAppContext();
+  const { formations, updateFormation, publishFormationAsFeedback, theme, blockUser, reportContent, currentUser, rooms } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const formation = formations.find(f => f.id === formationId);
+  const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
 
   // [State: 32b2ca5 기반]
   const [mode, setMode] = useState<'create' | 'place'>('create');
@@ -397,6 +398,7 @@ export default function FormationEditorScreen() {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showFilenameModal, setShowFilenameModal] = useState(false);
+  const [showFormationOptions, setShowFormationOptions] = useState(false);
   const [exportFileName, setExportFileName] = useState('');
   const [isChangingSong, setIsChangingSong] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
@@ -475,6 +477,14 @@ export default function FormationEditorScreen() {
       return next;
     });
   }, [handleAutoSave]);
+
+  const formationOptions = formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
+    { label: '저장하기', icon: 'save-outline', onPress: () => handleSave() },
+    { label: '내보내기 / 공유', icon: 'share-outline', onPress: () => setShowExportModal(true) }
+  ] : [
+    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(formation) reportContent(formation.id, 'formation'); } },
+    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
+  ];
 
   // [NEW: 실제 오디오 PCM 디코딩 로직]
   const analyzeAudio = async (uri: string) => {
@@ -886,11 +896,21 @@ export default function FormationEditorScreen() {
           <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'create' ? theme.background : theme.textSecondary }]}>대형 생성</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'place' ? theme.background : theme.textSecondary }]}>대형 배치</Text></TouchableOpacity>
         </View>
-        <View style={{ flexDirection: 'row', gap: 15 }}>
-          <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowExportModal(true)}><Ionicons name="share-outline" size={24} color={theme.primary} /></TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
+          {(formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id) ? (
+            <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+          ) : null}
+          <TouchableOpacity onPress={() => setShowFormationOptions(true)}><Ionicons name="ellipsis-vertical" size={24} color={theme.text} /></TouchableOpacity>
         </View>
       </View>
+
+      <OptionModal 
+        visible={showFormationOptions} 
+        onClose={() => setShowFormationOptions(false)} 
+        options={formationOptions} 
+        title="동선 설정" 
+        theme={theme} 
+      />
 
       {/* Hidden WebView for Audio Analysis */}
       <View style={{ height: 0, width: 0, opacity: 0, position: 'absolute' }}>

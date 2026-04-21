@@ -19,7 +19,15 @@ const ITEM_SIZE = (width - 48 - (ITEM_MARGIN * (COLUMN_COUNT - 1))) / COLUMN_COU
 export default function ArchiveScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { photos, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, theme, currentUser, refreshAllData, getUserById, markItemAsAccessed, rooms, checkProAccess } = useAppContext();
+  const context = useAppContext();
+  const { 
+    photos, addPhoto, updatePhoto, deletePhoto, 
+    addPhotoComment, updatePhotoComment, deletePhotoComment, 
+    theme, currentUser, refreshAllData, getUserById, 
+    markItemAsAccessed, rooms, checkProAccess, blockUser, 
+    reportContent
+  } = context;
+  const isPro = context?.isPro || false;
   const insets = useSafeAreaInsets();
 
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);

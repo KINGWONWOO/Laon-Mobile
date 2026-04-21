@@ -19,9 +19,11 @@ import AdBanner from '../../../components/ui/AdBanner';
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro } = useAppContext();
+  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent } = useAppContext();
 
   const insets = useSafeAreaInsets();
+
+  const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
   const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
