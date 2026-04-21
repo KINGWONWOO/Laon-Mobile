@@ -13,15 +13,24 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
-      // 💡 Supabase OAuth 리디렉션은 해시(#) 파라미터나 쿼리 파라미터로 토큰을 전달합니다.
-      // Expo Router의 useLocalSearchParams는 이를 파싱해줍니다.
+      console.log('[AuthCallback] URL Params check...');
+      
+      // 1. 이미 세션이 있는지 확인 (authService.ts에서 이미 처리했을 가능성)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        console.log('[AuthCallback] Session already exists, redirecting to /rooms');
+        router.replace('/rooms');
+        return;
+      }
+
+      // 2. URL 파라미터에서 토큰 추출 (Implicit Flow 대비)
       const { access_token, refresh_token } = params as { access_token?: string, refresh_token?: string };
 
-      if (access_token && refresh_token) {
-        console.log('[AuthCallback] Tokens found, setting session...');
+      if (access_token) {
+        console.log('[AuthCallback] Tokens found in params, setting session...');
         const { error } = await supabase.auth.setSession({
           access_token,
-          refresh_token,
+          refresh_token: refresh_token || '',
         });
 
         if (error) {
@@ -29,20 +38,39 @@ export default function AuthCallback() {
           Alert.alert('로그인 오류', '인증 세션을 설정하는 중 문제가 발생했습니다.');
           router.replace('/');
         } else {
-          console.log('[AuthCallback] Session set successfully');
-          // 세션 설정 성공 시 app/_layout.tsx의 전역 가드가 /rooms로 리디렉션합니다.
+          console.log('[AuthCallback] Session set successfully from params');
+          router.replace('/rooms');
         }
-      } else {
-        // 토큰이 없는 경우 (오류 상황)
-        console.warn('[AuthCallback] No tokens found in URL');
-        // 잠시 대기 후에도 세션이 안 잡히면 홈으로 이동
-        const timeout = setTimeout(() => {
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!session) router.replace('/');
-          });
-        }, 3000);
-        return () => clearTimeout(timeout);
+        return;
       }
+
+      // 3. 토큰이 없는 경우 (오류 상황 또는 PKCE flow 대기)
+      console.warn('[AuthCallback] No tokens found in URL yet. Waiting for background sync...');
+      
+      // 잠시 대기 후에도 세션이 안 잡히면 홈으로 이동 (PKCE flow는 authService에서 이미 교환 완료했을 것)
+      const checkInterval = setInterval(async () => {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession) {
+          console.log('[AuthCallback] Session found in background, redirecting...');
+          clearInterval(checkInterval);
+          router.replace('/rooms');
+        }
+      }, 500);
+
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        supabase.auth.getSession().then(({ data: { session: finalSession } }) => {
+          if (!finalSession) {
+            console.log('[AuthCallback] Timeout, no session found. Going to login.');
+            router.replace('/');
+          }
+        });
+      }, 5000);
+
+      return () => {
+        clearInterval(checkInterval);
+        clearTimeout(timeout);
+      };
     };
 
     handleAuth();
