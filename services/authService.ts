@@ -43,37 +43,51 @@ export const authService = {
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        console.log('[Auth] Browser success, URL:', res.url);
+        console.log('[Auth] Success URL received:', res.url);
         
-        // 💡 PKCE Flow: exchangeCodeForSession
-        const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
-        
-        if (sessionError) {
-          console.warn('[Auth] PKCE exchange error, trying manual parse...', sessionError.message);
-          
-          // Fallback: Manual parse for tokens
-          const urlObj = new URL(res.url.replace('#', '?'));
-          const access_token = urlObj.searchParams.get('access_token');
-          const refresh_token = urlObj.searchParams.get('refresh_token');
-          
-          if (access_token) {
-            const { data: setRes, error: setErr } = await supabase.auth.setSession({ 
-              access_token, 
-              refresh_token: refresh_token || '' 
+        // 💡 PKCE 코드로 세션 교환 시도
+        try {
+          const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
+          if (!sessionError && sessionData.session) {
+            console.log('[Auth] PKCE exchange success');
+            return { data: sessionData, error: null };
+          }
+        } catch (e) {
+          console.warn('[Auth] PKCE exchange exception, trying fallback...');
+        }
+
+        // 💡 Fallback: URL 해시(#)에서 access_token 직접 추출 (Implicit Flow 방식)
+        // 안드로이드 일부 환경에서는 PKCE verifier 손실 시 이 방식이 가장 확실합니다.
+        const hash = res.url.split('#')[1];
+        if (hash) {
+          console.log('[Auth] Extracting tokens from hash fallback...');
+          const params: Record<string, string> = {};
+          hash.split('&').forEach(pair => {
+            const [key, value] = pair.split('=');
+            params[key] = value;
+          });
+
+          if (params.access_token) {
+            const { data: setRes, error: setErr } = await supabase.auth.setSession({
+              access_token: params.access_token,
+              refresh_token: params.refresh_token || '',
             });
             if (setErr) throw setErr;
+            console.log('[Auth] Session set via hash fallback');
             return { data: setRes, error: null };
           }
-          throw sessionError;
         }
         
-        return { data: sessionData, error: null };
+        // 최후의 수단: 현재 세션이 잡혔는지 확인
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession) return { data: { session: currentSession }, error: null };
+        
+        throw new Error('인증 정보를 가져오지 못했습니다.');
       }
 
-      console.log('[Auth] Browser session ended or cancelled:', res.type);
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Fatal Error:`, err);
+      console.error(`[Auth] ${provider} Detail Error:`, err);
       return { data: null, error: err };
     }
   },

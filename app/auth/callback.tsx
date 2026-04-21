@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, Text, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import * as Linking from 'expo-linking';
 
 /**
  * 💡 인증 콜백 처리 화면
@@ -15,78 +16,76 @@ export default function AuthCallback() {
     const handleAuth = async () => {
       if (processed.current) return;
       
-      console.log('[AuthCallback] Start check. Params:', JSON.stringify(params));
+      console.log('[AuthCallback] Start check.');
       
       try {
-        // 1. 이미 세션이 있는지 확인 (다른 로직에서 이미 처리했을 가능성)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          console.log('[AuthCallback] Session exists, going to /rooms');
+        // 1. 이미 세션이 있는지 확인
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        if (existingSession) {
+          console.log('[AuthCallback] Session already active');
           processed.current = true;
           router.replace('/rooms');
           return;
         }
 
-        // 2. URL 파라미터에서 직접 추출 시도
-        const { access_token, refresh_token, code, error, error_description } = params as any;
+        // 2. 딥링크 URL에서 직접 토큰 추출 시도 (안드로이드/iOS 브라우저 리디렉션 대응)
+        const initialUrl = await Linking.getInitialURL();
+        const urlToParse = initialUrl || '';
+        console.log('[AuthCallback] Initial URL:', urlToParse);
 
-        if (error) {
-          console.error('[AuthCallback] OAuth Error:', error, error_description);
-          Alert.alert('로그인 실패', error_description || '인증 중 오류가 발생했습니다.');
-          router.replace('/');
-          return;
+        if (urlToParse.includes('access_token=')) {
+          const hash = urlToParse.split('#')[1] || urlToParse.split('?')[1];
+          if (hash) {
+            const parts = hash.split('&');
+            const tokenParams: Record<string, string> = {};
+            parts.forEach(p => {
+              const [k, v] = p.split('=');
+              tokenParams[k] = v;
+            });
+
+            if (tokenParams.access_token) {
+              console.log('[AuthCallback] Found token in URL, setting session...');
+              const { error: setErr } = await supabase.auth.setSession({
+                access_token: tokenParams.access_token,
+                refresh_token: tokenParams.refresh_token || '',
+              });
+              if (!setErr) {
+                processed.current = true;
+                router.replace('/rooms');
+                return;
+              }
+            }
+          }
         }
 
-        if (access_token) {
-          console.log('[AuthCallback] Found access_token, setting session...');
-          const { error: setErr } = await supabase.auth.setSession({
-            access_token,
-            refresh_token: refresh_token || '',
-          });
-          if (setErr) throw setErr;
-          console.log('[AuthCallback] Session set successfully');
-          processed.current = true;
-          router.replace('/rooms');
-          return;
-        }
-
-        if (code) {
-          console.log('[AuthCallback] Found code, exchanging for session...');
-          // PKCE Flow는 보통 authService에서 이미 처리하지만, 여기서도 시도할 수 있습니다.
-          // 다만 exchangeCodeForSession은 전체 URL을 필요로 할 때가 많습니다.
-          // 여기서는 이미 authService가 작동 중일 것이므로 잠시 기다립니다.
-        }
-
-        console.log('[AuthCallback] No immediate tokens. Waiting for background sync or manual input...');
-        
         // 3. 백그라운드 체크 (최대 5초)
         let retryCount = 0;
         const interval = setInterval(async () => {
           retryCount++;
           const { data: { session: s } } = await supabase.auth.getSession();
           if (s) {
-            console.log('[AuthCallback] Session found in background!');
+            console.log('[AuthCallback] Session caught in interval!');
             clearInterval(interval);
             processed.current = true;
             router.replace('/rooms');
           }
           if (retryCount > 10) {
-            console.warn('[AuthCallback] Background check timeout');
             clearInterval(interval);
-            // 만약 토큰도 없고 세션도 없으면 결국 홈으로
-            if (!processed.current) router.replace('/');
+            if (!processed.current) {
+              console.log('[AuthCallback] Timeout - no session found');
+              router.replace('/');
+            }
           }
         }, 500);
 
       } catch (err: any) {
-        console.error('[AuthCallback] Unexpected error:', err.message);
-        Alert.alert('로그인 오류', '인증 처리 중 예상치 못한 오류가 발생했습니다.');
+        console.error('[AuthCallback] Error:', err.message);
         router.replace('/');
       }
     };
 
     handleAuth();
-  }, [params]);
+  }, []);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
