@@ -36,7 +36,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-  const isProcessing = useRef(false);
+  const lastNav = useRef<string>('');
 
   useEffect(() => {
     setIsMounted(true);
@@ -44,28 +44,27 @@ function RootLayoutNav() {
   }, []);
 
   useEffect(() => {
-    if (!isMounted || isLoadingUser || isProcessing.current) return;
+    if (!isMounted || isLoadingUser) return;
 
     const currentSegment = segments[0];
     const isLoggedIn = !!currentUser;
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth', 'register'].includes(currentSegment ?? '');
     const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
 
-    console.log(`[Guard] isLoggedIn: ${isLoggedIn}, Path: /${segments.join('/')}, isPublic: ${isPublicPath}`);
-
-    if (isLoggedIn) {
-      if (isRoot || isPublicPath) {
-        isProcessing.current = true;
-        console.log('[Guard] SUCCESS -> Redirecting to /rooms');
+    const targetPath = isLoggedIn ? '/rooms' : '/';
+    
+    // Prevent duplicate navigation and only redirect if necessary
+    if (isLoggedIn && (isRoot || isPublicPath)) {
+      if (lastNav.current !== '/rooms') {
+        console.log('[Guard] Redirect -> /rooms');
+        lastNav.current = '/rooms';
         router.replace('/rooms');
-        setTimeout(() => { isProcessing.current = false; }, 1000);
       }
-    } else {
-      if (!isPublicPath && !isRoot) {
-        isProcessing.current = true;
-        console.log('[Guard] UNAUTH -> Redirecting to root (login)');
+    } else if (!isLoggedIn && (!isPublicPath && !isRoot)) {
+      if (lastNav.current !== '/') {
+        console.log('[Guard] Redirect -> login');
+        lastNav.current = '/';
         router.replace('/');
-        setTimeout(() => { isProcessing.current = false; }, 1000);
       }
     }
   }, [currentUser, segments, isMounted, isLoadingUser]);

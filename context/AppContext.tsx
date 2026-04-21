@@ -104,8 +104,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchMyProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (error || !data) {
+        setCurrentUser({ id: userId, name: '댄서', profileImage: null, subscription: { tier: 'free', isTrialUsed: false } });
+        return;
+      }
       setCurrentUser({ 
         id: data.id, 
         name: data.name || '댄서', 
@@ -117,27 +121,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           isTrialUsed: data.is_trial_used || false
         } : { tier: 'free', isTrialUsed: false }
       });
-    } else {
-      setCurrentUser(null);
+    } catch (e) {
+      console.error('[fetchMyProfile] Error:', e);
+      setCurrentUser({ id: userId, name: '댄서', profileImage: null, subscription: { tier: 'free', isTrialUsed: false } });
     }
   };
 
   useEffect(() => {
     let mounted = true;
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && mounted) await fetchMyProfile(session.user.id);
-      if (mounted) setIsLoadingUser(false);
-    };
-    initializeAuth();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      setIsLoadingUser(true);
-      if (session) await fetchMyProfile(session.user.id);
-      else setCurrentUser(null);
-      setIsLoadingUser(false);
+      
+      if (session) {
+        setIsLoadingUser(true);
+        try {
+          await fetchMyProfile(session.user.id);
+        } finally {
+          setIsLoadingUser(false);
+        }
+      } else {
+        setCurrentUser(null);
+        setIsLoadingUser(false);
+      }
     });
-    return () => { mounted = false; subscription.unsubscribe(); };
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const blockUser = async (userId: string) => {
@@ -187,6 +198,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
   const refreshAllData = useCallback(async () => { await queryClient.invalidateQueries(); }, [queryClient]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser, refreshAllData]);
 
   const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({ queryKey: ['rooms', currentUser?.id], queryFn: async () => currentUser ? await roomService.getMyRooms(currentUser.id) : [], enabled: !!currentUser, placeholderData: keepPreviousData });
   const roomIds = useMemo(() => roomsData.map(r => r.id), [roomsData]);
@@ -259,11 +276,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       deletePhotoComment: async (id) => { await contentService.deletePhotoComment(id); await refreshAllData(); },
       markItemAsAccessed: async (type, id) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); },
       schedules: schedulesMapped, addSchedule: async (rid, t, opts, useNoti = true, dl, rm) => { const { data: s, error } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, rm); if (s) await contentService.addScheduleOptions(s.id, opts); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 조율', t); await refreshAllData(); },
-      updateSchedule: async (id, updates) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); },
+      updateSchedule: async (id, updates) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.use_notification, reminder_before: updates.reminder_before }); await refreshAllData(); },
       respondToSchedule, deleteSchedule: async (id) => { await contentService.deleteSchedule(id); await refreshAllData(); },
       closeSchedule: async (id) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); },
       votes: votesMapped, addVote: async (rid, q, opts, s) => { const { data: v } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); if (v) await contentService.addVoteOptions(v.id, opts); if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); await refreshAllData(); },
-      updateVote: async (id, updates) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); },
+      updateVote: async (id, updates) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.use_notification, reminder_before: updates.reminder_before }); await refreshAllData(); },
       respondToVote, deleteVote: async (id) => { await contentService.deleteVote(id); await refreshAllData(); },
       closeVote: async (id) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); },
       formations: formationsQuery.data || [], addFormation: async (rid, title, audioUrl, settings, data) => { const newId = Math.random().toString(36).substr(2, 9); const newFormation: Formation = { id: newId, roomId: rid, userId: currentUser!.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; const localRaw = await AsyncStorage.getItem('local_formations'); const local = localRaw ? JSON.parse(localRaw) : []; await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); await refreshAllData(); return newId; },
