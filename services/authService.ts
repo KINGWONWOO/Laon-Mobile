@@ -12,13 +12,12 @@ if (typeof window !== 'undefined') {
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
     try {
-      // 💡 Redirect URI 생성 (scheme 명시)
       const redirectTo = AuthSession.makeRedirectUri({
         scheme: 'laondancefeedback',
         path: 'auth/callback',
       });
       
-      console.log(`[Auth] Starting ${provider} login with redirect: ${redirectTo}`);
+      console.log(`[Auth] Starting ${provider} login. Redirect: ${redirectTo}`);
 
       const options: any = {
         redirectTo,
@@ -26,18 +25,11 @@ export const authService = {
       };
 
       if (provider === 'kakao') {
-        // 카카오 추가 권한 요청
-        options.queryParams = {
-          scope: 'profile_nickname,account_email',
-        };
+        options.queryParams = { scope: 'profile_nickname,account_email' };
       }
 
       if (provider === 'google') {
-        // 💡 구글 로그인 시 앱(Gmail 등) 인터셉트 방지 및 계정 선택 강제
-        options.queryParams = {
-          prompt: 'select_account',
-          access_type: 'offline',
-        };
+        options.queryParams = { prompt: 'select_account', access_type: 'offline' };
       }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -51,17 +43,26 @@ export const authService = {
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        // 💡 PKCE Flow: URL에서 code 추출 후 세션 교환
+        console.log('[Auth] Browser success, URL:', res.url);
+        
+        // 💡 PKCE Flow: exchangeCodeForSession
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
         
         if (sessionError) {
-          // Fallback: URL 파싱 시도 (Implicit flow 대비)
+          console.warn('[Auth] PKCE exchange error, trying manual parse...', sessionError.message);
+          
+          // Fallback: Manual parse for tokens
           const urlObj = new URL(res.url.replace('#', '?'));
           const access_token = urlObj.searchParams.get('access_token');
           const refresh_token = urlObj.searchParams.get('refresh_token');
           
           if (access_token) {
-            return await supabase.auth.setSession({ access_token, refresh_token: refresh_token || '' });
+            const { data: setRes, error: setErr } = await supabase.auth.setSession({ 
+              access_token, 
+              refresh_token: refresh_token || '' 
+            });
+            if (setErr) throw setErr;
+            return { data: setRes, error: null };
           }
           throw sessionError;
         }
@@ -69,23 +70,19 @@ export const authService = {
         return { data: sessionData, error: null };
       }
 
+      console.log('[Auth] Browser session ended or cancelled:', res.type);
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Detail Error:`, err);
+      console.error(`[Auth] ${provider} Fatal Error:`, err);
       return { data: null, error: err };
     }
   },
 
-  signInWithGoogle: async () => {
-    return await authService.signInWithSocial('google');
-  },
-
-  signInWithKakao: async () => {
-    return await authService.signInWithSocial('kakao');
-  },
+  signInWithGoogle: async () => authService.signInWithSocial('google'),
+  signInWithKakao: async () => authService.signInWithSocial('kakao'),
 
   signInWithApple: async () => {
-    if (Platform.OS !== 'ios') return { data: null, error: new Error('Apple 로그인은 iOS에서만 지원됩니다.') };
+    if (Platform.OS !== 'ios') return { data: null, error: new Error('Apple 로그인은 iOS만 지원됩니다.') };
     try {
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
@@ -93,20 +90,15 @@ export const authService = {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      if (!credential.identityToken) throw new Error('Apple 인증 토큰을 받지 못했습니다.');
-      return await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: credential.identityToken,
-      });
+      if (!credential.identityToken) throw new Error('Apple 토큰 없음');
+      return await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
     } catch (e: any) {
       if (e.code === 'ERR_REQUEST_CANCELED') return { data: null, error: null };
       return { data: null, error: e };
     }
   },
 
-  signIn: async (email: string, password: string) => {
-    return await supabase.auth.signInWithPassword({ email, password });
-  },
+  signIn: async (email: string, password: string) => supabase.auth.signInWithPassword({ email, password }),
 
   sendVerificationCode: async (email: string) => {
     try {
@@ -122,26 +114,17 @@ export const authService = {
         body: JSON.stringify({ email }),
       });
       const result = await response.json();
-      if (!response.ok) {
-        let msg = result.error || JSON.stringify(result);
-        if (msg === 'EMAIL_EXISTS') msg = '이미 가입된 이메일입니다.';
-        return { error: new Error(msg) };
-      }
+      if (!response.ok) return { error: new Error(result.error || '발송 실패') };
       return { sessionToken: result.sessionToken, error: null };
     } catch (err: any) {
-      return { error: new Error(`통신 에러: ${err.message}`) };
+      return { error: err };
     }
   },
 
   checkEmailCode: async (email: string, code: string, sessionToken: string) => {
     try {
-      const { data, error } = await supabase.rpc('check_email_code', {
-        p_email: email,
-        p_code: code,
-        p_session_token: sessionToken,
-      });
-      if (error) throw error;
-      return { valid: !!data, error: null };
+      const { data, error } = await supabase.rpc('check_email_code', { p_email: email, p_code: code, p_session_token: sessionToken });
+      return { valid: !!data, error: error };
     } catch (err: any) {
       return { valid: false, error: err };
     }
@@ -151,40 +134,25 @@ export const authService = {
     try {
       const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      const response = await fetch(`${projectUrl}/functions/v1/send-verification-email`, {
+      const response = await fetch(`${projectUrl}/functions/v1/verify-and-signup`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': anonKey || '',
-          'Authorization': `Bearer ${anonKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'apikey': anonKey || '', 'Authorization': `Bearer ${anonKey}` },
         body: JSON.stringify({ email, code, sessionToken, password, name, phone }),
       });
       const result = await response.json();
-      if (!response.ok) {
-        let msg = result.error || JSON.stringify(result);
-        if (msg === 'INVALID_CODE') msg = '인증 코드가 올바르지 않거나 만료되었습니다.';
-        else if (msg === 'EMAIL_EXISTS') msg = '이미 가입된 이메일입니다.';
-        return { error: new Error(msg) };
-      }
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-      return { error: loginError };
+      if (!response.ok) return { error: new Error(result.error || '인증 실패') };
+      return await supabase.auth.signInWithPassword({ email, password });
     } catch (err: any) {
       return { error: err };
     }
   },
 
-  resetPassword: async (email: string) => {
-    return await supabase.auth.resetPasswordForEmail(email, { redirectTo: Linking.createURL('/reset-password') });
-  },
+  resetPassword: async (email: string) => supabase.auth.resetPasswordForEmail(email, { redirectTo: Linking.createURL('/reset-password') }),
 
   checkEmailAvailable: async (email: string) => {
     const { data, error } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
-    if (error) return { available: false, error };
-    return { available: !data, error: null };
+    return { available: !data, error: error };
   },
 
-  signOut: async () => {
-    await supabase.auth.signOut();
-  },
+  signOut: async () => supabase.auth.signOut(),
 };
