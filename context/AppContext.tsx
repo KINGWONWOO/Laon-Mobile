@@ -6,7 +6,7 @@ import { roomService } from '../services/roomService';
 import { storageService } from '../services/storageService';
 import { contentService } from '../services/contentService';
 import { getThemeColors } from '../constants/theme';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 
 interface AppContextType {
@@ -105,7 +105,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
   const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
-  const [queryVersion, setQueryVersion] = useState(0);
 
   useEffect(() => {
     AsyncStorage.getItem('theme_type').then(val => { if (val) setThemeTypeState(val as ThemeType); });
@@ -123,7 +122,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const reportContent = async (id: string, type: string) => {
-    // In a real app, send to server. Here we just mock it for policy compliance.
     console.log(`Reported ${type}: ${id}`);
     Alert.alert('신고 접수', '부적절한 콘텐츠로 신고가 접수되었습니다. 관리자 검토 후 조치됩니다.');
   };
@@ -193,7 +191,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- Subscription Helpers ---
   const isPro = useMemo(() => {
     if (!currentUser?.subscription) return false;
     const { tier, expiryDate } = currentUser.subscription;
@@ -206,49 +203,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUser) return;
     const now = Date.now();
     const nextMonth = now + (30 * 24 * 60 * 60 * 1000);
-    
-    // Remote update
     const { error } = await supabase.from('profiles').update({
       subscription_tier: 'pro',
       subscription_start: new Date(now).toISOString(),
       subscription_expiry: new Date(nextMonth).toISOString(),
       is_trial_used: true
     }).eq('id', currentUser.id);
-
     if (error) throw error;
     await fetchMyProfile(currentUser.id);
   };
 
   const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => {
     if (isPro) return { canAccess: true };
-
     switch (type) {
       case 'room_count': {
-        const count = roomsData.length;
+        const count = (queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || []).length;
         return { canAccess: count < 3, limit: 3, current: count };
       }
-      case 'archive_limit':
-        return { canAccess: false, limit: 20 }; // Per room check logic would go here
-      case 'formation':
-        return { canAccess: false };
-      case 'feedback_limit':
-        return { canAccess: false, limit: 10 };
-      case 'reminder':
-        return { canAccess: false };
-      default:
-        return { canAccess: true };
+      case 'archive_limit': return { canAccess: false, limit: 20 };
+      case 'formation': return { canAccess: false };
+      case 'feedback_limit': return { canAccess: false, limit: 10 };
+      case 'reminder': return { canAccess: false };
+      default: return { canAccess: true };
     }
   };
 
   const sendProReminder = async (roomId: string, type: 'vote' | 'schedule', targetId: string) => {
     if (!isPro) throw new Error('Pro 멤버십 전용 기능입니다.');
-    
-    const room = roomsData.find(r => r.id === roomId);
+    const rooms = queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || [];
+    const room = rooms.find(r => r.id === roomId);
     if (!room) return;
-
     let targetTitle = '';
     let nonResponders: string[] = [];
-
     if (type === 'vote') {
       const vote = votesMapped.find(v => v.id === targetId);
       if (vote) {
@@ -264,26 +250,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
       }
     }
-
     if (nonResponders.length > 0) {
       await sendPushNotification(nonResponders, '응답 요청', `"${targetTitle}"에 아직 참여하지 않으셨습니다. 확인 부탁드려요!`);
     }
   };
 
   const { data: allUsers = [] } = useQuery({
-    queryKey: ['profiles', queryVersion],
+    queryKey: ['profiles'],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('id, name, profile_image');
       return (data || []).map(u => ({ id: u.id, name: u.name, profileImage: u.profile_image }));
-    }
+    },
+    placeholderData: keepPreviousData
   });
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
   const refreshAllData = useCallback(async () => {
-    setQueryVersion(v => v + 1);
     await queryClient.invalidateQueries();
-    await queryClient.refetchQueries();
   }, [queryClient]);
 
   useEffect(() => {
@@ -293,53 +277,54 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, [currentUser, refreshAllData]);
 
   const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
-    queryKey: ['rooms', currentUser?.id, queryVersion],
+    queryKey: ['rooms', currentUser?.id],
     queryFn: async () => currentUser ? await roomService.getMyRooms(currentUser.id) : [],
     enabled: !!currentUser,
+    placeholderData: keepPreviousData
   });
 
   const roomIds = useMemo(() => roomsData.map(r => r.id), [roomsData]);
 
-  const videosQuery = useQuery({ queryKey: ['videos', roomIds, queryVersion], queryFn: async () => {
+  const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
     const { data: v } = await supabase.from('videos').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: c } = await supabase.from('video_comments').select('*').in('video_id', (v || []).map(x => x.id)).order('created_at', { ascending: true });
     return (v || []).map(video => ({ ...video, video_comments: (c || []).filter(comment => comment.video_id === video.id) }));
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
-  const photosQuery = useQuery({ queryKey: ['photos', roomIds, queryVersion], queryFn: async () => {
+  const photosQuery = useQuery({ queryKey: ['photos', roomIds], queryFn: async () => {
     const { data: p } = await supabase.from('gallery_items').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: c } = await supabase.from('gallery_comments').select('*').in('gallery_item_id', (p || []).map(x => x.id)).order('created_at', { ascending: true });
     return (p || []).map(photo => ({ ...photo, gallery_comments: (c || []).filter(comment => comment.gallery_item_id === photo.id) }));
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
-  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds, queryVersion], queryFn: async () => {
+  const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
     const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
     return (s || []).map(sch => ({ ...sch, schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({ ...opt, schedule_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
-  const votesQuery = useQuery({ queryKey: ['votes', roomIds, queryVersion], queryFn: async () => {
+  const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
     const { data: v } = await supabase.from('votes').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o = [] } = await supabase.from('vote_options').select('*').in('vote_id', (v || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
     return (v || []).map(vote => ({ ...vote, vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({ ...opt, vote_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
-  const noticesQuery = useQuery({ queryKey: ['notices', roomIds, queryVersion], queryFn: async () => {
+  const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
     const { data: n } = await supabase.from('notices').select('*').in('room_id', roomIds);
     const { data: c = [] } = await supabase.from('notice_comments').select('*').in('notice_id', (n || []).map(x => x.id)).order('created_at', { ascending: true });
     return (n || []).map(notice => ({ ...notice, notice_comments: (c || []).filter(comment => comment.notice_id === notice.id) }));
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
-  const formationsQuery = useQuery({ queryKey: ['formations', roomIds, queryVersion], queryFn: async () => {
+  const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const localRaw = await AsyncStorage.getItem('local_formations');
     const local = localRaw ? JSON.parse(localRaw) : [];
     const mappedRemote = (remote || []).map(form => ({ id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url, settings: form.settings, data: form.data, createdAt: new Date(form.created_at).getTime(), isLocal: false })) as Formation[];
     const filteredLocal = local.filter((f: any) => roomIds.includes(f.roomId)).map((f: any) => ({ ...f, isLocal: true }));
     return [...filteredLocal, ...mappedRemote] as Formation[];
-  }, enabled: roomIds.length > 0 });
+  }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
   const noticesMapped: Notice[] = (noticesQuery.data || []).map(n => ({
     id: n.id, roomId: n.room_id, userId: n.user_id, title: n.title, content: n.content, isPinned: n.is_pinned, useNotification: n.use_notification, imageUrls: n.image_urls || [], viewedBy: n.viewed_by || [], createdAt: new Date(n.created_at).getTime(),
@@ -362,15 +347,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteAccount = async () => {
     if (!currentUser) return;
     try {
-      // In a real implementation this would call an Edge Function or Supabase RPC to delete user auth data
       await supabase.rpc('delete_user');
-      // Then sign out
       await supabase.auth.signOut();
       setCurrentUser(null);
       queryClient.clear();
     } catch (e) {
       console.error(e);
-      // Fallback
       await logout();
     }
   };
@@ -419,7 +401,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
-  const respondToVote = async (vid: string, oids: string[]) => { await contentService.respondToVote(vid, currentUser!.id, oids); await refreshAllData(); };
+  const respondToVote = async (vid: string, oids: string[]) => { 
+    const oldData = queryClient.getQueryData(['votes', roomIds]);
+    if (oldData) {
+      queryClient.setQueryData(['votes', roomIds], (old: any[]) => (old || []).map(v => {
+        if (v.id === vid) {
+          const newResponses = (v.vote_responses || []).filter((r: any) => r.user_id !== currentUser!.id);
+          newResponses.push({ user_id: currentUser!.id, option_ids: oids });
+          return { ...v, vote_responses: newResponses };
+        }
+        return v;
+      }));
+    }
+    try {
+      await contentService.respondToVote(vid, currentUser!.id, oids); 
+    } catch (e) {
+      if (oldData) queryClient.setQueryData(['votes', roomIds], oldData);
+      throw e;
+    }
+    await refreshAllData(); 
+  };
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); };
 
   const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { 
@@ -434,7 +435,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
-  const respondToSchedule = async (sid: string, oids: string[]) => { await contentService.respondToSchedule(sid, currentUser!.id, oids); await refreshAllData(); };
+  const respondToSchedule = async (sid: string, oids: string[]) => { 
+    const oldData = queryClient.getQueryData(['schedules', roomIds]);
+    if (oldData) {
+      queryClient.setQueryData(['schedules', roomIds], (old: any[]) => (old || []).map(s => {
+        if (s.id === sid) {
+          const newResponses = (s.schedule_responses || []).filter((r: any) => r.user_id !== currentUser!.id);
+          newResponses.push({ user_id: currentUser!.id, option_ids: oids });
+          return { ...s, schedule_responses: newResponses };
+        }
+        return s;
+      }));
+    }
+    try {
+      await contentService.respondToSchedule(sid, currentUser!.id, oids); 
+    } catch (e) {
+      if (oldData) queryClient.setQueryData(['schedules', roomIds], oldData);
+      throw e;
+    }
+    await refreshAllData(); 
+  };
   const deleteSchedule = async (id: string) => { await contentService.deleteSchedule(id); await refreshAllData(); };
 
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
@@ -443,17 +463,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updateFormation = async (fid: string, updates: Partial<Formation>) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.map((f: any) => f.id === fid ? { ...f, ...updates } : f))); await refreshAllData(); return; } } await contentService.updateRemoteFormation(fid, updates); await refreshAllData(); };
   const deleteFormation = async (fid: string) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid))); await refreshAllData(); return; } } await contentService.deleteRemoteFormation(fid); await refreshAllData(); };
   const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
-    let formation = formationsQuery.data?.find(f => f.id === formationId);
+    let formation = (formationsQuery.data as any[] || []).find(f => f.id === formationId);
     const finalData = currentData?.data || formation?.data;
     const finalSettings = currentData?.settings || formation?.settings;
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
     if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
-
-    // Always create a new remote record as a snapshot for the feedback video
     const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData);
     if (error) throw error;
-
-    // Link to video feedback using the new remote record ID
     await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
     await refreshAllData();
   };

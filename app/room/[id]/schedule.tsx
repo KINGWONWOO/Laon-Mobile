@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,9 @@ export default function ScheduleScreen() {
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
+
+  // Cache for the active schedule to prevent flickering during refetches
+  const [cachedSchedule, setCachedSchedule] = useState<any>(null);
   
   // Form states
   const [title, setTitle] = useState('');
@@ -41,7 +44,17 @@ export default function ScheduleScreen() {
 
   const roomSchedules = useMemo(() => schedules.filter(s => s.roomId === id), [schedules, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
-  const selectedSchedule = useMemo(() => roomSchedules.find(s => s.id === selectedScheduleId), [roomSchedules, selectedScheduleId]);
+  
+  const activeSchedule = useMemo(() => {
+    const found = roomSchedules.find(s => s.id === selectedScheduleId);
+    if (found) return found;
+    return cachedSchedule;
+  }, [roomSchedules, selectedScheduleId, cachedSchedule]);
+
+  useEffect(() => {
+    const found = roomSchedules.find(s => s.id === selectedScheduleId);
+    if (found) setCachedSchedule(found);
+  }, [roomSchedules, selectedScheduleId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -78,17 +91,17 @@ export default function ScheduleScreen() {
   };
 
   const openEditModal = () => {
-    if (!selectedSchedule) return;
-    setTitle(selectedSchedule.title);
-    setHasDeadline(!!selectedSchedule.deadline);
-    setUseNotification(selectedSchedule.useNotification !== false);
-    setReminderMinutes(selectedSchedule.reminderMinutes || 30);
-    if (selectedSchedule.deadline) setDeadline(new Date(selectedSchedule.deadline));
+    if (!activeSchedule) return;
+    setTitle(activeSchedule.title);
+    setHasDeadline(!!activeSchedule.deadline);
+    setUseNotification(activeSchedule.useNotification !== false);
+    setReminderMinutes(activeSchedule.reminderMinutes || 30);
+    if (activeSchedule.deadline) setDeadline(new Date(activeSchedule.deadline));
     
-    const existingDates = Array.from(new Set(selectedSchedule.options.map((o:any) => o.dateTime.split(' ')[0]))).map(ds => new Date(ds as string));
+    const existingDates = Array.from(new Set(activeSchedule.options.map((o:any) => o.dateTime.split(' ')[0]))).map(ds => new Date(ds as string));
     setSelectedDates(existingDates);
     
-    const existingHours = selectedSchedule.options.map((o:any) => parseInt(o.dateTime.split(' ')[1].split(':')[0]));
+    const existingHours = activeSchedule.options.map((o:any) => parseInt(o.dateTime.split(' ')[1].split(':')[0]));
     if (existingHours.length > 0) {
       setStartTime(Math.min(...existingHours));
       setEndTime(Math.max(...existingHours) + 1);
@@ -113,6 +126,7 @@ export default function ScheduleScreen() {
       { text: '삭제', style: 'destructive', onPress: async () => {
         await deleteSchedule(selectedScheduleId!);
         setSelectedScheduleId(null);
+        setCachedSchedule(null);
       }}
     ]);
   };
@@ -142,10 +156,10 @@ export default function ScheduleScreen() {
     }
   };
 
-  const scheduleOptions = selectedSchedule?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
+  const scheduleOptions = activeSchedule?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
     { label: '미응답자에게 알림 보내기', icon: 'notifications-outline', onPress: handleSendReminder },
     { label: '제목/기한 수정', icon: 'create-outline', onPress: openEditModal },
-    { label: selectedSchedule?.deadline && new Date(selectedSchedule.deadline) < new Date() ? '종료됨' : '지금 즉시 종료', 
+    { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? '종료됨' : '지금 즉시 종료', 
       icon: 'stop-circle-outline', 
       destructive: true, 
       onPress: () => {
@@ -159,8 +173,8 @@ export default function ScheduleScreen() {
     },
     { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteSchedule }
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(selectedSchedule) reportContent(selectedSchedule.id, 'schedule'); } },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(selectedSchedule) blockUser(selectedSchedule.userId); } }
+    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(activeSchedule) reportContent(activeSchedule.id, 'schedule'); } },
+    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(activeSchedule) blockUser(activeSchedule.userId); } }
   ];
 
   const renderScheduleListItem = ({ item: schedule }: { item: any }) => {
@@ -190,15 +204,15 @@ export default function ScheduleScreen() {
 
   const getHeatmapColor = (votes: number) => {
     if (votes === 0) return 'transparent';
-    const participantsTotal = Object.keys(selectedSchedule?.responses || {}).length;
+    const participantsTotal = Object.keys(activeSchedule?.responses || {}).length;
     const maxVotes = Math.max(participantsTotal, 1);
     const intensity = 0.15 + (votes / maxVotes) * 0.85;
     return theme.primary + Math.floor(intensity * 255).toString(16).padStart(2, '0');
   };
 
   const renderDetail = () => {
-    if (!selectedSchedule) return null;
-    const schedule = selectedSchedule;
+    if (!activeSchedule) return null;
+    const schedule = activeSchedule;
     const isClosed = schedule.deadline && new Date(schedule.deadline) < new Date();
     const participants = Object.keys(schedule.responses);
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
@@ -214,7 +228,7 @@ export default function ScheduleScreen() {
     })).sort((a: any, b: any) => b.votes - a.votes);
 
     return (
-      <Modal visible={!!selectedScheduleId} animationType="slide" onRequestClose={() => setSelectedScheduleId(null)}>
+      <Modal visible={!!selectedScheduleId} animationType="slide" transparent={false} onRequestClose={() => setSelectedScheduleId(null)}>
         <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
           <View style={styles.detailHeader}>
             <TouchableOpacity onPress={() => setSelectedScheduleId(null)} style={styles.closeBtn}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
@@ -392,7 +406,7 @@ export default function ScheduleScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
       <View style={styles.header}>
-        <View><Text style={[styles.headerTitle, { color: theme.text }]}>연습 일정 조율</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>가장 많이 모이는 시간을 함께 찾아보아요!</Text></View>
+        <View><Text style={[styles.headerTitle, { color: theme.text }]}>연습 일정 조율</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>가능한 시간을 함께 찾아보아요!</Text></View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }, Shadows.glow]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color="#fff" /></TouchableOpacity>
       </View>
 
