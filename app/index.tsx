@@ -31,15 +31,23 @@ export default function LoginScreen() {
     try {
       const { data, error } = await authService.signIn(email, password);
       if (error) {
-        setErrorMsg(error.message || '로그인에 실패했습니다.');
+        let msg = '로그인에 실패했습니다.';
+        if (error.message.includes('Invalid login credentials')) {
+          msg = '이메일 또는 비밀번호가 올바르지 않습니다.';
+        } else if (error.message.includes('Email not confirmed')) {
+          msg = '이메일 인증이 완료되지 않았습니다.';
+        } else {
+          msg = error.message;
+        }
+        setErrorMsg(msg);
       } else if (data?.session) {
-        // 성공 시 onAuthStateChange가 감지하여 /rooms로 보낼 것이나, 명시적으로 이동
+        // 성공 시 root layout의 guard가 /rooms로 보낼 것이나, 확실히 하기 위해 명시적으로 이동
         router.replace('/rooms');
       } else {
         setErrorMsg('로그인 정보가 올바르지 않습니다.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || '로그인 중 오류가 발생했습니다.');
+      setErrorMsg('로그인 중 시스템 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: currentColors.background }]}
     >
-      {/* 테마 토글 버튼 */}
       <TouchableOpacity 
         style={[styles.themeToggle, { backgroundColor: currentColors.card }, Shadows.soft]} 
         onPress={toggleTheme}
