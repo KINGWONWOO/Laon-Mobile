@@ -2,12 +2,28 @@ import { supabase } from '../lib/supabase';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 
 if (typeof window !== 'undefined') {
   WebBrowser.maybeCompleteAuthSession();
 }
+
+// URL에서 토큰을 정교하게 추출하는 함수
+const parseSupabaseUrl = (url: string) => {
+  const params: Record<string, string> = {};
+  const regex = /[#?&]([^=#&]+)=([^&#]*)/g;
+  let match;
+  while ((match = regex.exec(url)) !== null) {
+    params[match[1]] = match[2];
+  }
+  return {
+    access_token: params.access_token,
+    refresh_token: params.refresh_token,
+    code: params.code,
+    error: params.error,
+    error_description: params.error_description?.replace(/\+/g, ' ')
+  };
+};
 
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
@@ -18,48 +34,49 @@ export const authService = {
         path: 'auth/callback',
       });
       
-      console.log(`${logPrefix} ${provider} 로그인 시작. Redirect: ${redirectTo}`);
+      console.log(`${logPrefix} ${provider} 로그인 시도. 리디렉션 주소: ${redirectTo}`);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-          queryParams: provider === 'google' ? { prompt: 'select_account' } : { scope: 'profile_nickname,account_email' }
-        },
+        options: { redirectTo, skipBrowserRedirect: true }
       });
 
       if (error) throw error;
       if (!data?.url) throw new Error('인증 URL 생성 실패');
 
-      // 💡 안드로이드에서 브라우저가 앱으로 돌아오지 않는 문제를 위해 openAuthSessionAsync 사용
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        console.log(`${logPrefix} 브라우저 인증 성공. URL 수신 완료.`);
+        console.log(`${logPrefix} 브라우저 응답 수신: ${res.url}`);
         
-        // 1. PKCE 방식 시도 (URL에 code가 있는 경우)
-        if (res.url.includes('code=')) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
-          if (!sessionError) return { data: sessionData, error: null };
-        }
-        
-        // 2. Implicit 방식 시ed도 (URL에 access_token이 있는 경우)
-        const hash = res.url.split('#')[1] || res.url.split('?')[1];
-        if (hash && hash.includes('access_token=')) {
-          const params: any = {};
-          hash.split('&').forEach(p => { const [k, v] = p.split('='); params[k] = v; });
-          const { data: setRes, error: setErr } = await supabase.auth.setSession({
-            access_token: params.access_token,
-            refresh_token: params.refresh_token || '',
+        const { access_token, refresh_token, code } = parseSupabaseUrl(res.url);
+
+        // 1. Implicit 방식 우선 시도 (안드로이드에서 가장 확실함)
+        if (access_token) {
+          console.log(`${logPrefix} access_token 발견. 세션 수동 설정 중...`);
+          const { data: sData, error: sErr } = await supabase.auth.setSession({
+            access_token,
+            refresh_token: refresh_token || '',
           });
-          if (!setErr) return { data: setRes, error: null };
+          if (!sErr) return { data: sData, error: null };
         }
+
+        // 2. PKCE 방식 시도
+        if (code || res.url.includes('code=')) {
+          console.log(`${logPrefix} code 발견. 세션 교환 중...`);
+          const { data: pData, error: pErr } = await supabase.auth.exchangeCodeForSession(res.url);
+          if (!pErr) return { data: pData, error: null };
+          console.warn(`${logPrefix} 세션 교환 실패, 백업 확인...`);
+        }
+        
+        // 3. 최종 확인
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return { data: { session }, error: null };
       }
 
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`${logPrefix} 오류 발생:`, err);
+      console.error(`${logPrefix} 소셜 로그인 에러:`, err);
       return { data: null, error: err };
     }
   },
@@ -68,20 +85,18 @@ export const authService = {
   signInWithKakao: async () => authService.signInWithSocial('kakao'),
 
   signIn: async (email: string, password: string) => supabase.auth.signInWithPassword({ email, password }),
-
-  signOut: async () => {
-    await supabase.auth.signOut();
-  },
-
+  signOut: async () => { await supabase.auth.signOut(); },
+  
   deleteAccount: async () => {
-    // 💡 RPC 함수 호출 (Supabase에 생성되어 있어야 함)
-    const { error } = await supabase.rpc('delete_user');
-    if (error) console.warn('RPC deletion error:', error.message);
-    await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.rpc('delete_user');
+      if (error) console.error('Account deletion RPC error:', error.message);
+    } finally {
+      await supabase.auth.signOut();
+    }
   },
 
   resetPassword: async (email: string) => supabase.auth.resetPasswordForEmail(email, { redirectTo: Linking.createURL('/reset-password') }),
-
   checkEmailAvailable: async (email: string) => {
     const { data, error } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
     return { available: !data, error };
