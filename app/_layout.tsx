@@ -16,15 +16,8 @@ import { registerForPushNotificationsAsync } from '../services/NotificationServi
 if (Platform.OS !== 'web') {
   try {
     const mobileAds = require('react-native-google-mobile-ads').default;
-    mobileAds()
-      .initialize()
-      .then((adapterStatuses) => {
-        console.log('[AdMob] Initialization complete!', adapterStatuses);
-      })
-      .catch((err) => console.warn('[AdMob] Init error:', err));
-  } catch (e) {
-    console.log('[AdMob] Not available in this environment');
-  }
+    mobileAds().initialize();
+  } catch (e) {}
 }
 
 initSentry();
@@ -45,6 +38,7 @@ function RootLayoutNav() {
   }, []);
 
   useEffect(() => {
+    const logPrefix = `[Guard][${new Date().toLocaleTimeString()}]`;
     if (!isMounted || isLoadingUser) return;
 
     const currentSegment = segments[0];
@@ -52,12 +46,15 @@ function RootLayoutNav() {
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
     const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
     
-    // OAuth 콜백 파라미터가 있는 경우 리디렉션을 잠시 유보합니다.
+    // OAuth 콜백 파라미터가 있는 경우 리디렉션을 일시 유보
     const hasAuthParams = params.access_token || params.refresh_token || params.code;
+
+    console.log(`${logPrefix} isLoggedIn:${isLoggedIn}, Path:/${segments.join('/')}, isPublic:${isPublicPath}, hasParams:${!!hasAuthParams}`);
 
     if (isLoggedIn) {
       if ((isRoot || isPublicPath) && !hasAuthParams) {
         if (lastNav.current !== '/rooms') {
+          console.log(`${logPrefix} Redirecting to /rooms`);
           lastNav.current = '/rooms';
           router.replace('/rooms');
         }
@@ -65,6 +62,7 @@ function RootLayoutNav() {
     } else {
       if (!isPublicPath && !isRoot) {
         if (lastNav.current !== '/') {
+          console.log(`${logPrefix} Redirecting to LOGIN (root)`);
           lastNav.current = '/';
           router.replace('/');
         }
