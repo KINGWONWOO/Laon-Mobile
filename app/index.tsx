@@ -29,10 +29,17 @@ export default function LoginScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      await authService.signIn(email, password);
-      router.replace('/rooms');
+      const { data, error } = await authService.signIn(email, password);
+      if (error) {
+        setErrorMsg(error.message || '로그인에 실패했습니다.');
+      } else if (data?.session) {
+        // 성공 시 onAuthStateChange가 감지하여 /rooms로 보낼 것이나, 명시적으로 이동
+        router.replace('/rooms');
+      } else {
+        setErrorMsg('로그인 정보가 올바르지 않습니다.');
+      }
     } catch (err: any) {
-      setErrorMsg(err.message || '로그인에 실패했습니다.');
+      setErrorMsg(err.message || '로그인 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
