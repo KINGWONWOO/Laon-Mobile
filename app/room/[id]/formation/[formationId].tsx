@@ -12,6 +12,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
+import { OptionModal } from '../../../../components/ui/RoomComponents';
 
 const { width } = Dimensions.get('window');
 const PX_PER_SEC = 60; 
@@ -1153,4 +1154,5 @@ const styles = StyleSheet.create({
   toast: { position: 'absolute', top: 120, left: '10%', right: '10%', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', zIndex: 999, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
   toastText: { marginLeft: 10, fontWeight: 'bold', fontSize: 14 },
   analysisLoader: { position: 'absolute', top: 120, alignSelf: 'center', padding: 15, borderRadius: 12, alignItems: 'center', zIndex: 1000 },
+
 });

@@ -1,6 +1,6 @@
 import 'expo-dev-client';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState, useRef } from 'react';
@@ -27,7 +27,6 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { currentUser, isLoadingUser } = useAppContext();
   const segments = useSegments();
-  const params = useLocalSearchParams();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const lastNav = useRef('');
@@ -39,6 +38,8 @@ function RootLayoutNav() {
 
   useEffect(() => {
     const logPrefix = `[Guard][${new Date().toLocaleTimeString()}]`;
+    
+    // 💡 마운트되지 않았거나 유저 정보를 불러오는 중이면 판단을 유보합니다.
     if (!isMounted || isLoadingUser) return;
 
     const currentSegment = segments[0];
@@ -46,13 +47,11 @@ function RootLayoutNav() {
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
     const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
     
-    // OAuth 콜백 파라미터가 있는 경우 리디렉션을 일시 유보
-    const hasAuthParams = params.access_token || params.refresh_token || params.code;
-
-    console.log(`${logPrefix} isLoggedIn:${isLoggedIn}, Path:/${segments.join('/')}, isPublic:${isPublicPath}, hasParams:${!!hasAuthParams}`);
+    console.log(`${logPrefix} isLoggedIn:${isLoggedIn}, Path:/${segments.join('/')}, isPublic:${isPublicPath}`);
 
     if (isLoggedIn) {
-      if ((isRoot || isPublicPath) && !hasAuthParams) {
+      // 💡 로그인 상태인데 루트나 공용 페이지(인증 콜백 포함)에 있다면 메인으로 이동
+      if (isRoot || isPublicPath) {
         if (lastNav.current !== '/rooms') {
           console.log(`${logPrefix} Redirecting to /rooms`);
           lastNav.current = '/rooms';
@@ -60,6 +59,7 @@ function RootLayoutNav() {
         }
       }
     } else {
+      // 💡 로그아웃 상태인데 보호된 페이지에 있다면 로그인으로 이동
       if (!isPublicPath && !isRoot) {
         if (lastNav.current !== '/') {
           console.log(`${logPrefix} Redirecting to LOGIN (root)`);
@@ -68,7 +68,7 @@ function RootLayoutNav() {
         }
       }
     }
-  }, [currentUser, segments, isMounted, isLoadingUser, params]);
+  }, [currentUser, segments, isMounted, isLoadingUser, router]);
 
   if (!isMounted || (isLoadingUser && segments[0] !== 'auth')) {
     return (

@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Colors, Shadows } from '../constants/theme';
 import { StyledBackButton, DanceButton } from '../components/ui/Interactions';
-import { authService } from '../services/authService';
+import { useAppContext } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 
 function PwRule({ ok, label }: { ok: boolean; label: string }) {
@@ -41,6 +41,7 @@ export default function RegisterScreen() {
   const [timer, setTimer] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const { sendVerificationCode, checkEmailCode, verifyAndSignup } = useAppContext();
   const router = useRouter();
 
   const isCodeVerified = codeStep === 'verified';
@@ -67,7 +68,7 @@ export default function RegisterScreen() {
     }
     
     setCodeStep('sending');
-    const { sessionToken: token, error } = await authService.sendVerificationCode(email);
+    const { sessionToken: token, error } = await sendVerificationCode(email);
     
     if (error) {
       setCodeStep('idle');
@@ -94,7 +95,7 @@ export default function RegisterScreen() {
     if (!sessionToken) return;
 
     setCodeStep('verifying');
-    const { valid, error } = await authService.checkEmailCode(email, inputCode, sessionToken);
+    const { valid, error } = await checkEmailCode(email, inputCode, sessionToken);
     
     if (error || !valid) {
       setCodeStep('sent');
@@ -141,7 +142,7 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
-    const { error } = await authService.verifyAndSignup(
+    const { error } = await verifyAndSignup(
       email, inputCode, sessionToken!, password, name, phone,
     );
     setLoading(false);

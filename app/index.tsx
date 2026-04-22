@@ -18,7 +18,7 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   
-  const { themeType, setThemeType, theme } = useAppContext();
+  const { themeType, setThemeType, theme, login, loginWithSocial } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -28,7 +28,7 @@ export default function LoginScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await authService.signIn(email, password);
+      const { data, error } = await login(email, password);
       if (error) {
         let msg = '로그인에 실패했습니다.';
         if (error.message.includes('Invalid login credentials')) {
@@ -40,7 +40,6 @@ export default function LoginScreen() {
         }
         setErrorMsg(msg);
       } else if (data?.session) {
-        // 성공 시 root layout의 guard가 처리하므로 별도 replace 생략 가능하나, 명시적으로 이동 시도
         router.replace('/rooms');
       } else {
         setErrorMsg('로그인 정보가 올바르지 않습니다.');
@@ -55,7 +54,7 @@ export default function LoginScreen() {
   const handleSocialLogin = async (provider: 'google' | 'kakao') => {
     setSocialLoading(provider);
     try {
-      const { data, error } = await authService.signInWithSocial(provider);
+      const { data, error } = await loginWithSocial(provider);
       if (error) throw error;
       if (data?.session) router.replace('/rooms');
     } catch (err: any) {
@@ -145,19 +144,30 @@ export default function LoginScreen() {
 
           <View style={styles.socialButtons}>
             <TouchableOpacity 
-              style={[styles.socialBtn, { backgroundColor: currentColors.card }, Shadows.soft]}
+              style={[styles.socialBtn, { backgroundColor: currentColors.card, borderColor: '#EA433533', borderWidth: 1 }, Shadows.soft]}
               onPress={() => handleSocialLogin('google')}
-              disabled={!!socialLoading}
+              disabled={!!socialLoading || loading}
             >
-              {socialLoading === 'google' ? <ActivityIndicator size="small" /> : <Ionicons name="logo-google" size={24} color="#EA4335" />}
+              {socialLoading === 'google' ? <ActivityIndicator size="small" color="#EA4335" /> : <Ionicons name="logo-google" size={26} color="#EA4335" />}
             </TouchableOpacity>
+            
             <TouchableOpacity 
-              style={[styles.socialBtn, { backgroundColor: currentColors.card, marginLeft: 24 }, Shadows.soft]}
+              style={[styles.socialBtn, { backgroundColor: currentColors.card, marginLeft: 20, borderColor: '#FEE50033', borderWidth: 1 }, Shadows.soft]}
               onPress={() => handleSocialLogin('kakao')}
-              disabled={!!socialLoading}
+              disabled={!!socialLoading || loading}
             >
-              {socialLoading === 'kakao' ? <ActivityIndicator size="small" /> : <Ionicons name="chatbubble" size={24} color="#FEE500" />}
+              {socialLoading === 'kakao' ? <ActivityIndicator size="small" color="#FEE500" /> : <Ionicons name="chatbubble" size={26} color="#FEE500" />}
             </TouchableOpacity>
+
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity 
+                style={[styles.socialBtn, { backgroundColor: currentColors.card, marginLeft: 20, borderColor: currentColors.text + '33', borderWidth: 1 }, Shadows.soft]}
+                onPress={() => handleSocialLogin('apple')}
+                disabled={!!socialLoading || loading}
+              >
+                {socialLoading === 'apple' ? <ActivityIndicator size="small" color={currentColors.text} /> : <Ionicons name="logo-apple" size={26} color={currentColors.text} />}
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.footer}>

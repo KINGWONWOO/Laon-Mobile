@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, Image, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, Image, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch , Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../../components/ui/RoomComponents';
-import { Modal } from 'react-native';
 import { Shadows } from '../../../../constants/theme';
 
 export default function NoticeDetailScreen() {
