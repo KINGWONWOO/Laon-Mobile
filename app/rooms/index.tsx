@@ -6,7 +6,6 @@ import { useAppContext } from '../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Shadows } from '../../constants/theme';
 
 export default function RoomsScreen() {
@@ -242,11 +241,11 @@ export default function RoomsScreen() {
               </View>
 
               <View style={styles.policyRow}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://laon-dance.netlify.app/privacy-policy')}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/privacy-policy.html')}>
                   <Text style={[styles.policyText, { color: theme.textSecondary }]}>개인정보 처리방침</Text>
                 </TouchableOpacity>
                 <Text style={{ color: theme.border, marginHorizontal: 8 }}>|</Text>
-                <TouchableOpacity onPress={() => Linking.openURL('https://laon-dance.netlify.app/terms')}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/terms.html')}>
                   <Text style={[styles.policyText, { color: theme.textSecondary }]}>이용약관</Text>
                 </TouchableOpacity>
               </View>
