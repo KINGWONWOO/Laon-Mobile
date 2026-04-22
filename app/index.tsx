@@ -18,7 +18,8 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   
-  const { themeType, setThemeType, theme, login, loginWithSocial } = useAppContext();
+  // 테마 관리
+  const { themeType, setThemeType, theme } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -28,24 +29,10 @@ export default function LoginScreen() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await login(email, password);
-      if (error) {
-        let msg = '로그인에 실패했습니다.';
-        if (error.message.includes('Invalid login credentials')) {
-          msg = '이메일 또는 비밀번호가 올바르지 않습니다.';
-        } else if (error.message.includes('Email not confirmed')) {
-          msg = '이메일 인증이 완료되지 않았습니다.';
-        } else {
-          msg = error.message;
-        }
-        setErrorMsg(msg);
-      } else if (data?.session) {
-        router.replace('/rooms');
-      } else {
-        setErrorMsg('로그인 정보가 올바르지 않습니다.');
-      }
+      await authService.signIn(email, password);
+      router.replace('/rooms');
     } catch (err: any) {
-      setErrorMsg('로그인 중 시스템 오류가 발생했습니다.');
+      setErrorMsg(err.message || '로그인에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -76,6 +63,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: currentColors.background }]}
     >
+      {/* 테마 토글 버튼 */}
       <TouchableOpacity 
         style={[styles.themeToggle, { backgroundColor: currentColors.card }, Shadows.soft]} 
         onPress={toggleTheme}

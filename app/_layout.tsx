@@ -16,8 +16,15 @@ import { registerForPushNotificationsAsync } from '../services/NotificationServi
 if (Platform.OS !== 'web') {
   try {
     const mobileAds = require('react-native-google-mobile-ads').default;
-    mobileAds().initialize();
-  } catch (e) {}
+    mobileAds()
+      .initialize()
+      .then((adapterStatuses: any) => {
+        console.log('[AdMob] Initialization complete!', adapterStatuses);
+      })
+      .catch((err: any) => console.warn('[AdMob] Init error:', err));
+  } catch (e) {
+    console.log('[AdMob] Not available in this environment');
+  }
 }
 
 initSentry();
@@ -29,7 +36,9 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-  const lastNav = useRef('');
+  
+  // 💡 현재 리디렉션 중인지 확인하여 중복 실행 방지
+  const isProcessing = useRef(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -37,40 +46,36 @@ function RootLayoutNav() {
   }, []);
 
   useEffect(() => {
-    const logPrefix = `[Guard][${new Date().toLocaleTimeString()}]`;
-    
-    // 💡 마운트되지 않았거나 유저 정보를 불러오는 중이면 판단을 유보합니다.
-    if (!isMounted || isLoadingUser) return;
+    if (!isMounted || isLoadingUser || isProcessing.current) return;
 
     const currentSegment = segments[0];
     const isLoggedIn = !!currentUser;
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
     const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
-    
-    console.log(`${logPrefix} isLoggedIn:${isLoggedIn}, Path:/${segments.join('/')}, isPublic:${isPublicPath}`);
+
+    console.log(`[Guard] User: ${isLoggedIn ? 'Yes' : 'No'}, Path: /${segments.join('/')}`);
 
     if (isLoggedIn) {
-      // 💡 로그인 상태인데 루트나 공용 페이지(인증 콜백 포함)에 있다면 메인으로 이동
+      // 💡 로그인 상태인데 '로그인 화면'이나 '루트'에 있다면 /rooms로 이동
       if (isRoot || isPublicPath) {
-        if (lastNav.current !== '/rooms') {
-          console.log(`${logPrefix} Redirecting to /rooms`);
-          lastNav.current = '/rooms';
-          router.replace('/rooms');
-        }
+        isProcessing.current = true;
+        console.log('[Guard] Redirecting to /rooms');
+        router.replace('/rooms');
+        // 내비게이션 완료 후 플래그 해제
+        setTimeout(() => { isProcessing.current = false; }, 500);
       }
     } else {
-      // 💡 로그아웃 상태인데 보호된 페이지에 있다면 로그인으로 이동
+      // 비로그인 상태인데 비공개 경로에 있다면 루트(/) 로그인 화면으로
       if (!isPublicPath && !isRoot) {
-        if (lastNav.current !== '/') {
-          console.log(`${logPrefix} Redirecting to LOGIN (root)`);
-          lastNav.current = '/';
-          router.replace('/');
-        }
+        isProcessing.current = true;
+        console.log('[Guard] Redirecting to root');
+        router.replace('/');
+        setTimeout(() => { isProcessing.current = false; }, 500);
       }
     }
-  }, [currentUser, segments, isMounted, isLoadingUser, router]);
+  }, [currentUser, segments, isMounted, isLoadingUser]);
 
-  if (!isMounted || (isLoadingUser && segments[0] !== 'auth')) {
+  if (!isMounted || isLoadingUser) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
         <ActivityIndicator size="large" color="#21F3A3" />
