@@ -3,49 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>개인정보 처리방침 - LAON</title>
+    <title>개인정보 처리방침 - LAON DANCE FEEDBACK</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 40px 20px; }
-        h1 { border-bottom: 2px solid #21F3A3; padding-bottom: 10px; }
-        h2 { margin-top: 30px; color: #111; }
-        footer { margin-top: 50px; font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 20px; }
+        :root { --primary-color: #21F3A3; --text-color: #333; --bg-color: #f9fafa; }
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: var(--text-color); background-color: var(--bg-color); margin: 0; padding: 0; }
+        .container { max-width: 800px; margin: 40px auto; background: #fff; padding: 50px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .header { text-align: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid var(--primary-color); }
+        .header h1 { margin: 0; color: #111; font-size: 28px; letter-spacing: -0.5px; }
+        .header p { color: #666; margin-top: 10px; font-size: 14px; }
+        h2 { margin-top: 40px; color: #111; font-size: 20px; border-left: 4px solid var(--primary-color); padding-left: 12px; letter-spacing: -0.5px; }
+        h3 { margin-top: 25px; color: #444; font-size: 16px; }
+        p, li { font-size: 15px; color: #555; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+        .highlight { background-color: rgba(33, 243, 163, 0.15); padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #000; }
+        footer { margin-top: 60px; text-align: center; font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 20px; }
+        @media (max-width: 768px) { .container { margin: 20px; padding: 30px; } }
     </style>
 </head>
 <body>
-    <h1>개인정보 처리방침</h1>
-    <p>본 방침은 'LAON'(이하 '앱')이 사용자의 개인정보를 어떻게 수집, 사용 및 보호하는지 설명합니다.</p>
+    <div class="container">
+        <div class="header">
+            <h1>개인정보 처리방침</h1>
+            <p>시행일자: 2026년 4월 22일</p>
+        </div>
 
-    <h2>1. 수집하는 개인정보 항목</h2>
-    <p>앱은 서비스 제공을 위해 다음과 같은 최소한의 개인정보를 수집합니다.</p>
-    <ul>
-        <li>이메일 주소, 이름, 프로필 사진 (사용자 식별 및 프로필 설정용)</li>
-        <li>기기 식별자(Push Token) (푸시 알림 제공용)</li>
-        <li>사용자가 업로드한 영상 및 사진 (앱 핵심 기능 제공용)</li>
-    </ul>
+        <p>'LAON DANCE FEEDBACK'(이하 '회사' 또는 '앱')은 사용자의 개인정보 보호를 가장 중요하게 생각하며, 「개인정보 보호법」 및 Google Play 개발자 프로그램 정책(사용자 데이터 보호 규정)을 준수하고 있습니다.</p>
 
-    <h2>2. 개인정보의 수집 및 이용 목적</h2>
-    <ul>
-        <li>사용자 인증 및 계정 관리</li>
-        <li>팀(크루) 공간 생성 및 참여 서비스 제공</li>
-        <li>댄스 피드백 영상 공유 및 아카이브 저장</li>
-        <li>중요 공지사항 및 피드백 알림 전달(푸시 알림)</li>
-    </ul>
+        <h2>1. 수집하는 개인정보 항목 및 수집 방법</h2>
+        <p>회사는 원활한 서비스 제공을 위해 아래와 같은 최소한의 개인정보를 수집합니다.</p>
+        <ul>
+            <li><strong>필수 수집 항목:</strong> 소셜 로그인(Google, Kakao, Apple)을 통한 식별값, 이메일 주소, 프로필 이름, 프로필 사진</li>
+            <li><strong>서비스 이용 과정에서 생성되는 데이터:</strong> 기기 식별자(Push Token), OS 버전, 앱 사용 기록, 접속 로그, 결제 기록(정기 구독 시)</li>
+            <li><strong>사용자 생성 콘텐츠(UGC):</strong> 기기 내 사진/동영상 파일, 마이크(오디오) 데이터, 게시글, 댓글, 댄스 동선 데이터</li>
+            <li><strong>기기 접근 권한:</strong> <span class="highlight">카메라, 마이크, 사진첩(저장소) 권한</span>은 사용자가 명시적으로 허용할 때만 영상 피드백 및 아카이브 업로드를 위해 접근하며, 해당 목적 외에는 사용되지 않습니다.</li>
+        </ul>
 
-    <h2>3. 데이터 보안</h2>
-    <p>모든 데이터는 안전한 서버(HTTPS)를 통해 암호화되어 전송되며, 인가되지 않은 접근으로부터 보호됩니다.</p>
+        <h2>2. 개인정보의 수집 및 이용 목적</h2>
+        <p>수집된 데이터는 다음 목적을 위해서만 활용되며, 목적이 변경될 경우 사전 동의를 구합니다.</p>
+        <ul>
+            <li><strong>회원 관리:</strong> 본인 확인, 부정 이용 방지, 계정 생성 및 탈퇴 처리</li>
+            <li><strong>서비스 제공:</strong> 프라이빗 크루룸 개설 및 참여, 댄스 영상 업로드 및 타임스탬프 피드백, 일정 조율 및 투표 기능 제공</li>
+            <li><strong>알림 전송:</strong> 공지사항, 새로운 피드백 등록, 일정 조율 마감 등 서비스 관련 중요 푸시 알림 전송</li>
+            <li><strong>고객 지원:</strong> 문의 사항 대응, 오류(비정상 종료 등) 진단 및 앱 성능 개선</li>
+        </ul>
 
-    <h2>4. 개인정보의 제3자 제공</h2>
-    <p>앱은 사용자의 동의 없이 개인정보를 외부에 제공하지 않습니다. 다만, 법령의 규정에 의거하거나 수사 목적으로 법령에 정해진 절차와 방법에 따라 수사기관의 요구가 있는 경우는 예외로 합니다.</p>
+        <h2>3. 개인정보의 보유 및 이용 기간</h2>
+        <p>회사는 사용자가 앱 서비스를 이용하는 동안 개인정보를 보유하며, <span class="highlight">사용자가 회원 탈퇴를 요청하거나 동의를 철회하는 경우 해당 정보를 지체 없이 파기합니다.</span> 단, 관계 법령에 의하여 보존할 필요가 있는 경우 해당 법령에서 정한 기간 동안 보관합니다.</p>
 
-    <h2>5. 데이터 삭제 및 탈퇴</h2>
-    <p>사용자는 앱 내 설정 메뉴의 '회원 탈퇴' 기능을 통해 언제든지 자신의 계정과 관련 데이터를 삭제할 수 있습니다. 탈퇴 시 수집된 개인정보는 즉시 파기됩니다.</p>
+        <h2>4. 개인정보의 제3자 제공 및 위탁</h2>
+        <p>회사는 사용자의 사전 동의 없이 개인정보를 제3자에게 제공하지 않습니다. 원활한 서비스 제공을 위해 아래와 같이 업무를 위탁하고 있습니다.</p>
+        <ul>
+            <li><strong>Supabase:</strong> 데이터베이스 호스팅 및 사용자 인증 관리 (데이터 암호화 저장)</li>
+            <li><strong>Cloudflare (R2):</strong> 사용자가 업로드한 대용량 영상 및 사진 파일 저장</li>
+            <li><strong>Google AdMob:</strong> 비개인화(Non-Personalized) 광고 게재 및 분석</li>
+        </ul>
 
-    <h2>6. 문의처</h2>
-    <p>본 방침에 대한 문의사항은 개발자에게 연락 주시기 바랍니다.</p>
-    <p>이메일: hjlree@gmail.com</p>
+        <h2>5. 사용자의 권리 및 데이터 삭제 (Account Deletion)</h2>
+        <p>사용자는 언제든지 자신의 개인정보를 조회, 수정, 삭제할 수 있습니다.</p>
+        <ul>
+            <li>사용자는 앱 내 <strong>[설정] > [회원 탈퇴]</strong> 메뉴를 통해 즉시 계정 삭제를 요청할 수 있습니다.</li>
+            <li>회원 탈퇴 시 사용자의 이메일, 프로필 정보 등은 시스템에서 <span class="highlight">완전히 삭제(영구 파기)되며 복구할 수 없습니다.</span></li>
+        </ul>
 
-    <footer>
-        <p>시행일: 2026년 4월 22일</p>
-    </footer>
+        <h2>6. 개인정보 보호를 위한 기술적 대책</h2>
+        <p>회사는 해킹이나 컴퓨터 바이러스 등에 의한 개인정보 유출 및 훼손을 막기 위해 보안 통신(HTTPS/TLS)을 사용하여 데이터를 암호화 전송하며, 안전한 데이터베이스에 정보를 보관합니다.</p>
+
+        <h2>7. 개인정보 보호책임자 및 문의처</h2>
+        <p>개인정보 처리와 관련된 문의, 불만 처리, 데이터 삭제 요청 등은 아래의 연락처로 접수해 주시기 바랍니다.</p>
+        <ul>
+            <li>담당자 이메일: hjlree@gmail.com</li>
+        </ul>
+
+        <footer>
+            <p>LAON DANCE FEEDBACK | All rights reserved.</p>
+        </footer>
+    </div>
 </body>
 </html>
