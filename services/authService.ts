@@ -10,7 +10,8 @@ if (typeof window !== 'undefined') {
 }
 
 export const authService = {
-  signInWithSocial: async (provider: 'google' | 'kakao') => {
+  signInWithSocial: async (provider: 'google' | 'kakao' | 'apple') => {
+    if (provider === 'apple') return await authService.signInWithApple();
     try {
       // 💡 Redirect URI 생성 (scheme 명시)
       const redirectTo = AuthSession.makeRedirectUri({
@@ -23,6 +24,7 @@ export const authService = {
       const options: any = {
         redirectTo,
         skipBrowserRedirect: true,
+        flowType: 'pkce',
       };
 
       if (provider === 'kakao') {
@@ -47,33 +49,55 @@ export const authService = {
       if (!oauthData?.url) throw new Error('인증 URL 생성 실패');
 
       // 💡 PKCE 보안을 위해 verifier가 저장될 시간을 소폭 확보 (AsyncStorage 지연 대응)
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const res = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
         console.log(`[Auth] Success URL received: ${res.url}`);
         
-        // 💡 PKCE Flow: URL에서 code 추출 후 세션 교환
-        const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
-        
-        if (sessionError) {
-          console.warn(`[Auth] PKCE Exchange failed, trying fallback: ${sessionError.message}`);
+        // 💡 PKCE Flow인지 Implicit Flow인지 URL 분석을 통해 판단
+        const urlObj = new URL(res.url.replace('#', '?'));
+        const code = urlObj.searchParams.get('code');
+        const error = urlObj.searchParams.get('error');
+
+        if (error) {
+          throw new Error(`인증 에러: ${urlObj.searchParams.get('error_description') || error}`);
+        }
+
+        if (code) {
+          console.log('[Auth] Code found, attempting PKCE exchange');
+          const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
           
-          // Fallback: URL 파싱 시도 (Implicit flow 대비)
-          const urlObj = new URL(res.url.replace('#', '?'));
-          const access_token = urlObj.searchParams.get('access_token');
-          const refresh_token = urlObj.searchParams.get('refresh_token');
-          
-          if (access_token) {
-            console.log('[Auth] Using manual token fallback');
-            return await supabase.auth.setSession({ access_token, refresh_token: refresh_token || '' });
+          if (sessionError) {
+            console.warn(`[Auth] PKCE Exchange failed: ${sessionError.message}`);
+            // verifier 누락 등의 문제로 실패한 경우 fallback 시도
+          } else {
+            console.log('[Auth] PKCE Exchange success');
+            return { data: sessionData, error: null };
           }
-          throw sessionError;
+        }
+
+        // Fallback: URL 파싱 시도 (Implicit flow 대비 또는 PKCE 실패 시 대응)
+        console.log('[Auth] Attempting token fallback');
+        const access_token = urlObj.searchParams.get('access_token');
+        const refresh_token = urlObj.searchParams.get('refresh_token');
+        
+        if (access_token) {
+          console.log('[Auth] Using manual token fallback');
+          const { data, error: setSessionError } = await supabase.auth.setSession({ 
+            access_token, 
+            refresh_token: refresh_token || '' 
+          });
+          return { data, error: setSessionError };
         }
         
-        console.log('[Auth] PKCE Exchange success');
-        return { data: sessionData, error: null };
+        if (code && !access_token) {
+          // 코드는 있는데 exchange 실패했고 토큰도 없으면 에러
+          throw new Error('인증 코드를 세션으로 교환하는 데 실패했습니다.');
+        }
+
+        throw new Error('인증 정보를 찾을 수 없습니다.');
       }
 
       return { data: null, error: null };
