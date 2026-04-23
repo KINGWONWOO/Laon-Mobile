@@ -37,6 +37,9 @@ function RootLayoutNav() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   
+  // 💡 초기 앱 구동 시에만 로딩을 보여주기 위한 상태
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  
   // 💡 현재 리디렉션 중인지 확인하여 중복 실행 방지
   const isProcessing = useRef(false);
 
@@ -45,28 +48,32 @@ function RootLayoutNav() {
     registerForPushNotificationsAsync().catch(err => console.warn('Push error:', err));
   }, []);
 
+  // 초기 로딩 완료 처리
   useEffect(() => {
+    if (isMounted && !isLoadingUser) {
+      setIsInitialLoading(false);
+    }
+  }, [isMounted, isLoadingUser]);
+
+  useEffect(() => {
+    // 💡 isLoadingUser가 true일 때는 Guard 로직을 실행하지 않고 대기합니다.
     if (!isMounted || isLoadingUser || isProcessing.current) return;
 
     const currentSegment = segments[0];
     const isLoggedIn = !!currentUser;
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
-    // segments[0]이 undefined거나 빈 문자열이면 루트(/)로 간주
     const isRoot = segments.length <= 1 && (!segments[0] || (segments[0] as string) === '(tabs)');
 
     console.log(`[Guard] User: ${isLoggedIn ? 'Yes' : 'No'}, Path: /${segments.join('/')}`);
 
     if (isLoggedIn) {
-      // 💡 로그인 상태인데 '로그인 화면'이나 '루트'에 있다면 /rooms로 이동
       if (isRoot || isPublicPath) {
         isProcessing.current = true;
         console.log('[Guard] Redirecting to /rooms');
         router.replace('/rooms');
-        // 내비게이션 완료 후 플래그 해제
         setTimeout(() => { isProcessing.current = false; }, 500);
       }
     } else {
-      // 비로그인 상태인데 비공개 경로에 있다면 루트(/) 로그인 화면으로
       if (!isPublicPath && !isRoot) {
         isProcessing.current = true;
         console.log('[Guard] Redirecting to root');
@@ -76,7 +83,8 @@ function RootLayoutNav() {
     }
   }, [currentUser, segments, isMounted, isLoadingUser]);
 
-  if (!isMounted || isLoadingUser) {
+  // 💡 앱이 완전히 처음 켜질 때만 로딩 뷰를 보여줍니다.
+  if (!isMounted || isInitialLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
         <ActivityIndicator size="large" color="#21F3A3" />
