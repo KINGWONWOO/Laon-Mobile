@@ -285,7 +285,7 @@ export default function FeedbackScreen() {
                   </View>
                 ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
               ) : (
-                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} fullscreenOptions={{ variant: 'allow' }} contentFit="contain" />
+                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} contentFit="contain" />
               )}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>

@@ -218,8 +218,8 @@ export default function ScheduleScreen() {
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
     const isOwner = schedule.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id;
 
-    const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => o.dateTime.split(' ')[0]))).sort();
-    const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt((o.dateTime || ' 00').split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b);
+    const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => String(o.dateTime).split(' ')[0]))).sort();
+    const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt((String(o.dateTime) || ' 00').split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b);
 
     const ranked = schedule.options.map((opt: any) => ({
       ...opt,

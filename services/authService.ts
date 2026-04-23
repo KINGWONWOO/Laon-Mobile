@@ -2,23 +2,12 @@ import { supabase } from '../lib/supabase';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { Platform } from 'react-native';
 
 if (typeof window !== 'undefined') {
   WebBrowser.maybeCompleteAuthSession();
 }
-
-// 04ec068 당시 사용된 URL 토큰 추출 함수
-const extractParams = (url: string) => {
-  const params: Record<string, string> = {};
-  const query = url.split('#')[1] || url.split('?')[1];
-  if (query) {
-    query.split('&').forEach(part => {
-      const [key, value] = part.split('=');
-      params[key] = value;
-    });
-  }
-  return params;
-};
 
 export const authService = {
   signInWithSocial: async (provider: 'google' | 'kakao') => {
@@ -31,56 +20,59 @@ export const authService = {
       
       console.log(`[Auth] Starting ${provider} login with redirect: ${redirectTo}`);
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { 
-          redirectTo,
-          skipBrowserRedirect: true,
-          queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined
-        }
-      });
+      const options: any = {
+        redirectTo,
+        skipBrowserRedirect: true,
+      };
 
       if (provider === 'kakao') {
-        // 카카오 추가 권한 요청
         options.queryParams = {
           scope: 'profile_nickname,account_email',
         };
       }
 
       if (provider === 'google') {
-        // 💡 구글 로그인 시 앱(Gmail 등) 인터셉트 방지 및 계정 선택 강제
         options.queryParams = {
           prompt: 'select_account',
           access_type: 'offline',
         };
       }
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data: oauthData, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options,
       });
 
-      if (error) throw error;
-      if (!data?.url) throw new Error('인증 URL 생성 실패');
+      if (oauthError) throw oauthError;
+      if (!oauthData?.url) throw new Error('인증 URL 생성 실패');
 
-      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // 💡 PKCE 보안을 위해 verifier가 저장될 시간을 소폭 확보 (AsyncStorage 지연 대응)
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const res = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
+        console.log(`[Auth] Success URL received: ${res.url}`);
+        
         // 💡 PKCE Flow: URL에서 code 추출 후 세션 교환
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
         
         if (sessionError) {
+          console.warn(`[Auth] PKCE Exchange failed, trying fallback: ${sessionError.message}`);
+          
           // Fallback: URL 파싱 시도 (Implicit flow 대비)
           const urlObj = new URL(res.url.replace('#', '?'));
           const access_token = urlObj.searchParams.get('access_token');
           const refresh_token = urlObj.searchParams.get('refresh_token');
           
           if (access_token) {
+            console.log('[Auth] Using manual token fallback');
             return await supabase.auth.setSession({ access_token, refresh_token: refresh_token || '' });
           }
           throw sessionError;
         }
         
+        console.log('[Auth] PKCE Exchange success');
         return { data: sessionData, error: null };
       }
 
@@ -166,7 +158,7 @@ export const authService = {
     try {
       const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-      const response = await fetch(`${projectUrl}/functions/v1/send-verification-email`, {
+      const response = await fetch(`${projectUrl}/functions/v1/verify-and-signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

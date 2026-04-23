@@ -51,7 +51,8 @@ function RootLayoutNav() {
     const currentSegment = segments[0];
     const isLoggedIn = !!currentUser;
     const isPublicPath = ['register', 'forgot-password', 'reset-password', 'auth'].includes(currentSegment ?? '');
-    const isRoot = segments.length === 0 || (segments.length === 1 && !segments[0]);
+    // segments[0]이 undefined거나 빈 문자열이면 루트(/)로 간주
+    const isRoot = segments.length <= 1 && (!segments[0] || (segments[0] as string) === '(tabs)');
 
     console.log(`[Guard] User: ${isLoggedIn ? 'Yes' : 'No'}, Path: /${segments.join('/')}`);
 

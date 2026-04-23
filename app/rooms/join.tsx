@@ -26,7 +26,7 @@ export default function JoinRoomScreen() {
         Alert.alert('참여 성공', `'${room.name}' 크루룸에 참여되었습니다.`);
         router.replace('/rooms');
         setTimeout(() => {
-          router.push(`/room/${room.id}` as any);
+          router.push(`/room/${room.id as string}` as any);
         }, 100);
       } else {
         Alert.alert('참여 실패', '방 ID 또는 비밀번호가 올바르지 않습니다.');

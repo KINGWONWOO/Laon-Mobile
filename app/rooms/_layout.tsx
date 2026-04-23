@@ -43,9 +43,6 @@ export default function RoomsLayout() {
         headerShown: false,
         headerStyle: { 
           backgroundColor: Colors.background,
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 0,
         },
         headerTitleStyle: {
           fontWeight: '900',
@@ -54,10 +51,9 @@ export default function RoomsLayout() {
         },
         headerTintColor: Colors.primary,
         headerRight: () => <LogoutButton />,
-        headerShadowVisible: false,
       }}
     >
-      <Stack.Screen name="index" options={{ title: '내 방 목록', headerLeft: () => null }} />
+      <Stack.Screen name="index" options={{ title: '내 방 목록' }} />
       <Stack.Screen name="create" options={{ presentation: 'modal', title: '방 만들기' }} />
       <Stack.Screen name="join" options={{ presentation: 'modal', title: '방 참여하기' }} />
     </Stack>

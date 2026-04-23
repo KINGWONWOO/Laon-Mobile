@@ -156,14 +156,9 @@ export default function FormationListScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-                {!item.isLocal && (
-                  <View style={[styles.publishedBadge, { backgroundColor: theme.primary + '22' }]}>
-                    <Text style={{ color: theme.primary, fontSize: 10, fontWeight: 'bold' }}>공유됨</Text>
-                  </View>
-                )}
               </View>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                {item.isLocal ? '로컬 작업 중' : '서버 저장됨'} • {new Date(item.createdAt).toLocaleDateString()}
+                서버 저장됨 • {new Date(item.createdAt).toLocaleDateString()}
               </Text>
             </View>
             <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 5 }}>

@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
   label: { fontSize: 15, fontWeight: '800', marginBottom: 12, opacity: 0.8 },
   input: { borderRadius: 20, padding: 18, fontSize: 16, fontWeight: '600', marginBottom: 16 },
-  addOptBtn: { padding: 16, borderRadius: 20, borderWeight: 1.5, borderStyle: 'dashed', borderWidth: 1.5, alignItems: 'center', marginBottom: 24 },
+  addOptBtn: { padding: 16, borderRadius: 20, borderStyle: 'dashed', borderWidth: 1.5, alignItems: 'center', marginBottom: 24 },
   settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 12 },
   settingLabel: { fontSize: 16, fontWeight: '700' },
   saveBtn: { padding: 20, borderRadius: 24, alignItems: 'center', marginTop: 24 },

@@ -19,7 +19,7 @@ export default function LoginScreen() {
   const router = useRouter();
   
   // 테마 관리
-  const { themeType, setThemeType, theme } = useAppContext();
+  const { themeType, setThemeType, theme, loginWithSocial } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -38,8 +38,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'kakao') => {
-    setSocialLoading(provider);
+  const handleSocialLogin = async (provider: 'google' | 'kakao' | 'apple') => {
+    setSocialLoading(provider as any);
     try {
       const { data, error } = await loginWithSocial(provider);
       if (error) throw error;

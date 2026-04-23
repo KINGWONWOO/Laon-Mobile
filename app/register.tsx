@@ -228,7 +228,7 @@ export default function RegisterScreen() {
                   editable={timer > 0}
                 />
                 <TouchableOpacity
-                  style={[styles.codeBtn, { backgroundColor: Colors.accent }, timer === 0 && styles.codeBtnDisabled]}
+                  style={[styles.codeBtn, { backgroundColor: Colors.primary }, timer === 0 && styles.codeBtnDisabled]}
                   onPress={handleVerifyCode}
                   disabled={codeStep === 'verifying' || timer === 0}
                 >

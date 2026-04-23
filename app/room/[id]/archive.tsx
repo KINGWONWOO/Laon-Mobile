@@ -296,13 +296,16 @@ export default function ArchiveScreen() {
             ListHeaderComponent={
               <View style={styles.contentSection}>
                 <View style={styles.authorRow}>
-                  {getUserById(selectedPhoto?.userId)?.profileImage ? (
-                    <Image source={{ uri: getUserById(selectedPhoto?.userId).profileImage }} style={styles.authorAvatar} />
-                  ) : (
-                    <View style={[styles.authorAvatar, { backgroundColor: theme.primary + '15' }]}>
-                      <Text style={{ color: theme.primary, fontWeight: '800' }}>{getUserById(selectedPhoto?.userId)?.name?.[0]}</Text>
-                    </View>
-                  )}
+                  {(() => {
+                    const author = getUserById(selectedPhoto?.userId);
+                    return author?.profileImage ? (
+                      <Image source={{ uri: author.profileImage }} style={styles.authorAvatar} />
+                    ) : (
+                      <View style={[styles.authorAvatar, { backgroundColor: theme.primary + '15' }]}>
+                        <Text style={{ color: theme.primary, fontWeight: '800' }}>{author?.name?.[0] || '?'}</Text>
+                      </View>
+                    );
+                  })()}
                   <View>
                     <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || '알 수 없음'}</Text>
                     <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>

@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   noticeIconBox: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', padding: 20, paddingBottom: 40 },
-  optionContent: { borderRadius: 32, padding: 8, overflow: 'hidden', ...Shadows.card },
+  optionContent: { borderRadius: 32, padding: 8, overflow: 'hidden', ...Shadows.medium },
   optionTitle: { fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 16, marginBottom: 8, opacity: 0.6 },
   optionsList: { marginBottom: 8 },
   optionItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.05)' },

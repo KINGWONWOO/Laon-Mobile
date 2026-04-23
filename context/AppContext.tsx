@@ -1,15 +1,14 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo } from 'react';
-import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, FormationScene, TimelineEntry, Dancer, Position, FormationSettings, UserSubscription } from '../types';
+import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
+import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, UserSubscription } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { roomService } from '../services/roomService';
 import { storageService } from '../services/storageService';
 import { contentService } from '../services/contentService';
-import { authService } from '../services/authService';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Alert } from 'react-native';
-import { registerForPushNotificationsAsync } from '../services/NotificationService';
+import { authService } from '../services/authService';
 
 interface AppContextType {
   currentUser: User | null;
@@ -65,7 +64,7 @@ interface AppContextType {
   schedules: Schedule[];
   addSchedule: (rid: string, t: string, opts: string[], useNoti?: boolean, dl?: number, reminderMinutes?: number) => Promise<void>;
   updateSchedule: (id: string, updates: Partial<Schedule>) => Promise<void>;
-  respondToToSchedule: (sid: string, oids: string[]) => Promise<void>;
+  respondToSchedule: (sid: string, oids: string[]) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
   closeSchedule: (id: string) => Promise<void>;
 
@@ -112,6 +111,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
   const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const currentUserRef = useRef<User | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem('theme_type').then(val => { if (val) setThemeTypeState(val as ThemeType); });
@@ -171,7 +171,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const fetchMyProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data) {
-      setCurrentUser({ 
+      const user: User = { 
         id: data.id, 
         name: data.name || '댄서', 
         profileImage: data.profile_image,
@@ -181,21 +181,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
           isTrialUsed: data.is_trial_used || false
         } : { tier: 'free', isTrialUsed: false }
-      });
+      };
+      setCurrentUser(user);
+      currentUserRef.current = user;
     }
   };
 
   useEffect(() => {
+    let mounted = true;
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) fetchMyProfile(session.user.id);
-      setIsLoadingUser(false);
+      if (mounted) {
+        if (session) fetchMyProfile(session.user.id);
+        setIsLoadingUser(false);
+      }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) fetchMyProfile(session.user.id);
-      else setCurrentUser(null);
-      setIsLoadingUser(false);
+      if (mounted) {
+        if (session) fetchMyProfile(session.user.id);
+        else {
+          setCurrentUser(null);
+          currentUserRef.current = null;
+        }
+        setIsLoadingUser(false);
+      }
     });
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const isPro = useMemo(() => {
@@ -206,7 +219,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }, [currentUser]);
 
-  const purchasePro = useCallback(async () => {
+  const purchasePro = async () => {
     if (!currentUserRef.current) return;
     const now = Date.now();
     const nextMonth = now + (30 * 24 * 60 * 60 * 1000);
@@ -215,9 +228,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       subscription_start: new Date(now).toISOString(),
       subscription_expiry: new Date(nextMonth).toISOString(),
       is_trial_used: true
-    }).eq('id', currentUser.id);
+    }).eq('id', currentUserRef.current.id);
     if (error) throw error;
-    await fetchMyProfile(currentUser.id);
+    await fetchMyProfile(currentUserRef.current.id);
   };
 
   const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => {
@@ -246,14 +259,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const vote = votesMapped.find(v => v.id === targetId);
       if (vote) {
         targetTitle = vote.question;
-        const responders = Object.keys(vote.responses);
+        const responders = Object.keys(vote.responses || {});
         nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
       }
     } else {
       const sch = schedulesMapped.find(s => s.id === targetId);
       if (sch) {
         targetTitle = sch.title;
-        const responders = Object.keys(sch.responses);
+        const responders = Object.keys(sch.responses || {});
         nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
       }
     }
@@ -349,79 +362,79 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
   }).filter(v => !blockedUsers.includes(v.userId));
 
-  const login = async (e: string, p: string) => { await supabase.auth.signInWithPassword({ email: e, password: p }); };
-  const logout = async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); };
+  const logout = async () => { setCurrentUser(null); currentUserRef.current = null; await supabase.auth.signOut(); queryClient.clear(); };
   const deleteAccount = async () => {
-    if (!currentUser) return;
+    if (!currentUserRef.current) return;
     try {
       await supabase.rpc('delete_user');
-      await supabase.auth.signOut();
-      setCurrentUser(null);
-      queryClient.clear();
+      await logout();
     } catch (e) {
       console.error(e);
       await logout();
     }
   };
   const updateUserProfile = async (n: string, i?: string) => { 
+    if (!currentUserRef.current) return;
     let final = i; 
-    if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); 
-    await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); 
-    setCurrentUser(prev => prev ? { ...prev, name: n, profileImage: final || null } : null);
+    if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUserRef.current.id, i); 
+    await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUserRef.current.id); 
+    await fetchMyProfile(currentUserRef.current.id);
     await refreshAllData(); 
   };
-  const createRoom = async (n: string, p: string, i?: string) => { const room = await roomService.createRoom(n, p, currentUser!.id, i); await refreshAllData(); return room; };
-  const joinRoom = async (rid: string, pc: string) => { const room = await roomService.joinRoom(rid, pc, currentUser!.id); if (room) await refreshAllData(); return room; };
+  const createRoom = async (n: string, p: string, i?: string) => { if (!currentUserRef.current) return; const room = await roomService.createRoom(n, p, currentUserRef.current.id, i); await refreshAllData(); return room; };
+  const joinRoom = async (rid: string, pc: string) => { if (!currentUserRef.current) return; const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id); if (room) await refreshAllData(); return room; };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };
   const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); };
   
-  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { await contentService.addNotice(rid, currentUser!.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 공지사항', t); await refreshAllData(); };
+  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { if (!currentUserRef.current) return; await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 공지사항', t); await refreshAllData(); };
   const updateNotice = async (id: string, updates: Partial<Notice>) => { await contentService.updateNotice(id, { title: updates.title, content: updates.content, is_pinned: updates.isPinned, image_urls: updates.imageUrls }); await refreshAllData(); };
   const deleteNotice = async (id: string) => { await contentService.deleteNotice(id); await refreshAllData(); };
-  const addNoticeComment = async (nid: string, t: string, pid?: string) => { await contentService.addNoticeComment(nid, currentUser!.id, t, pid); const notice = noticesMapped.find(n => n.id === nid); if (notice && notice.userId !== currentUser!.id) sendPushNotification([notice.userId], '공지에 새로운 댓글', t); await refreshAllData(); };
+  const addNoticeComment = async (nid: string, t: string, pid?: string) => { if (!currentUserRef.current) return; await contentService.addNoticeComment(nid, currentUserRef.current.id, t, pid); const notice = noticesMapped.find(n => n.id === nid); if (notice && notice.userId !== currentUserRef.current.id) sendPushNotification([notice.userId], '공지에 새로운 댓글', t); await refreshAllData(); };
   const updateNoticeComment = async (id: string, t: string) => { await contentService.updateNoticeComment(id, t); await refreshAllData(); };
   const deleteNoticeComment = async (id: string) => { await contentService.deleteNoticeComment(id); await refreshAllData(); };
 
-  const addVideo = async (rid: string, url: string, t: string, useNoti = true) => { await contentService.addVideo(rid, currentUser!.id, url, t, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 피드백 영상', t); await refreshAllData(); };
+  const addVideo = async (rid: string, url: string, t: string, useNoti = true) => { if (!currentUserRef.current) return; await contentService.addVideo(rid, currentUserRef.current.id, url, t, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 피드백 영상', t); await refreshAllData(); };
   const updateVideo = async (id: string, t: string) => { await contentService.updateVideo(id, t); await refreshAllData(); };
   const deleteVideo = async (id: string) => { await contentService.deleteVideo(id); await refreshAllData(); };
-  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { await contentService.addVideoComment(vid, currentUser!.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUser!.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); };
+  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { if (!currentUserRef.current) return; await contentService.addVideoComment(vid, currentUserRef.current.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUserRef.current.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); };
   const updateComment = async (id: string, t: string) => { await contentService.updateVideoComment(id, t); await refreshAllData(); };
   const deleteComment = async (id: string) => { await contentService.deleteVideoComment(id); await refreshAllData(); };
 
-  const addPhoto = async (rid: string, url: string, d?: string, useNoti = true) => { await storageService.uploadToGallery(rid, currentUser!.id, url, d); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 아카이브', d || '새로운 사진'); await refreshAllData(); };
+  const addPhoto = async (rid: string, url: string, d?: string, useNoti = true) => { if (!currentUserRef.current) return; await storageService.uploadToGallery(rid, currentUserRef.current.id, url, d); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 아카이브', d || '새로운 사진'); await refreshAllData(); };
   const updatePhoto = async (id: string, d: string) => { await contentService.updatePhoto(id, d); await refreshAllData(); };
   const deletePhoto = async (id: string) => { await contentService.deletePhoto(id); await refreshAllData(); };
-  const addPhotoComment = async (phid: string, t: string, pid?: string) => { await contentService.addPhotoComment(phid, currentUser!.id, t, pid); const photo = photosMapped.find(p => p.id === phid); if (photo && photo.userId !== currentUser!.id) sendPushNotification([photo.userId], '아카이브에 새로운 댓글', t); await refreshAllData(); };
+  const addPhotoComment = async (phid: string, t: string, pid?: string) => { if (!currentUserRef.current) return; await contentService.addPhotoComment(phid, currentUserRef.current.id, t, pid); const photo = photosMapped.find(p => p.id === phid); if (photo && photo.userId !== currentUserRef.current.id) sendPushNotification([photo.userId], '아카이브에 새로운 댓글', t); await refreshAllData(); };
   const updatePhotoComment = async (id: string, t: string) => { await contentService.updatePhotoComment(id, t); await refreshAllData(); };
   const deletePhotoComment = async (id: string) => { await contentService.deletePhotoComment(id); await refreshAllData(); };
 
   const addVote = async (rid: string, q: string, opts: string[], s: any) => { 
-    const { data: v, error } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); 
+    if (!currentUserRef.current) return;
+    const { data: v, error } = await contentService.addVote(rid, currentUserRef.current.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); 
     if (error) throw error;
     if (v) {
       const { error: oError } = await contentService.addVoteOptions(v.id, opts);
       if (oError) throw oError;
     }
-    if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); 
+    if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 투표', q); 
     await refreshAllData(); 
   };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
-  const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
+  const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
   const respondToVote = async (vid: string, oids: string[]) => { 
+    if (!currentUserRef.current) return;
     const oldData = queryClient.getQueryData(['votes', roomIds]);
     if (oldData) {
       queryClient.setQueryData(['votes', roomIds], (old: any[]) => (old || []).map(v => {
         if (v.id === vid) {
-          const newResponses = (v.vote_responses || []).filter((r: any) => r.user_id !== currentUser!.id);
-          newResponses.push({ user_id: currentUser!.id, option_ids: oids });
+          const newResponses = (v.vote_responses || []).filter((r: any) => r.user_id !== currentUserRef.current?.id);
+          newResponses.push({ user_id: currentUserRef.current?.id, option_ids: oids });
           return { ...v, vote_responses: newResponses };
         }
         return v;
       }));
     }
     try {
-      await contentService.respondToVote(vid, currentUser!.id, oids); 
+      await contentService.respondToVote(vid, currentUserRef.current.id, oids); 
     } catch (e) {
       if (oldData) queryClient.setQueryData(['votes', roomIds], oldData);
       throw e;
@@ -431,31 +444,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); };
 
   const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { 
-    const { data: s, error } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes); 
+    if (!currentUserRef.current) return;
+    const { data: s, error } = await contentService.addSchedule(rid, currentUserRef.current.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes); 
     if (error) throw error;
     if (s) {
       const { error: oError } = await contentService.addScheduleOptions(s.id, opts);
       if (oError) throw oError;
     }
-    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 조율', t); 
+    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 일정 조율', t); 
     await refreshAllData(); 
   };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
-  const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
+  const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
   const respondToSchedule = async (sid: string, oids: string[]) => { 
+    if (!currentUserRef.current) return;
     const oldData = queryClient.getQueryData(['schedules', roomIds]);
     if (oldData) {
       queryClient.setQueryData(['schedules', roomIds], (old: any[]) => (old || []).map(s => {
         if (s.id === sid) {
-          const newResponses = (s.schedule_responses || []).filter((r: any) => r.user_id !== currentUser!.id);
-          newResponses.push({ user_id: currentUser!.id, option_ids: oids });
+          const newResponses = (s.schedule_responses || []).filter((r: any) => r.user_id !== currentUserRef.current?.id);
+          newResponses.push({ user_id: currentUserRef.current?.id, option_ids: oids });
           return { ...s, schedule_responses: newResponses };
         }
         return s;
       }));
     }
     try {
-      await contentService.respondToSchedule(sid, currentUser!.id, oids); 
+      await contentService.respondToSchedule(sid, currentUserRef.current.id, oids); 
     } catch (e) {
       if (oldData) queryClient.setQueryData(['schedules', roomIds], oldData);
       throw e;
@@ -466,20 +481,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const markItemAsAccessed = async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); };
 
-  const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => { if (!currentUser?.id) throw new Error('로그인이 필요합니다.'); const newId = Math.random().toString(36).substr(2, 9); const newFormation: Formation = { id: newId, roomId: rid, userId: currentUser.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; const localRaw = await AsyncStorage.getItem('local_formations'); const local = localRaw ? JSON.parse(localRaw) : []; await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); await refreshAllData(); return newId; };
+  const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => { if (!currentUserRef.current) throw new Error('로그인이 필요합니다.'); const newId = Math.random().toString(36).substr(2, 9); const newFormation: Formation = { id: newId, roomId: rid, userId: currentUserRef.current.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; const localRaw = await AsyncStorage.getItem('local_formations'); const local = localRaw ? JSON.parse(localRaw) : []; await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); await refreshAllData(); return newId; };
   const updateFormation = async (fid: string, updates: Partial<Formation>) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.map((f: any) => f.id === fid ? { ...f, ...updates } : f))); await refreshAllData(); return; } } await contentService.updateRemoteFormation(fid, updates); await refreshAllData(); };
   const deleteFormation = async (fid: string) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid))); await refreshAllData(); return; } } await contentService.deleteRemoteFormation(fid); await refreshAllData(); };
   const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
+    if (!currentUserRef.current) return;
     let formation = (formationsQuery.data as any[] || []).find(f => f.id === formationId);
     const finalData = currentData?.data || formation?.data;
     const finalSettings = currentData?.settings || formation?.settings;
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
     if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
-    const { data: remote, error } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData);
+    const { data: remote, error } = await contentService.publishFormation(roomId, currentUserRef.current.id, title, finalAudioUrl || '', finalSettings, finalData);
     if (error) throw error;
     await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
     await refreshAllData();
-  }, [queryClient, roomIds, refreshAllData]);
+  };
 
   const contextValue = useMemo(() => ({
     currentUser, isLoadingUser, 
@@ -488,173 +504,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     sendVerificationCode: async (e: string) => authService.sendVerificationCode(e),
     checkEmailCode: async (e: string, c: string, t: string) => authService.checkEmailCode(e, c, t),
     verifyAndSignup: async (e: string, c: string, t: string, p: string, n: string, ph: string) => authService.verifyAndSignup(e, c, t, p, n, ph),
-    updateUserProfile: async (n: string, i?: string) => { 
-        let final = i; 
-        if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUser!.id, i); 
-        await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUser!.id); 
-        await fetchMyProfile(currentUser!.id); 
-        await refreshAllData(); 
-    },
-    logout: async () => { setCurrentUser(null); await supabase.auth.signOut(); queryClient.clear(); },
-    deleteAccount: async () => { try { await supabase.rpc('delete_user'); await supabase.auth.signOut(); setCurrentUser(null); queryClient.clear(); } catch (e) { await supabase.auth.signOut(); setCurrentUser(null); queryClient.clear(); } },
-    blockUser, reportContent, blockedUsers, rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote,
-    createRoom: async (n: string, p: string, i?: string) => { const room = await roomService.createRoom(n, p, currentUser!.id, i); await refreshAllData(); return room; },
-    joinRoom: async (rid: string, pc: string) => { const room = await roomService.joinRoom(rid, pc, currentUser!.id); if (room) await refreshAllData(); return room; },
-    updateRoom: async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); },
-    deleteRoom: async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); },
-    notices: noticesMapped, 
-    addNotice: async (rid: string, t: string, c: string, p = false, imgs = [], useNoti = true) => { 
-        await contentService.addNotice(rid, currentUser!.id, t, c, p, imgs, useNoti); 
-        if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 공지사항', t); 
-        await refreshAllData(); 
-    },
-    updateNotice: async (id: string, updates: Partial<Notice>) => { await contentService.updateNotice(id, { title: updates.title, content: updates.content, is_pinned: updates.isPinned, image_urls: updates.imageUrls }); await refreshAllData(); },
-    deleteNotice: async (id: string) => { await contentService.deleteNotice(id); await refreshAllData(); },
-    addNoticeComment: async (nid: string, t: string, pid?: string) => { await contentService.addNoticeComment(nid, currentUser!.id, t, pid); const notice = noticesMapped.find(n => n.id === nid); if (notice && notice.userId !== currentUser!.id) sendPushNotification([notice.userId], '공지에 새로운 댓글', t); await refreshAllData(); },
-    updateNoticeComment: async (id: string, t: string) => { await contentService.updateNoticeComment(id, t); await refreshAllData(); },
-    deleteNoticeComment: async (id: string) => { await contentService.deleteNoticeComment(id); await refreshAllData(); },
-    videos: videosMapped, 
-    addVideo: async (rid: string, url: string, t: string, useNoti = true) => { 
-        await contentService.addVideo(rid, currentUser!.id, url, t, useNoti); 
-        if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 피드백 영상', t); 
-        await refreshAllData(); 
-    },
-    updateVideo: async (id: string, t: string) => { await contentService.updateVideo(id, t); await refreshAllData(); },
-    deleteVideo: async (id: string) => { await contentService.deleteVideo(id); await refreshAllData(); },
-    addComment: async (vid: string, t: string, ts: number, pid?: string) => { await contentService.addVideoComment(vid, currentUser!.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUser!.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); },
-    updateComment: async (id: string, t: string) => { await contentService.updateVideoComment(id, t); await refreshAllData(); },
-    deleteComment: async (id: string) => { await contentService.deleteVideoComment(id); await refreshAllData(); },
-    photos: photosMapped, 
-    addPhoto: async (rid: string, url: string, d?: string, useNoti = true) => { 
-        await storageService.uploadToGallery(rid, currentUser!.id, url, d); 
-        if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 아카이브', d || '새로운 사진'); 
-        await refreshAllData(); 
-    },
-    updatePhoto: async (id: string, d: string) => { await contentService.updatePhoto(id, d); await refreshAllData(); },
-    deletePhoto: async (id: string, url: string) => { await contentService.deletePhoto(id); await refreshAllData(); },
-    addPhotoComment: async (phid: string, t: string, pid?: string) => { await contentService.addPhotoComment(phid, currentUser!.id, t, pid); const photo = photosMapped.find(p => p.id === phid); if (photo && photo.userId !== currentUser!.id) sendPushNotification([photo.userId], '아카이브에 새로운 댓글', t); await refreshAllData(); },
-    updatePhotoComment: async (id: string, t: string) => { await contentService.updatePhotoComment(id, t); await refreshAllData(); },
-    deletePhotoComment: async (id: string) => { await contentService.deletePhotoComment(id); await refreshAllData(); },
-    markItemAsAccessed: async (type: string, id: string) => { await supabase.from(type === 'video' ? 'videos' : 'gallery_items').update({ last_accessed_at: new Date() }).eq('id', id); },
-    schedules: schedulesMapped, 
-    addSchedule: async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, rm?: number) => { 
-        const { data: s } = await contentService.addSchedule(rid, currentUser!.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, rm); 
-        if (s) await contentService.addScheduleOptions(s.id, opts); 
-        if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 일정 조율', t); 
-        await refreshAllData(); 
-    },
-    updateSchedule: async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.use_notification, reminder_before: updates.reminder_before }); await refreshAllData(); },
-    respondToSchedule, 
-    deleteSchedule: async (id: string) => { await contentService.deleteSchedule(id); await refreshAllData(); },
-    closeSchedule: async (id: string) => { 
-        await contentService.updateSchedule(id, { deadline: new Date().toISOString() }); 
-        const sch = schedulesMapped.find(s => s.id === id); 
-        if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); 
-        await refreshAllData(); 
-    },
-    votes: votesMapped, 
-    addVote: async (rid: string, q: string, opts: string[], s: any) => { 
-        const { data: v } = await contentService.addVote(rid, currentUser!.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); 
-        if (v) await contentService.addVoteOptions(v.id, opts); 
-        if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUser?.id), '새로운 투표', q); 
-        await refreshAllData(); 
-    },
-    updateVote: async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.use_notification, reminder_before: updates.reminder_before }); await refreshAllData(); },
-    respondToVote, 
-    deleteVote: async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); },
-    closeVote: async (id: string) => { 
-        await contentService.updateVote(id, { deadline: new Date().toISOString() }); 
-        const vote = votesMapped.find(v => v.id === id); 
-        if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUser?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); 
-        await refreshAllData(); 
-    },
-    formations: formationsQuery.data || [], 
-    addFormation: async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => { 
-        const newId = Math.random().toString(36).substr(2, 9); 
-        const newFormation: Formation = { id: newId, roomId: rid, userId: currentUser!.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; 
-        const localRaw = await AsyncStorage.getItem('local_formations'); 
-        const local = localRaw ? JSON.parse(localRaw) : []; 
-        await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); 
-        await refreshAllData(); 
-        return newId; 
-    },
-    updateFormation: async (fid: string, updates: Partial<Formation>) => { 
-        const localRaw = await AsyncStorage.getItem('local_formations'); 
-        if (localRaw) { 
-            const local = JSON.parse(localRaw); 
-            if (local.some((f: any) => f.id === fid)) { 
-                await AsyncStorage.setItem('local_formations', JSON.stringify(local.map((f: any) => f.id === fid ? { ...f, ...updates } : f))); 
-                await refreshAllData(); 
-                return; 
-            } 
-        } 
-        await contentService.updateRemoteFormation(fid, updates); 
-        await refreshAllData(); 
-    },
-    deleteFormation: async (fid: string) => { 
-        const localRaw = await AsyncStorage.getItem('local_formations'); 
-        if (localRaw) { 
-            const local = JSON.parse(localRaw); 
-            if (local.some((f: any) => f.id === fid)) { 
-                await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid))); 
-                await refreshAllData(); 
-                return; 
-            } 
-        } 
-        await contentService.deleteRemoteFormation(fid); 
-        await refreshAllData(); 
-    },
-    publishFormationAsFeedback: async (roomId: string, formationId: string, title: string, currentData?: any) => { 
-        let formation = (formationsQuery.data as any[] || []).find(f => f.id === formationId); 
-        const finalData = currentData?.data || formation?.data; 
-        const finalSettings = currentData?.settings || formation?.settings; 
-        const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl; 
-        if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.'); 
-        const { data: remote } = await contentService.publishFormation(roomId, currentUser!.id, title, finalAudioUrl || '', finalSettings, finalData); 
-        await contentService.addVideo(roomId, currentUser!.id, `formation://${remote.id}`, `[동선] ${title}`, true);
-        await refreshAllData(); 
-    },
-    refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme, updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, 
-    sendProReminder: async (roomId: string, type: 'vote' | 'schedule', targetId: string) => { 
-        const rooms = queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || []; 
-        const room = rooms.find(r => r.id === roomId); 
-        if (!room) return; 
-        let targetTitle = ''; 
-        let nonResponders: string[] = []; 
-        if (type === 'vote') { 
-            const vote = votesMapped.find(v => v.id === targetId); 
-            if (vote) { 
-                targetTitle = vote.question; 
-                nonResponders = (room.members || []).filter(mid => !(vote.responses[mid] || []).length && mid !== currentUser?.id); 
-            } 
-        } else { 
-            const sch = schedulesMapped.find(s => s.id === targetId); 
-            if (sch) { 
-                targetTitle = sch.title; 
-                nonResponders = (room.members || []).filter(mid => !(sch.responses[mid] || []).length && mid !== currentUser?.id); 
-            } 
-        } 
-        if (nonResponders.length > 0) await sendPushNotification(nonResponders, '응답 요청', `"${targetTitle}"에 아직 참여하지 않으셨습니다.`); 
-    }
+    updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers,
+    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
+    notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
+    videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
+    photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
+    schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule,
+    votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
+    formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
+    refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
+    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder
   }), [
-    currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, blockedUsers, roomProfiles, themeType, customColor, customBackgroundColor, theme, isPro, 
-    noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,
-    refreshAllData, blockUser, reportContent, getUserById, respondToVote, respondToSchedule, checkProAccess, getRoomUserProfile, sendPushNotification, fetchMyProfile, queryClient
+    currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data, 
+    themeType, customColor, customBackgroundColor, theme, roomProfiles, blockedUsers, isPro
   ]);
 
   return (
-    <AppContext.Provider value={{
-      currentUser, isLoadingUser, login, updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers,
-      rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
-      notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
-      videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
-      photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
-      schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule,
-      votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
-      formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
-      refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-      updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

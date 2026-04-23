@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, maxHeight: 100, marginRight: 10, ...Shadows.soft },
   sendBtn: { width: 44, height: 44, borderRadius: 999, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%', ...Shadows.card },
+  modalContent: { padding: 24, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '90%', ...Shadows.medium },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   submitBtn: { padding: 15, borderRadius: 28, alignItems: 'center', marginTop: 10, ...Shadows.soft },

@@ -18,7 +18,7 @@ interface ButtonProps {
   children?: React.ReactNode;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  variant?: 'primary' | 'secondary' | 'accent' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'apple';
   icon?: any;
   soundEffect?: 'tap' | 'success' | 'error' | 'pop';
   loading?: boolean;
@@ -59,14 +59,15 @@ export const DanceButton = ({
     switch (variant) {
       case 'primary': return Colors.primary;
       case 'secondary': return Colors.secondary;
-      case 'accent': return Colors.accent;
+      case 'accent': return Colors.primary; // Accent replaced with primary
       case 'ghost': return 'transparent';
+      case 'apple': return '#000000';
       default: return Colors.primary;
     }
   };
 
   const getTextColor = () => {
-    if (variant === 'primary' || variant === 'accent') return '#FFFFFF';
+    if (variant === 'primary' || variant === 'accent' || variant === 'apple') return '#FFFFFF';
     if (variant === 'ghost') return Colors.textSecondary;
     return Colors.text;
   };

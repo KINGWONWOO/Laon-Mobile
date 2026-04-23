@@ -678,7 +678,7 @@ export default function FormationEditorScreen() {
       setCreatePast(prev => [...prev, current]); setCreateFuture(prev => prev.slice(1));
       setDancers(next.dancers); setScenes(next.scenes); setTimeline(next.timeline); setAudioUrl(next.audioUrl);
       const active = next.scenes.find(s => s.id === activeSceneId);
-      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = next.positions[dId]; });
+      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = (next as any).positions[dId]; });
     } else {
       if (placeFuture.length === 0) return;
       const next = placeFuture[0];
