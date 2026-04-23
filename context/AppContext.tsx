@@ -401,8 +401,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUserRef.current) return;
     let final = i; 
     if (i && !i.startsWith('http')) final = await storageService.uploadProfileImage('user', currentUserRef.current.id, i); 
-    await supabase.from('profiles').update({ name: n, profile_image: final }).eq('id', currentUserRef.current.id); 
-    await fetchMyProfile(currentUserRef.current.id);
+    
+    // 💡 update 대신 upsert를 사용하여 레코드가 없으면 생성하도록 수정
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.from('profiles').upsert({ 
+      id: currentUserRef.current.id, 
+      name: n, 
+      profile_image: final,
+      email: session?.user?.email // 이메일 정보도 함께 저장
+    }); 
+    
+    await fetchMyProfile(currentUserRef.current.id, session?.user);
     await refreshAllData(); 
   };
   const createRoom = async (n: string, p: string, i?: string) => { if (!currentUserRef.current) return; const room = await roomService.createRoom(n, p, currentUserRef.current.id, i); await refreshAllData(); return room; };
