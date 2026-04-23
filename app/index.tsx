@@ -28,10 +28,14 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setErrorMsg(null);
+    console.log('[LoginScreen] Attempting email login:', email);
     try {
-      await authService.signIn(email, password);
+      const { data, error } = await authService.signIn(email, password);
+      if (error) throw error;
+      console.log('[LoginScreen] Login success, navigating to rooms');
       router.replace('/rooms');
     } catch (err: any) {
+      console.error('[LoginScreen] Login error:', err);
       setErrorMsg(err.message || '로그인에 실패했습니다.');
     } finally {
       setLoading(false);
@@ -39,11 +43,18 @@ export default function LoginScreen() {
   };
 
   const handleSocialLogin = async (provider: 'google' | 'kakao' | 'apple') => {
+    console.log(`[LoginScreen] Starting social login: ${provider}`);
     setSocialLoading(provider as any);
     try {
       const { data, error } = await loginWithSocial(provider);
+      console.log(`[LoginScreen] ${provider} login response:`, { hasData: !!data, hasSession: !!data?.session, error: error?.message });
       if (error) throw error;
-      if (data?.session) router.replace('/rooms');
+      if (data?.session) {
+        console.log(`[LoginScreen] ${provider} session found, navigating to rooms`);
+        router.replace('/rooms');
+      } else {
+        console.log(`[LoginScreen] ${provider} login completed but no session yet (might be waiting for redirect/callback)`);
+      }
     } catch (err: any) {
       console.error(`[SocialAuth] Error:`, err);
       Alert.alert('알림', `${provider} 로그인 중 오류가 발생했습니다.\n${err.message || ''}`);

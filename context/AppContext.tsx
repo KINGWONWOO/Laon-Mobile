@@ -168,43 +168,94 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const fetchMyProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
-      const user: User = { 
-        id: data.id, 
-        name: data.name || '댄서', 
-        profileImage: data.profile_image,
-        subscription: data.subscription_tier ? {
-          tier: data.subscription_tier,
-          startDate: data.subscription_start ? new Date(data.subscription_start).getTime() : undefined,
-          expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
-          isTrialUsed: data.is_trial_used || false
-        } : { tier: 'free', isTrialUsed: false }
-      };
-      setCurrentUser(user);
-      currentUserRef.current = user;
+  // 프로필 가져오기 로직 완벽 재구성
+  const fetchMyProfile = async (userId: string, sessionUser?: any) => {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.warn('[AppContext] Profile query warning:', error.message);
+      }
+
+      if (data) {
+        const user: User = { 
+          id: data.id, 
+          name: data.name || sessionUser?.user_metadata?.name || '댄서', 
+          profileImage: data.profile_image || sessionUser?.user_metadata?.avatar_url || null,
+          subscription: data.subscription_tier ? {
+            tier: data.subscription_tier,
+            startDate: data.subscription_start ? new Date(data.subscription_start).getTime() : undefined,
+            expiryDate: data.subscription_expiry ? new Date(data.subscription_expiry).getTime() : undefined,
+            isTrialUsed: data.is_trial_used || false
+          } : { tier: 'free', isTrialUsed: false }
+        };
+        setCurrentUser(user);
+        currentUserRef.current = user;
+      } else {
+        // 프로필 테이블에 데이터가 없는 경우를 위한 완벽한 Fallback 처리
+        console.log('[AppContext] No profile in DB, using fallback session data.');
+        const fallbackUser: User = {
+          id: userId,
+          name: sessionUser?.user_metadata?.name || sessionUser?.user_metadata?.full_name || '댄서',
+          profileImage: sessionUser?.user_metadata?.avatar_url || null,
+          subscription: { tier: 'free', isTrialUsed: false }
+        };
+        setCurrentUser(fallbackUser);
+        currentUserRef.current = fallbackUser;
+      }
+    } catch (err: any) {
+      console.error('[AppContext] Critical error in fetchMyProfile:', err);
+      // 치명적 에러 발생 시에도 앱이 동작하도록 fallback 제공
+      if (sessionUser) {
+        const fallbackUser: User = {
+          id: userId,
+          name: sessionUser?.user_metadata?.name || sessionUser?.user_metadata?.full_name || '댄서',
+          profileImage: sessionUser?.user_metadata?.avatar_url || null,
+          subscription: { tier: 'free', isTrialUsed: false }
+        };
+        setCurrentUser(fallbackUser);
+        currentUserRef.current = fallbackUser;
+      }
     }
   };
 
+  // Auth 초기화 및 감지 로직 재구성
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) {
-        if (session) fetchMyProfile(session.user.id);
-        setIsLoadingUser(false);
-      }
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) {
-        if (session) fetchMyProfile(session.user.id);
-        else {
-          setCurrentUser(null);
-          currentUserRef.current = null;
+
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+        
+        if (session) {
+          await fetchMyProfile(session.user.id, session.user);
         }
-        setIsLoadingUser(false);
+      } catch (err) {
+        console.error('[AppContext] Initialization error:', err);
+      } finally {
+        if (mounted) setIsLoadingUser(false);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      if (session) {
+        if (currentUserRef.current?.id !== session.user.id) {
+          setIsLoadingUser(true);
+          await fetchMyProfile(session.user.id, session.user);
+          if (mounted) setIsLoadingUser(false);
+        }
+      } else {
+        setCurrentUser(null);
+        currentUserRef.current = null;
+        if (mounted) setIsLoadingUser(false);
       }
     });
+
     return () => {
       mounted = false;
       subscription.unsubscribe();

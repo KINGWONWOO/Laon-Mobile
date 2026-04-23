@@ -118,25 +118,35 @@ export const authService = {
   signInWithApple: async () => {
     if (Platform.OS !== 'ios') return { data: null, error: new Error('Apple 로그인은 iOS에서만 지원됩니다.') };
     try {
+      console.log('[Auth] Starting Apple login');
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
+      console.log('[Auth] Apple credential received');
       if (!credential.identityToken) throw new Error('Apple 인증 토큰을 받지 못했습니다.');
-      return await supabase.auth.signInWithIdToken({
+      
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
+      
+      console.log('[Auth] Supabase Apple login result:', { hasData: !!data, error: error?.message });
+      return { data, error };
     } catch (e: any) {
+      console.error('[Auth] Apple login error:', e);
       if (e.code === 'ERR_REQUEST_CANCELED') return { data: null, error: null };
       return { data: null, error: e };
     }
   },
 
   signIn: async (email: string, password: string) => {
-    return await supabase.auth.signInWithPassword({ email, password });
+    console.log('[Auth] Starting email/password sign in for:', email);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('[Auth] Email sign in result:', { success: !!data?.user, error: error?.message });
+    return { data, error };
   },
 
   sendVerificationCode: async (email: string) => {
