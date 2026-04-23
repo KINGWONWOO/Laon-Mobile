@@ -210,14 +210,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setIsLoadingUser(false);
       }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (mounted) {
-        if (session) fetchMyProfile(session.user.id, session.user);
-        else {
+        if (session) {
+          // 💡 로그인이 감지되면 프로필을 가져오기 전까지 로딩 상태를 true로 유지
+          if (currentUserRef.current?.id !== session.user.id) {
+            setIsLoadingUser(true);
+            fetchMyProfile(session.user.id, session.user).then(() => {
+              if (mounted) setIsLoadingUser(false);
+            });
+          } else {
+            setIsLoadingUser(false);
+          }
+        } else {
           setCurrentUser(null);
           currentUserRef.current = null;
+          setIsLoadingUser(false);
         }
-        setIsLoadingUser(false);
       }
     });
     return () => {
