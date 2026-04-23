@@ -19,8 +19,6 @@ export const authService = {
         path: 'auth/callback',
       });
       
-      console.log(`[Auth] Starting ${provider} login with redirect: ${redirectTo}`);
-
       const options: any = {
         redirectTo,
         skipBrowserRedirect: true,
@@ -54,8 +52,6 @@ export const authService = {
       const res = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectTo);
 
       if (res.type === 'success' && res.url) {
-        console.log(`[Auth] Success URL received: ${res.url}`);
-        
         // 💡 PKCE Flow인지 Implicit Flow인지 URL 분석을 통해 판단
         const urlObj = new URL(res.url.replace('#', '?'));
         const code = urlObj.searchParams.get('code');
@@ -66,25 +62,21 @@ export const authService = {
         }
 
         if (code) {
-          console.log('[Auth] Code found, attempting PKCE exchange');
           const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
           
           if (sessionError) {
             console.warn(`[Auth] PKCE Exchange failed: ${sessionError.message}`);
             // verifier 누락 등의 문제로 실패한 경우 fallback 시도
           } else {
-            console.log('[Auth] PKCE Exchange success');
             return { data: sessionData, error: null };
           }
         }
 
         // Fallback: URL 파싱 시도 (Implicit flow 대비 또는 PKCE 실패 시 대응)
-        console.log('[Auth] Attempting token fallback');
         const access_token = urlObj.searchParams.get('access_token');
         const refresh_token = urlObj.searchParams.get('refresh_token');
         
         if (access_token) {
-          console.log('[Auth] Using manual token fallback');
           const { data, error: setSessionError } = await supabase.auth.setSession({ 
             access_token, 
             refresh_token: refresh_token || '' 
@@ -102,7 +94,6 @@ export const authService = {
 
       return { data: null, error: null };
     } catch (err: any) {
-      console.error(`[Auth] ${provider} Detail Error:`, err);
       return { data: null, error: err };
     }
   },
@@ -118,25 +109,19 @@ export const authService = {
   signInWithApple: async () => {
     if (Platform.OS !== 'ios') return { data: null, error: new Error('Apple 로그인은 iOS에서만 지원됩니다.') };
     try {
-      console.log('[Auth] Starting Apple login');
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-      console.log('[Auth] Apple credential received');
       if (!credential.identityToken) throw new Error('Apple 인증 토큰을 받지 못했습니다.');
       
-      const { data, error } = await supabase.auth.signInWithIdToken({
+      return await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
-      
-      console.log('[Auth] Supabase Apple login result:', { hasData: !!data, error: error?.message });
-      return { data, error };
     } catch (e: any) {
-      console.error('[Auth] Apple login error:', e);
       if (e.code === 'ERR_REQUEST_CANCELED') return { data: null, error: null };
       return { data: null, error: e };
     }

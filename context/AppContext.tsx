@@ -168,15 +168,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // 프로필 가져오기 로직 완벽 재구성
   const fetchMyProfile = async (userId: string, sessionUser?: any) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       
-      if (error && error.code !== 'PGRST116') {
-        console.warn('[AppContext] Profile query warning:', error.message);
-      }
-
       if (data) {
         const user: User = { 
           id: data.id, 
@@ -193,7 +188,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         currentUserRef.current = user;
       } else {
         // 프로필 테이블에 데이터가 없는 경우를 위한 완벽한 Fallback 처리
-        console.log('[AppContext] No profile in DB, using fallback session data.');
         const fallbackUser: User = {
           id: userId,
           name: sessionUser?.user_metadata?.name || sessionUser?.user_metadata?.full_name || '댄서',
@@ -203,59 +197,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setCurrentUser(fallbackUser);
         currentUserRef.current = fallbackUser;
       }
-    } catch (err: any) {
-      console.error('[AppContext] Critical error in fetchMyProfile:', err);
-      // 치명적 에러 발생 시에도 앱이 동작하도록 fallback 제공
-      if (sessionUser) {
-        const fallbackUser: User = {
-          id: userId,
-          name: sessionUser?.user_metadata?.name || sessionUser?.user_metadata?.full_name || '댄서',
-          profileImage: sessionUser?.user_metadata?.avatar_url || null,
-          subscription: { tier: 'free', isTrialUsed: false }
-        };
-        setCurrentUser(fallbackUser);
-        currentUserRef.current = fallbackUser;
-      }
+    } catch (err) {
+      console.error('[AppContext] Profile fetch error:', err);
     }
   };
 
-  // Auth 초기화 및 감지 로직 재구성
   useEffect(() => {
     let mounted = true;
-
-    const initializeAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
-        
-        if (session) {
-          await fetchMyProfile(session.user.id, session.user);
-        }
-      } catch (err) {
-        console.error('[AppContext] Initialization error:', err);
-      } finally {
-        if (mounted) setIsLoadingUser(false);
-      }
-    };
-
-    initializeAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      
-      if (session) {
-        if (currentUserRef.current?.id !== session.user.id) {
-          setIsLoadingUser(true);
-          await fetchMyProfile(session.user.id, session.user);
-          if (mounted) setIsLoadingUser(false);
-        }
-      } else {
-        setCurrentUser(null);
-        currentUserRef.current = null;
-        if (mounted) setIsLoadingUser(false);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) {
+        if (session) fetchMyProfile(session.user.id, session.user);
+        setIsLoadingUser(false);
       }
     });
-
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        if (session) fetchMyProfile(session.user.id, session.user);
+        else {
+          setCurrentUser(null);
+          currentUserRef.current = null;
+        }
+        setIsLoadingUser(false);
+      }
+    });
     return () => {
       mounted = false;
       subscription.unsubscribe();
