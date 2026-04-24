@@ -251,7 +251,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       subscription_tier: 'pro',
       subscription_start: new Date(now).toISOString(),
       subscription_expiry: new Date(expiry).toISOString(),
-      is_trial_used: true
     }).eq('id', currentUserRef.current.id);
     if (error) throw error;
     await fetchMyProfile(currentUserRef.current.id);
