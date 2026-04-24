@@ -6,6 +6,7 @@ import { useAppContext } from '../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Shadows } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -28,14 +29,20 @@ export default function SubscriptionScreen() {
   const handleCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
     if (!code) return;
-    if (code !== 'ALWAYSLAONZENA') {
-      setCouponError('유효하지 않은 쿠폰 코드입니다.');
-      return;
-    }
     setIsCouponProcessing(true);
     setCouponError('');
     try {
-      await purchasePro();
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('benefit, duration_days')
+        .eq('code', code)
+        .eq('is_active', true)
+        .single();
+      if (error || !data) {
+        setCouponError('유효하지 않은 쿠폰 코드입니다.');
+        return;
+      }
+      await purchasePro(data.duration_days);
       Alert.alert('쿠폰 적용 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
       setCouponCode('');
     } catch (e: any) {

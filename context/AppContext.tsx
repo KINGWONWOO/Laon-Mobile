@@ -95,7 +95,7 @@ interface AppContextType {
 
   // Subscription
   isPro: boolean;
-  purchasePro: () => Promise<void>;
+  purchasePro: (durationDays?: number) => Promise<void>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
 }
@@ -243,14 +243,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }, [currentUser]);
 
-  const purchasePro = async () => {
+  const purchasePro = async (durationDays: number = 30) => {
     if (!currentUserRef.current) return;
     const now = Date.now();
-    const nextMonth = now + (30 * 24 * 60 * 60 * 1000);
+    const expiry = now + (durationDays * 24 * 60 * 60 * 1000);
     const { error } = await supabase.from('profiles').update({
       subscription_tier: 'pro',
       subscription_start: new Date(now).toISOString(),
-      subscription_expiry: new Date(nextMonth).toISOString(),
+      subscription_expiry: new Date(expiry).toISOString(),
       is_trial_used: true
     }).eq('id', currentUserRef.current.id);
     if (error) throw error;
