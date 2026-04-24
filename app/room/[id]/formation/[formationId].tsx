@@ -127,78 +127,105 @@ const TransitionX = React.memo(function TransitionX({ width, left }: { width: nu
   );
 });
 
-const ResizeHandle = ({ direction, localX, localWidth, startX, startW, minX, maxX, onCommit }: any) => {
+const ResizeHandle = React.memo(function ResizeHandle({ direction, localX, localWidth, minX, maxX, onCommit, isVisible, movePanRef }: any) {
   const { theme } = useAppContext();
-  const pan = Gesture.Pan()
-    .onStart(() => {
-      'worklet';
-      startX.value = localX.value;
-      startW.value = localWidth.value;
-    })
-    .onUpdate((e) => {
-      'worklet';
-      if (direction === 'left') {
-        const newX = Math.max(minX, Math.min(startX.value + e.translationX, startX.value + startW.value - 10));
-        const actualDiff = newX - startX.value;
-        localX.value = newX;
-        localWidth.value = startW.value - actualDiff;
-      } else {
-        localWidth.value = Math.max(10, Math.min(startW.value + e.translationX, maxX - localX.value));
-      }
-    })
-    .onEnd((e) => {
-      'worklet';
-      runOnJS(onCommit)(e.translationX);
-    });
+  // Independent start values — NOT shared with localWidth to avoid compounding bug
+  const startX = useSharedValue(0);
+  const startWidth = useSharedValue(0);
+
+  const pan = useMemo(() => {
+    const g = Gesture.Pan()
+      .onStart(() => {
+        'worklet';
+        startX.value = localX.value;
+        startWidth.value = localWidth.value;
+      })
+      .onUpdate((e) => {
+        'worklet';
+        if (direction === 'left') {
+          const newX = Math.max(minX, Math.min(startX.value + e.translationX, startX.value + startWidth.value - 10));
+          localX.value = newX;
+          localWidth.value = startWidth.value - (newX - startX.value);
+        } else {
+          localWidth.value = Math.max(10, Math.min(startWidth.value + e.translationX, maxX - localX.value));
+        }
+      })
+      .onEnd(() => {
+        'worklet';
+        // Pass final visual position — NOT raw translationX which ignores clamping
+        if (direction === 'left') {
+          runOnJS(onCommit)(localX.value);
+        } else {
+          runOnJS(onCommit)(localWidth.value);
+        }
+      });
+    if (movePanRef) g.blocksExternalGesture(movePanRef);
+    return g;
+  }, [direction, localX, localWidth, startX, startWidth, minX, maxX, onCommit, movePanRef]);
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight}>
+      <Animated.View
+        style={[direction === 'left' ? styles.resizeHandleLeft : styles.resizeHandleRight, { opacity: isVisible ? 1 : 0 }]}
+        pointerEvents={isVisible ? 'auto' : 'none'}
+      >
         <View style={[styles.handleCircle, { backgroundColor: theme.text }]}>
           <Ionicons name={direction === 'left' ? "chevron-back" : "chevron-forward"} size={14} color={theme.background} />
         </View>
       </Animated.View>
     </GestureDetector>
   );
-};
+});
 
 const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes, settings }: any) {
   const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
   const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
-  const startX = useSharedValue(0);
+  const moveStartX = useSharedValue(0);
+  const isSelectedSV = useSharedValue(isSelected);
+  const movePanRef = useRef<any>(null);
 
   useEffect(() => {
     localX.value = (entry.timestampMillis / 1000) * PX_PER_SEC;
     localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
   }, [entry.timestampMillis, entry.durationMillis, localWidth, localX]);
 
+  useEffect(() => {
+    isSelectedSV.value = isSelected;
+  }, [isSelected, isSelectedSV]);
+
   const scene = scenes.find((s: any) => s.id === entry.sceneId);
 
   const animatedStyle = useAnimatedStyle(() => ({
     left: localX.value,
     width: localWidth.value,
-    backgroundColor: isSelected ? (theme.primary + 'AA') : (theme.card + 'CC'),
-    borderColor: isSelected ? theme.primary : theme.border,
-    zIndex: isSelected ? 100 : 50
+    backgroundColor: isSelectedSV.value ? (theme.primary + 'AA') : (theme.card + 'CC'),
+    borderColor: isSelectedSV.value ? theme.primary : theme.border,
+    zIndex: isSelectedSV.value ? 100 : 50
   }));
 
-  const pan = Gesture.Pan()
+  // Commit receives final pixel position, not raw translationX
+  const onCommitLeft = useCallback((finalXPx: number) => onCommitResize(entry.id, finalXPx, 'left'), [entry.id, onCommitResize]);
+  const onCommitRight = useCallback((finalWidthPx: number) => onCommitResize(entry.id, finalWidthPx, 'right'), [entry.id, onCommitResize]);
+
+  const pan = useMemo(() => Gesture.Pan()
+    .withRef(movePanRef)
     .enabled(isSelected)
     .onStart(() => {
       'worklet';
-      startX.value = localX.value;
+      moveStartX.value = localX.value;
     })
     .onUpdate((g) => {
       'worklet';
-      const newX = startX.value + g.translationX;
-      localX.value = Math.max(minX, Math.min(newX, maxX - localWidth.value));
+      localX.value = Math.max(minX, Math.min(moveStartX.value + g.translationX, maxX - localWidth.value));
     })
-    .onEnd((g) => {
+    .onEnd(() => {
       'worklet';
-      runOnJS(onCommitMove)(entry.id, g.translationX);
-    });
+      // Pass final clamped position, not raw translationX
+      runOnJS(onCommitMove)(entry.id, localX.value);
+    }),
+  [isSelected, entry.id, minX, maxX, localX, localWidth, moveStartX, onCommitMove]);
 
-  const tap = Gesture.Tap()
+  const tap = useMemo(() => Gesture.Tap()
     .runOnJS(true)
     .onEnd(() => {
       if (isSelected) {
@@ -206,7 +233,8 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
       } else {
         onSelect(entry.id);
       }
-    });
+    }),
+  [isSelected, entry.id, onDelete, onSelect]);
 
   return (
     <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
@@ -217,22 +245,22 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
           </View>
         )}
         <Text style={[styles.blockText, { color: isSelected ? theme.background : theme.text }]} numberOfLines={1}>{sceneName}</Text>
-        {isSelected && (
-          <>
-            <ResizeHandle 
-              direction="left" 
-              localX={localX} localWidth={localWidth} startX={startX} startW={localWidth}
-              minX={minX} maxX={maxX}
-              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'left')}
-            />
-            <ResizeHandle 
-              direction="right" 
-              localX={localX} localWidth={localWidth} startX={startX} startW={localWidth}
-              minX={minX} maxX={maxX}
-              onCommit={(dx: number) => onCommitResize(entry.id, dx, 'right')}
-            />
-          </>
-        )}
+        <ResizeHandle
+          direction="left"
+          localX={localX} localWidth={localWidth}
+          minX={minX} maxX={maxX}
+          onCommit={onCommitLeft}
+          isVisible={isSelected}
+          movePanRef={movePanRef}
+        />
+        <ResizeHandle
+          direction="right"
+          localX={localX} localWidth={localWidth}
+          minX={minX} maxX={maxX}
+          onCommit={onCommitRight}
+          isVisible={isSelected}
+          movePanRef={movePanRef}
+        />
       </Animated.View>
     </GestureDetector>
   );
@@ -290,7 +318,7 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
 
   return (
     <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => {
-      if (canDrag) onPress();
+      if (canDrag) onPress(dancer.id);
     }))}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
         <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
@@ -300,26 +328,18 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
   );
 });
 
-const GhostDancer = React.memo(function GhostDancer({ dancer, pos, stageWidth, stageHeight, cellSize }: any) {
+const SceneCardItem = React.memo(function SceneCardItem({ scene, isActive, dancers, settings, onSelect, onLongPress, theme }: any) {
   return (
-    <View 
-      style={[
-        styles.dancerNode, 
-        { 
-          position: 'absolute',
-          width: cellSize * 2.5,
-          transform: [
-            { translateX: (pos.x * stageWidth) - (cellSize * 1.25) },
-            { translateY: (pos.y * stageHeight) - (cellSize * 0.35) }
-          ],
-          opacity: 0.4,
-          zIndex: 0
-        }
-      ]} 
-      pointerEvents="none"
+    <TouchableOpacity
+      onLongPress={() => onLongPress(scene)}
+      onPress={() => onSelect(scene.id, isActive)}
+      style={[styles.sceneCard, { backgroundColor: theme.card, borderColor: isActive ? theme.primary : theme.border }, isActive && { backgroundColor: theme.primary + '11' }]}
     >
-      <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: 'rgba(255,255,255,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1 }]} />
-    </View>
+      <MiniFormationPreview scene={scene} dancers={dancers} settings={settings} />
+      <View style={[styles.sceneCardLabel, { backgroundColor: theme.border + '11' }]}>
+        <Text style={[styles.sceneCardText, { color: isActive ? theme.primary : theme.textSecondary }]}>{scene.name}</Text>
+      </View>
+    </TouchableOpacity>
   );
 });
 
@@ -741,7 +761,7 @@ export default function FormationEditorScreen() {
   useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data) => {
     if (data.mode === 'create') {
       const targetScene = data.scenes.find(s => s.id === data.activeId);
-      if (targetScene) { dancers.forEach(d => { if (dancerPositions[d.id]) { dancerPositions[d.id].value = withTiming(targetScene.positions[d.id] || { x: 0.5, y: 0.5 }, { duration: 400, easing: Easing.out(Easing.quad) }); } }); }
+      if (targetScene) { dancers.forEach(d => { if (dancerPositions[d.id]) { cancelAnimation(dancerPositions[d.id]); dancerPositions[d.id].value = withTiming(targetScene.positions[d.id] || { x: 0.5, y: 0.5 }, { duration: 200, easing: Easing.out(Easing.quad) }); } }); }
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
@@ -772,8 +792,44 @@ export default function FormationEditorScreen() {
 
   const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
   const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; setTimeline([...timeline, newEntry]); setShowTimelineMenu(false); };
-  const handleCommitMove = useCallback((entryId: string, totalDx: number) => { pushHistory(); const deltaMs = (totalDx / PX_PER_SEC) * 1000; setTimeline(prev => { const idx = prev.findIndex(x => x.id === entryId); if (idx === -1) return prev; const target = prev[idx], sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis), sIdx = sorted.findIndex(x => x.id === entryId), prevBlock = sorted[sIdx-1], nextBlock = sorted[sIdx+1]; let newTs = Math.max(0, target.timestampMillis + deltaMs); const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0, maxTs = nextBlock ? nextBlock.timestampMillis - target.durationMillis : Infinity; newTs = Math.max(minTs, Math.min(newTs, maxTs)); return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newTs } : e); }); }, [pushHistory]);
-  const handleCommitResize = useCallback((entryId: string, totalDx: number, dir: 'left' | 'right') => { pushHistory(); const deltaMs = (totalDx / PX_PER_SEC) * 1000; setTimeline(prev => { const sorted = [...prev].sort((a,b) => a.timestampMillis - b.timestampMillis), sIdx = sorted.findIndex(x => x.id === entryId), target = sorted[sIdx], prevBlock = sorted[sIdx-1], nextBlock = sorted[sIdx+1]; if (dir === 'left') { const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0, newStart = Math.max(minTs, Math.min(target.timestampMillis + deltaMs, target.timestampMillis + target.durationMillis - 500)), diff = target.timestampMillis - newStart; return prev.map(e => e.id === entryId ? { ...e, timestampMillis: newStart, durationMillis: target.durationMillis + diff } : e); } else { const maxTs = nextBlock ? nextBlock.timestampMillis : Infinity, newDur = Math.max(500, Math.min(target.durationMillis + deltaMs, maxTs - target.timestampMillis)); return prev.map(e => e.id === entryId ? { ...e, durationMillis: newDur } : e); } }); }, [pushHistory]);
+  const handleCommitMove = useCallback((entryId: string, finalXPx: number) => {
+    pushHistory();
+    const newTs = (finalXPx / PX_PER_SEC) * 1000;
+    setTimeline(prev => {
+      const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
+      const sIdx = sorted.findIndex(x => x.id === entryId);
+      if (sIdx === -1) return prev;
+      const target = sorted[sIdx];
+      const prevBlock = sorted[sIdx - 1], nextBlock = sorted[sIdx + 1];
+      const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
+      const maxTs = nextBlock ? nextBlock.timestampMillis - target.durationMillis : Infinity;
+      const clampedTs = Math.max(0, Math.max(minTs, Math.min(newTs, maxTs)));
+      return prev.map(e => e.id === entryId ? { ...e, timestampMillis: clampedTs } : e);
+    });
+  }, [pushHistory]);
+
+  const handleCommitResize = useCallback((entryId: string, finalPx: number, dir: 'left' | 'right') => {
+    pushHistory();
+    setTimeline(prev => {
+      const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
+      const sIdx = sorted.findIndex(x => x.id === entryId);
+      if (sIdx === -1) return prev;
+      const target = sorted[sIdx];
+      const prevBlock = sorted[sIdx - 1], nextBlock = sorted[sIdx + 1];
+      if (dir === 'left') {
+        const newStartTs = (finalPx / PX_PER_SEC) * 1000;
+        const rightEdgeTs = target.timestampMillis + target.durationMillis;
+        const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
+        const clampedStart = Math.max(minTs, Math.min(newStartTs, rightEdgeTs - 500));
+        return prev.map(e => e.id === entryId ? { ...e, timestampMillis: clampedStart, durationMillis: rightEdgeTs - clampedStart } : e);
+      } else {
+        const newDurMs = (finalPx / PX_PER_SEC) * 1000;
+        const maxTs = nextBlock ? nextBlock.timestampMillis : Infinity;
+        const clampedDur = Math.max(500, Math.min(newDurMs, maxTs - target.timestampMillis));
+        return prev.map(e => e.id === entryId ? { ...e, durationMillis: clampedDur } : e);
+      }
+    });
+  }, [pushHistory]);
   const handleDeleteEntry = useCallback((entryId: string) => { pushHistory(); setTimeline(prev => prev.filter(x => x.id !== entryId)); }, [pushHistory]);
   const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1], nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]; setScenes(nScenes); setActiveSceneId(nid); } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
   
@@ -870,6 +926,28 @@ export default function FormationEditorScreen() {
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
   const sceneNamesMap = useMemo(() => { const map: any = {}; scenes.forEach(s => { map[s.id] = s.name; }); return map; }, [scenes]);
 
+  const handleSceneCardSelect = useCallback((sceneId: string, isActive: boolean) => {
+    if (isActive) {
+      const scene = scenes.find(s => s.id === sceneId);
+      if (scene) { setSceneModalMode('rename'); setTargetSceneId(sceneId); setInputName(scene.name); setShowSceneModal(true); }
+    } else {
+      setActiveSceneId(sceneId);
+    }
+  }, [scenes]);
+
+  const handleSceneCardLongPress = useCallback((scene: any) => {
+    Alert.alert(scene.name, '작업', [
+      { text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(scene.id); setInputName(scene.name); setShowSceneModal(true); } },
+      { text: '삭제', style: 'destructive', onPress: () => { pushHistory(); setScenes((prev: any[]) => prev.filter((x: any) => x.id !== scene.id)); } },
+      { text: '취소' }
+    ]);
+  }, [pushHistory]);
+
+  const handleDancerPress = useCallback((dancerId: string) => {
+    setSelectedDancerId(dancerId);
+    setShowDancerSheet(true);
+  }, []);
+
   useEffect(() => {
     if (showExportModal || showPublishModal) {
       const now = new Date();
@@ -953,22 +1031,9 @@ export default function FormationEditorScreen() {
               </View>
               <GridLayer settings={settings} />
               
-              {/* Ghost Dancers */}
-              {mode === 'create' && activeSceneId && (
-                (() => {
-                  const currentIndex = scenes.findIndex(s => s.id === activeSceneId);
-                  const prevScene = currentIndex > 0 ? scenes[currentIndex - 1] : null;
-                  if (!prevScene) return null;
-                  return dancers.map(d => {
-                    const pos = prevScene.positions[d.id];
-                    if (!pos) return null;
-                    return <GhostDancer key={`ghost-${d.id}`} dancer={d} pos={pos} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} />;
-                  });
-                })()
-              )}
 
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={() => { setSelectedDancerId(d.id); setShowDancerSheet(true); }} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
               ))}
               <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
                 <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
@@ -1017,7 +1082,16 @@ export default function FormationEditorScreen() {
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ alignItems: 'center' }}>
                 {scenes.map(s => (
-                  <TouchableOpacity key={s.id} onLongPress={() => { Alert.alert(s.name, '작업', [{ text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } }, { text: '삭제', style: 'destructive', onPress: () => { pushHistory(); setScenes(scenes.filter(x => x.id !== s.id)); } }, { text: '취소' }]); }} onPress={() => { if (activeSceneId === s.id) { setSceneModalMode('rename'); setTargetSceneId(s.id); setInputName(s.name); setShowSceneModal(true); } else setActiveSceneId(s.id); }} style={[styles.sceneCard, { backgroundColor: theme.card, borderColor: activeSceneId === s.id ? theme.primary : theme.border }, activeSceneId === s.id && { backgroundColor: theme.primary + '11' }]}><MiniFormationPreview scene={s} dancers={dancers} settings={settings} /><View style={[styles.sceneCardLabel, { backgroundColor: theme.border + '11' }]}><Text style={[styles.sceneCardText, { color: activeSceneId === s.id ? theme.primary : theme.textSecondary }]}>{s.name}</Text></View></TouchableOpacity>
+                  <SceneCardItem
+                    key={s.id}
+                    scene={s}
+                    isActive={activeSceneId === s.id}
+                    dancers={dancers}
+                    settings={settings}
+                    theme={theme}
+                    onSelect={handleSceneCardSelect}
+                    onLongPress={handleSceneCardLongPress}
+                  />
                 ))}
               </ScrollView>
             </View>
