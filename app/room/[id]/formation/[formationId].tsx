@@ -312,7 +312,7 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
       { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
       { scale: withSpring(isSelected || isDragging.value ? 1.1 : 1) }
     ],
-    opacity: mode === 'place' ? (canDragInPlace ? 1 : 0.4) : 1,
+    opacity: 1,
     zIndex: isSelected || isDragging.value ? 100 : 1
   }));
 
@@ -1051,7 +1051,7 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={[styles.timelineWrapper, { backgroundColor: theme.card }]}>
-              <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); runOnJS(setSelectedEntryId)(null); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
+              <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
                 <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
                   <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 120 }}>
                     <WaveformBackground duration={status.duration || 60} peaks={waveformPeaks} />
