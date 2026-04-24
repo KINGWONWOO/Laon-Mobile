@@ -37,8 +37,13 @@ export default function SubscriptionScreen() {
         .select('benefit, duration_days')
         .eq('code', code)
         .eq('is_active', true)
-        .single();
-      if (error || !data) {
+        .maybeSingle();
+      if (error) {
+        console.error('[coupon] supabase error:', error);
+        setCouponError('쿠폰 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      if (!data) {
         setCouponError('유효하지 않은 쿠폰 코드입니다.');
         return;
       }
@@ -46,6 +51,7 @@ export default function SubscriptionScreen() {
       Alert.alert('쿠폰 적용 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
       setCouponCode('');
     } catch (e: any) {
+      console.error('[coupon] unexpected error:', e);
       setCouponError('쿠폰 적용 중 오류가 발생했습니다.');
     } finally {
       setIsCouponProcessing(false);
