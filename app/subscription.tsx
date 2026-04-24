@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import React, { useState, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../context/AppContext';
@@ -14,12 +14,36 @@ export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [isCouponProcessing, setIsCouponProcessing] = useState(false);
+  const couponRef = useRef<TextInput>(null);
 
   const daysLeft = useMemo(() => {
     if (!currentUser?.subscription?.expiryDate) return 0;
     const diff = currentUser.subscription.expiryDate - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [currentUser]);
+
+  const handleCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    if (code !== 'ALWAYSLAONZENA') {
+      setCouponError('유효하지 않은 쿠폰 코드입니다.');
+      return;
+    }
+    setIsCouponProcessing(true);
+    setCouponError('');
+    try {
+      await purchasePro();
+      Alert.alert('쿠폰 적용 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
+      setCouponCode('');
+    } catch (e: any) {
+      setCouponError('쿠폰 적용 중 오류가 발생했습니다.');
+    } finally {
+      setIsCouponProcessing(false);
+    }
+  };
 
   const handlePurchase = async () => {
     setIsProcessing(true);
@@ -102,6 +126,39 @@ export default function SubscriptionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!isPro && (
+          <View style={[styles.couponSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.couponHeader}>
+              <Ionicons name="ticket-outline" size={18} color={theme.primary} />
+              <Text style={[styles.couponLabel, { color: theme.text }]}>쿠폰 코드 입력</Text>
+            </View>
+            <View style={styles.couponRow}>
+              <TextInput
+                ref={couponRef}
+                style={[styles.couponInput, { color: theme.text, borderColor: couponError ? '#ff4d4f' : theme.border, backgroundColor: theme.background }]}
+                placeholder="쿠폰 코드를 입력하세요"
+                placeholderTextColor={theme.textSecondary}
+                value={couponCode}
+                onChangeText={t => { setCouponCode(t); setCouponError(''); }}
+                autoCapitalize="characters"
+                returnKeyType="done"
+                onSubmitEditing={handleCoupon}
+              />
+              <TouchableOpacity
+                style={[styles.couponApplyBtn, { backgroundColor: theme.primary }, isCouponProcessing && { opacity: 0.7 }]}
+                onPress={handleCoupon}
+                disabled={isCouponProcessing}
+              >
+                {isCouponProcessing
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.couponApplyText}>적용</Text>
+                }
+              </TouchableOpacity>
+            </View>
+            {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
+          </View>
+        )}
+
         {isPro ? (
           <LinearGradient
             colors={[theme.primary, theme.primary + 'CC']}
@@ -207,5 +264,13 @@ const styles = StyleSheet.create({
   faqItem: { gap: 4 },
   faqQ: { fontSize: 15, fontWeight: '700' },
   faqA: { fontSize: 14, fontWeight: '500', lineHeight: 20 },
-  footerInfo: { fontSize: 12, textAlign: 'center', marginTop: 40, lineHeight: 18, opacity: 0.6 }
+  footerInfo: { fontSize: 12, textAlign: 'center', marginTop: 40, lineHeight: 18, opacity: 0.6 },
+  couponSection: { borderRadius: 20, borderWidth: 1, padding: 16, marginBottom: 24 },
+  couponHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  couponLabel: { fontSize: 14, fontWeight: '700' },
+  couponRow: { flexDirection: 'row', gap: 8 },
+  couponInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, fontWeight: '600', letterSpacing: 1 },
+  couponApplyBtn: { paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  couponApplyText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  couponError: { color: '#ff4d4f', fontSize: 12, fontWeight: '600', marginTop: 8 },
 });
