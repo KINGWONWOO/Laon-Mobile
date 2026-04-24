@@ -190,8 +190,10 @@ export default function VoteScreen() {
 
             <Text style={[styles.detailTitle, { color: theme.text }]}>{vote.question}</Text>
             <View style={styles.voteMetaRow}>
-              <View style={[styles.metaPill, {backgroundColor: theme.border + '30'}]}><Text style={{fontSize: 11, color: theme.textSecondary, fontWeight:'700'}}>{vote.isAnonymous ? '익명' : '기명'}</Text></View>
-              <View style={[styles.metaPill, {backgroundColor: theme.border + '30', marginLeft: 8}]}><Text style={{fontSize: 11, color: theme.textSecondary, fontWeight:'700'}}>{vote.allowMultiple ? '복수 응답' : '단일 응답'}</Text></View>
+              {vote.isAnonymous && (
+                <View style={[styles.metaPill, {backgroundColor: theme.border + '30'}]}><Text style={{fontSize: 11, color: theme.textSecondary, fontWeight:'700'}}>익명</Text></View>
+              )}
+              <View style={[styles.metaPill, {backgroundColor: theme.border + '30', marginLeft: vote.isAnonymous ? 8 : 0}]}><Text style={{fontSize: 11, color: theme.textSecondary, fontWeight:'700'}}>{vote.allowMultiple ? '복수 응답' : '단일 응답'}</Text></View>
             </View>
 
             <View style={{marginTop: 30, gap: 12}}>
@@ -199,13 +201,13 @@ export default function VoteScreen() {
                 const isSelected = myResponses.includes(opt.id);
                 const voters = Object.entries(vote.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uid]) => uid);
                 const percentage = respondersCount > 0 ? (voters.length / respondersCount) * 100 : 0;
-                
+
                 return (
-                  <TouchableOpacity 
-                    key={opt.id} 
-                    disabled={isClosed} 
-                    activeOpacity={0.7} 
-                    style={[styles.optionCard, { backgroundColor: theme.card }, Shadows.soft, isSelected && { borderColor: theme.primary, borderWidth: 2 }]} 
+                  <TouchableOpacity
+                    key={opt.id}
+                    disabled={isClosed}
+                    activeOpacity={0.7}
+                    style={[styles.optionCard, { backgroundColor: theme.card }, Shadows.soft, isSelected && { borderColor: theme.primary, borderWidth: 2 }]}
                     onPress={() => {
                       let next;
                       if (vote.allowMultiple) {
@@ -224,14 +226,20 @@ export default function VoteScreen() {
                       <View style={[styles.progressBarBg, {backgroundColor: theme.border + '40'}]}>
                         <View style={[styles.progressBarFill, {backgroundColor: theme.primary, width: `${percentage}%`}]} />
                       </View>
-                      {!vote.isAnonymous && voters.length > 0 && (
-                        <TouchableOpacity style={{marginTop: 10}} onPress={() => { setVotersToDisplay(voters); setVoterModalTitle(`${opt.text} 투표자`); setShowVoterModal(true); }}>
-                          <View style={{flexDirection:'row', flexWrap:'wrap', gap: 4}}>
-                            {voters.map(vId => (
-                              <View key={vId} style={[styles.smallNamePill, {backgroundColor: theme.primary + '10'}]}><Text style={{fontSize: 10, color: theme.primary, fontWeight:'700'}}>{getUserById(vId)?.name || '?'}</Text></View>
-                            ))}
-                          </View>
-                        </TouchableOpacity>
+                      {!vote.isAnonymous && (
+                        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10}}>
+                          <TouchableOpacity
+                            style={[styles.viewVotersBtn, {backgroundColor: theme.primary + '12'}]}
+                            onPress={() => {
+                              setVotersToDisplay(voters);
+                              setVoterModalTitle(`${opt.text} 투표자`);
+                              setShowVoterModal(true);
+                            }}
+                          >
+                            <Ionicons name="people-outline" size={13} color={theme.primary} />
+                            <Text style={{fontSize: 11, color: theme.primary, fontWeight: '700', marginLeft: 4}}>멤버 보기 {voters.length > 0 ? `(${voters.length})` : ''}</Text>
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   </TouchableOpacity>
@@ -327,6 +335,7 @@ const styles = StyleSheet.create({
   progressBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 4 },
   smallNamePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  viewVotersBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
   resultBanner: { padding: 24, borderRadius: 32, borderWidth: 2, alignItems: 'center', marginTop: 20, borderStyle: 'dashed' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },

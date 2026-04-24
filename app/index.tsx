@@ -18,8 +18,7 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   
-  // 테마 관리
-  const { themeType, setThemeType, theme, loginWithSocial } = useAppContext();
+  const { theme, loginWithSocial } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -56,10 +55,6 @@ export default function LoginScreen() {
     }
   };
 
-  const toggleTheme = () => {
-    setThemeType(themeType === 'light' ? 'dark' : 'light');
-  };
-
   const currentColors = theme || Colors;
 
   return (
@@ -67,14 +62,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: currentColors.background }]}
     >
-      {/* 테마 토글 버튼 */}
-      <TouchableOpacity 
-        style={[styles.themeToggle, { backgroundColor: currentColors.card }, Shadows.soft]} 
-        onPress={toggleTheme}
-      >
-        <Ionicons name={themeType === 'light' ? "moon" : "sunny"} size={20} color={currentColors.primary} />
-      </TouchableOpacity>
-
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: currentColors.primary }]}>LAON</Text>
@@ -176,7 +163,6 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  themeToggle: { position: 'absolute', top: 60, right: 25, width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   scrollContent: { padding: 30, paddingTop: 120 },
   header: { marginBottom: 50 },
   title: { fontSize: 42, fontWeight: '900', letterSpacing: -1.5 },

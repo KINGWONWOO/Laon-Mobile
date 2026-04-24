@@ -382,7 +382,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return { id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})), responses: resp, viewedBy: s.viewed_by || [], useNotification: s.use_notification, reminderMinutes: s.reminder_before, deadline: s.deadline ? new Date(s.deadline).getTime() : undefined, createdAt: new Date(s.created_at).getTime() };
   }).filter(s => !blockedUsers.includes(s.userId));
   const votesMapped: Vote[] = (votesQuery.data || []).map(v => {
-    const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (v.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
+    const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (o.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
     return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
   }).filter(v => !blockedUsers.includes(v.userId));
 
@@ -484,26 +484,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
-  const respondToVote = async (vid: string, oids: string[]) => { 
+  const respondToVote = async (vid: string, oids: string[]) => {
     if (!currentUserRef.current) return;
+    const userId = currentUserRef.current.id;
     const oldData = queryClient.getQueryData(['votes', roomIds]);
-    if (oldData) {
-      queryClient.setQueryData(['votes', roomIds], (old: any[]) => (old || []).map(v => {
-        if (v.id === vid) {
-          const newResponses = (v.vote_responses || []).filter((r: any) => r.user_id !== currentUserRef.current?.id);
-          newResponses.push({ user_id: currentUserRef.current?.id, option_ids: oids });
-          return { ...v, vote_responses: newResponses };
-        }
-        return v;
-      }));
-    }
+    queryClient.setQueryData(['votes', roomIds], (old: any[]) => (old || []).map(v => {
+      if (v.id !== vid) return v;
+      const updatedOptions = (v.vote_options || []).map((opt: any) => {
+        const filtered = (opt.vote_responses || []).filter((r: any) => r.user_id !== userId);
+        if (oids.includes(opt.id)) filtered.push({ user_id: userId, option_ids: oids, vote_id: vid });
+        return { ...opt, vote_responses: filtered };
+      });
+      return { ...v, vote_options: updatedOptions };
+    }));
     try {
-      await contentService.respondToVote(vid, currentUserRef.current.id, oids); 
+      await contentService.respondToVote(vid, userId, oids);
+      queryClient.invalidateQueries({ queryKey: ['votes', roomIds] });
     } catch (e) {
       if (oldData) queryClient.setQueryData(['votes', roomIds], oldData);
       throw e;
     }
-    await refreshAllData(); 
   };
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); };
 
@@ -520,26 +520,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
-  const respondToSchedule = async (sid: string, oids: string[]) => { 
+  const respondToSchedule = async (sid: string, oids: string[]) => {
     if (!currentUserRef.current) return;
+    const userId = currentUserRef.current.id;
     const oldData = queryClient.getQueryData(['schedules', roomIds]);
-    if (oldData) {
-      queryClient.setQueryData(['schedules', roomIds], (old: any[]) => (old || []).map(s => {
-        if (s.id === sid) {
-          const newResponses = (s.schedule_responses || []).filter((r: any) => r.user_id !== currentUserRef.current?.id);
-          newResponses.push({ user_id: currentUserRef.current?.id, option_ids: oids });
-          return { ...s, schedule_responses: newResponses };
-        }
-        return s;
-      }));
-    }
+    queryClient.setQueryData(['schedules', roomIds], (old: any[]) => (old || []).map(s => {
+      if (s.id !== sid) return s;
+      const updatedOptions = (s.schedule_options || []).map((opt: any) => {
+        const filtered = (opt.schedule_responses || []).filter((r: any) => r.user_id !== userId);
+        if (oids.includes(opt.id)) filtered.push({ user_id: userId, option_ids: oids, schedule_id: sid });
+        return { ...opt, schedule_responses: filtered };
+      });
+      return { ...s, schedule_options: updatedOptions };
+    }));
     try {
-      await contentService.respondToSchedule(sid, currentUserRef.current.id, oids); 
+      await contentService.respondToSchedule(sid, userId, oids);
+      queryClient.invalidateQueries({ queryKey: ['schedules', roomIds] });
     } catch (e) {
       if (oldData) queryClient.setQueryData(['schedules', roomIds], oldData);
       throw e;
     }
-    await refreshAllData(); 
   };
   const deleteSchedule = async (id: string) => { await contentService.deleteSchedule(id); await refreshAllData(); };
 
