@@ -177,7 +177,7 @@ const ResizeHandle = React.memo(function ResizeHandle({ direction, localX, local
   );
 });
 
-const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scenes, settings }: any) {
+const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scene, settings }: any) {
   const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
   const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
   const moveStartX = useSharedValue(0);
@@ -192,8 +192,6 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
   useEffect(() => {
     isSelectedSV.value = isSelected;
   }, [isSelected, isSelectedSV]);
-
-  const scene = scenes.find((s: any) => s.id === entry.sceneId);
 
   const animatedStyle = useAnimatedStyle(() => ({
     left: localX.value,
@@ -812,8 +810,10 @@ export default function FormationEditorScreen() {
 
   const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
   const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; setTimeline([...timeline, newEntry]); setShowTimelineMenu(false); };
+  // Stable callbacks: use pushHistoryRef so these never change reference,
+  // preventing TimelineBlock re-renders and gesture recreation after each commit.
   const handleCommitMove = useCallback((entryId: string, finalXPx: number) => {
-    pushHistory();
+    pushHistoryRef.current();
     const newTs = (finalXPx / PX_PER_SEC) * 1000;
     setTimeline(prev => {
       const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -826,10 +826,11 @@ export default function FormationEditorScreen() {
       const clampedTs = Math.max(0, Math.max(minTs, Math.min(newTs, maxTs)));
       return prev.map(e => e.id === entryId ? { ...e, timestampMillis: clampedTs } : e);
     });
-  }, [pushHistory]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCommitResize = useCallback((entryId: string, finalPx: number, dir: 'left' | 'right') => {
-    pushHistory();
+    pushHistoryRef.current();
     setTimeline(prev => {
       const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
       const sIdx = sorted.findIndex(x => x.id === entryId);
@@ -849,8 +850,13 @@ export default function FormationEditorScreen() {
         return prev.map(e => e.id === entryId ? { ...e, durationMillis: clampedDur } : e);
       }
     });
-  }, [pushHistory]);
-  const handleDeleteEntry = useCallback((entryId: string) => { pushHistory(); setTimeline(prev => prev.filter(x => x.id !== entryId)); }, [pushHistory]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleDeleteEntry = useCallback((entryId: string) => {
+    pushHistoryRef.current();
+    setTimeline(prev => prev.filter(x => x.id !== entryId));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1], nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]; setScenes(nScenes); setActiveSceneId(nid); } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
   
   const handleChangeSong = async () => {
@@ -1074,7 +1080,7 @@ export default function FormationEditorScreen() {
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scenes={scenes} settings={settings} />
+                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
                       ))}
