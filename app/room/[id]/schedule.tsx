@@ -210,6 +210,97 @@ export default function ScheduleScreen() {
     return theme.primary + Math.floor(intensity * 255).toString(16).padStart(2, '0');
   };
 
+  const topBlocks = useMemo(() => {
+    if (!activeSchedule || !activeSchedule.options || activeSchedule.options.length === 0) return [];
+    const schedule = activeSchedule;
+    
+    const dateGroups: { [date: string]: any[] } = {};
+    schedule.options.forEach((opt: any) => {
+      const [date, time] = String(opt.dateTime).split(' ');
+      const hour = parseInt((time || '00').split(':')[0]);
+      if (!dateGroups[date]) dateGroups[date] = [];
+      dateGroups[date].push({ ...opt, hour });
+    });
+
+    const allBlocks: any[] = [];
+    Object.entries(dateGroups).forEach(([date, dayOptions]) => {
+      dayOptions.sort((a, b) => a.hour - b.hour);
+      const hours = dayOptions.map(o => o.hour);
+      
+      for (let i = 0; i < hours.length; i++) {
+        for (let j = i; j < hours.length; j++) {
+          if (hours[j] !== hours[i] + (j - i)) break;
+
+          const blockOptionIds = dayOptions.slice(i, j + 1).map(o => o.id);
+          const commonVoters = Object.entries(schedule.responses).filter(([uId, optIds]: any) => {
+            return blockOptionIds.every(id => optIds.includes(id));
+          }).map(([uId]) => uId);
+
+          if (commonVoters.length > 0) {
+            allBlocks.push({
+              date,
+              startHour: hours[i],
+              endHour: hours[j] + 1,
+              voters: commonVoters,
+              votes: commonVoters.length,
+              duration: (hours[j] + 1) - hours[i]
+            });
+          }
+        }
+      }
+    });
+
+    const meaningfulBlocks = allBlocks.filter(blockA => {
+      const isSubBlock = allBlocks.some(blockB => {
+        if (blockA === blockB) return false;
+        return blockA.date === blockB.date &&
+               blockA.startHour >= blockB.startHour &&
+               blockA.endHour <= blockB.endHour &&
+               blockA.votes <= blockB.votes &&
+               !(blockA.startHour === blockB.startHour && blockA.endHour === blockB.endHour);
+      });
+      const hasBetterVoterSet = allBlocks.some(blockB => {
+        return blockA.date === blockB.date &&
+               blockA.startHour === blockB.startHour &&
+               blockA.endHour === blockB.endHour &&
+               blockB.votes > blockA.votes;
+      });
+      return !isSubBlock && !hasBetterVoterSet;
+    });
+
+    meaningfulBlocks.sort((a, b) => {
+      if (b.votes !== a.votes) return b.votes - a.votes;
+      if (b.duration !== a.duration) return b.duration - a.duration;
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.startHour - b.startHour;
+    });
+
+    const unique = [];
+    const seen = new Set();
+    for (const b of meaningfulBlocks) {
+      const key = `${b.date}-${b.startHour}-${b.endHour}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(b);
+      }
+    }
+    
+    const voteValues = Array.from(new Set(unique.map(b => b.votes))).sort((a, b) => b - a);
+    const top3VoteValues = voteValues.slice(0, 3);
+    const filtered = unique.filter(b => top3VoteValues.includes(b.votes));
+
+    // Group by votes
+    const groups: { [votes: number]: any[] } = {};
+    filtered.forEach(block => {
+      if (!groups[block.votes]) groups[block.votes] = [];
+      groups[block.votes].push(block);
+    });
+
+    return Object.entries(groups)
+      .map(([votes, blocks]) => ({ votes: parseInt(votes), blocks }))
+      .sort((a, b) => b.votes - a.votes);
+  }, [activeSchedule]);
+
   const renderDetail = () => {
     if (!activeSchedule) return null;
     const schedule = activeSchedule;
@@ -357,13 +448,55 @@ export default function ScheduleScreen() {
             </View>
 
             <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
-              <Text style={[styles.rankingHeader, { color: theme.text }]}>가장 많이 모이는 시간</Text>
-              {ranked.length > 0 && ranked[0].votes > 0 ? (
-                <View style={{marginTop: 15}}>
-                  <View style={[styles.bestTimeCard, {backgroundColor: theme.primary + '10'}]}>
-                    <Text style={{color: theme.primary, fontWeight: '900', fontSize: 16}}>베스트 1위 ({ranked[0].votes}명)</Text>
-                    <Text style={{color: theme.text, fontWeight: '700', marginTop: 4, fontSize: 14}}>{new Date(ranked[0].dateTime).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })} {new Date(ranked[0].dateTime).getHours()}시</Text>
-                  </View>
+              <Text style={[styles.rankingHeader, { color: theme.text, marginBottom: 15 }]}>가장 많이 모이는 시간</Text>
+              {topBlocks.length > 0 ? (
+                <View style={{ gap: 16 }}>
+                  {topBlocks.map((group: any, index: number) => {
+                    const rankNum = index + 1;
+                    return (
+                      <View 
+                        key={index} 
+                        style={[styles.rankGroupCard, { backgroundColor: rankNum === 1 ? theme.primary + '10' : theme.background, borderColor: rankNum === 1 ? theme.primary + '20' : theme.border + '30', borderWidth: 1 }]}
+                      >
+                        <View style={styles.rankGroupHeader}>
+                          <View style={[styles.rankBadge, { backgroundColor: rankNum === 1 ? theme.primary : theme.textSecondary + '40' }]}>
+                            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{rankNum}위</Text>
+                          </View>
+                          <Text style={{ color: rankNum === 1 ? theme.primary : theme.text, fontWeight: '900', fontSize: 16, marginLeft: 10 }}>{group.votes}명</Text>
+                        </View>
+                        
+                        <View style={styles.rankGroupContent}>
+                          {group.blocks.map((block: any, bIndex: number) => (
+                            <TouchableOpacity 
+                              key={bIndex} 
+                              activeOpacity={0.6}
+                              style={[styles.rankSlotRow, bIndex > 0 && { borderTopWidth: 1, borderTopColor: theme.border + '20' }]}
+                              onPress={() => {
+                                setVotersToDisplay(block.voters);
+                                const d = new Date(block.date);
+                                const dateStr = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+                                setVoterModalTitle(`${dateStr} ${block.startHour}-${block.endHour}시 가능 인원`);
+                                setShowVoterModal(true);
+                              }}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ color: theme.text, fontWeight: '800', fontSize: 15 }}>
+                                  {new Date(block.date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+                                </Text>
+                                <Text style={{ color: theme.textSecondary, fontWeight: '700', fontSize: 13, marginTop: 2 }}>
+                                  {block.startHour}시 - {block.endHour}시
+                                </Text>
+                              </View>
+                              <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  <Text style={{ fontSize: 11, color: theme.textSecondary, textAlign: 'center', marginTop: 4, opacity: 0.7 }}>
+                    항목을 터치하면 참여 가능한 멤버를 확인할 수 있습니다.
+                  </Text>
                 </View>
               ) : (
                 <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>아직 조율 데이터가 없습니다.</Text>
@@ -531,7 +664,11 @@ const styles = StyleSheet.create({
   manualReminderBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, marginTop: 16, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
   rankingSection: { padding: 24, borderRadius: 32, marginBottom: 24 },
   rankingHeader: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  bestTimeCard: { padding: 16, borderRadius: 20, alignItems: 'center' },
+  rankGroupCard: { borderRadius: 24, overflow: 'hidden' },
+  rankGroupHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  rankGroupContent: { padding: 4 },
+  rankSlotRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16 },
+  rankBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center', minWidth: 36 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalContent: { padding: 28, borderTopLeftRadius: 40, borderTopRightRadius: 40, maxHeight: '95%' },
