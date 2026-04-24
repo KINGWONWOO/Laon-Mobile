@@ -53,7 +53,7 @@ export default function FeedbackScreen() {
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showSpeedPicker, setShowSpeedPicker] = useState(false);
 
-  const speedOptions = Array.from({ length: 36 }, (_, i) => Math.round((0.25 + i * 0.05) * 100) / 100);
+  const speedOptions = Array.from({ length: 8 }, (_, i) => Math.round((0.25 + i * 0.25) * 100) / 100);
 
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
@@ -305,9 +305,23 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
                 <View style={{flex: 1}} />
                 {!isFormation && (
-                  <TouchableOpacity style={styles.speedBtn} onPress={() => setShowSpeedPicker(v => !v)}>
-                    <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
-                  </TouchableOpacity>
+                  <View style={styles.speedBtnGroup}>
+                    <TouchableOpacity
+                      style={styles.speedArrowBtn}
+                      onPress={() => setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100))}
+                    >
+                      <Ionicons name="chevron-back" size={14} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.speedBtn} onPress={() => setShowSpeedPicker(v => !v)}>
+                      <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.speedArrowBtn}
+                      onPress={() => setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100))}
+                    >
+                      <Ionicons name="chevron-forward" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
                 )}
                 {isFullScreen && (
                   <>
@@ -542,7 +556,9 @@ const styles = StyleSheet.create({
   landscapeVideo: { flex: 1 },
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
-  speedBtn: { marginRight: 16, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  speedBtnGroup: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
+  speedArrowBtn: { paddingHorizontal: 6, paddingVertical: 4 },
+  speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   speedBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   speedPickerPanel: { position: 'absolute', top: 64, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.82)', zIndex: 200 },
   speedPickerScroll: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
