@@ -266,27 +266,31 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
   );
 });
 
-const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlace }: any) {
+const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlaceSV }: any) {
   const { theme } = useAppContext();
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
-  
+
   const pos = useDerivedValue(() => {
     if (isDragging.value) return { x: dragX.value, y: dragY.value };
     return dancerPos?.value || { x: 0.5, y: 0.5 };
   });
 
-  const canDrag = mode === 'create' || (mode === 'place' && canDragInPlace);
+  // Derived SharedValue so RNGH can toggle enabled without a JS re-render
+  const canDragSV = useDerivedValue(() =>
+    mode === 'create' || (mode === 'place' && (canDragInPlaceSV?.value ?? false))
+  );
 
-  const panGesture = Gesture.Pan().enabled(canDrag)
-    .onStart(() => { 
+  const panGesture = useMemo(() => Gesture.Pan()
+    .enabled(canDragSV)
+    .onStart(() => {
       'worklet';
-      isDragging.value = true; 
-      startX.value = dancerPos?.value?.x || 0.5; 
-      startY.value = dancerPos?.value?.y || 0.5; 
+      isDragging.value = true;
+      startX.value = dancerPos?.value?.x || 0.5;
+      startY.value = dancerPos?.value?.y || 0.5;
     })
     .onUpdate((e) => {
       'worklet';
@@ -303,7 +307,17 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
       }
       if (dancerPos) dancerPos.value = { x: fx, y: fy };
       runOnJS(onDragEnd)(dancer.id, { x: fx, y: fy });
-    });
+    }),
+  // stageWidth/stageHeight/settings change only on stage-settings edits (rare)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [canDragSV, stageWidth, stageHeight, scale, settings, dancerPos, dancer.id, onDragEnd]);
+
+  const gesture = useMemo(() => Gesture.Exclusive(
+    panGesture,
+    Gesture.Tap().runOnJS(true).onEnd(() => {
+      if (mode === 'create' || (canDragInPlaceSV?.value ?? false)) onPress(dancer.id);
+    })
+  ), [panGesture, mode, canDragInPlaceSV, onPress, dancer.id]);
 
   const style = useAnimatedStyle(() => ({
     width: cellSize * 2.5,
@@ -317,9 +331,7 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
   }));
 
   return (
-    <GestureDetector gesture={Gesture.Exclusive(panGesture, Gesture.Tap().runOnJS(true).onEnd(() => {
-      if (canDrag) onPress(dancer.id);
-    }))}>
+    <GestureDetector gesture={gesture}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
         <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
         <Text style={[styles.dancerNameText, { color: isSelected ? theme.text : theme.textSecondary, fontSize: (settings.dancerNameSize || 8) }]} numberOfLines={1}>{dancer.name}</Text>
@@ -476,6 +488,12 @@ export default function FormationEditorScreen() {
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
+
+  // SharedValue so DancerNode.enabled toggles on the UI thread without triggering a JS re-render
+  const canDragInPlaceSV = useSharedValue(false);
+  useEffect(() => {
+    canDragInPlaceSV.value = !!(activeEntryIdInPlace || selectedEntryId);
+  }, [activeEntryIdInPlace, selectedEntryId, canDragInPlaceSV]);
 
   const [, setChangeCount] = useState(0);
 
@@ -664,16 +682,22 @@ export default function FormationEditorScreen() {
     else { setPlacePast(prev => [...prev, current].slice(-30)); setPlaceFuture([]); }
   }, [dancers, scenes, timeline, mode, audioUrl, incrementChange]);
 
-  const onDragEnd = useCallback((dancerId: string, pos: Position) => {
-    const targetId = activeSceneIdToEdit;
-    if (!targetId) return;
+  // Refs let onDragEnd stay stable across renders so DancerNodes never re-render due to callback churn
+  const activeSceneIdToEditRef = useRef<string | null>(null);
+  const pushHistoryRef = useRef(pushHistory);
+  useEffect(() => { activeSceneIdToEditRef.current = activeSceneIdToEdit; }, [activeSceneIdToEdit]);
+  useEffect(() => { pushHistoryRef.current = pushHistory; }, [pushHistory]);
 
+  const onDragEnd = useCallback((dancerId: string, pos: Position) => {
+    const targetId = activeSceneIdToEditRef.current;
+    if (!targetId) return;
     setScenes(prev => prev.map(s => s.id === targetId ? {
       ...s,
       positions: { ...s.positions, [dancerId]: pos }
     } : s));
-    pushHistory();
-  }, [activeSceneIdToEdit, pushHistory]);
+    pushHistoryRef.current();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const undo = () => {
     if (mode === 'create') {
@@ -1037,7 +1061,7 @@ export default function FormationEditorScreen() {
               
 
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!(activeEntryIdInPlace || selectedEntryId)} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlaceSV={canDragInPlaceSV} />
               ))}
               <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
                 <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
