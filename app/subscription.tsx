@@ -126,6 +126,30 @@ export default function SubscriptionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {isPro ? (
+          <LinearGradient
+            colors={[theme.primary, theme.primary + 'CC']}
+            style={[styles.statusCard, Shadows.medium]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View>
+              <Text style={styles.statusLabel}>현재 멤버십</Text>
+              <Text style={styles.statusTier}>Pro 멤버십 이용 중</Text>
+            </View>
+            <View style={styles.daysBadge}>
+              <Text style={styles.daysText}>{daysLeft}일 남음</Text>
+            </View>
+          </LinearGradient>
+        ) : (
+          <View style={styles.heroSection}>
+            <Text style={[styles.heroTitle, { color: theme.text }]}>라온 댄스 Pro</Text>
+            <Text style={[styles.heroSub, { color: theme.textSecondary }]}>
+              크루를 위한 모든 기능을 무제한으로 즐기세요
+            </Text>
+          </View>
+        )}
+
         {!isPro && (
           <View style={[styles.couponSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.couponHeader}>
@@ -156,30 +180,6 @@ export default function SubscriptionScreen() {
               </TouchableOpacity>
             </View>
             {couponError ? <Text style={styles.couponError}>{couponError}</Text> : null}
-          </View>
-        )}
-
-        {isPro ? (
-          <LinearGradient
-            colors={[theme.primary, theme.primary + 'CC']}
-            style={[styles.statusCard, Shadows.medium]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View>
-              <Text style={styles.statusLabel}>현재 멤버십</Text>
-              <Text style={styles.statusTier}>Pro 멤버십 이용 중</Text>
-            </View>
-            <View style={styles.daysBadge}>
-              <Text style={styles.daysText}>{daysLeft}일 남음</Text>
-            </View>
-          </LinearGradient>
-        ) : (
-          <View style={styles.heroSection}>
-            <Text style={[styles.heroTitle, { color: theme.text }]}>라온 댄스 Pro</Text>
-            <Text style={[styles.heroSub, { color: theme.textSecondary }]}>
-              크루를 위한 모든 기능을 무제한으로 즐기세요
-            </Text>
           </View>
         )}
 
