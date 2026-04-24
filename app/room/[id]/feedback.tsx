@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, Dimensions, ScrollView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
@@ -50,7 +50,11 @@ export default function FeedbackScreen() {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [enableFloatingComments, setEnableFloatingComments] = useState(true);
-  
+  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [showSpeedPicker, setShowSpeedPicker] = useState(false);
+
+  const speedOptions = Array.from({ length: 36 }, (_, i) => Math.round((0.25 + i * 0.05) * 100) / 100);
+
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
@@ -164,8 +168,16 @@ export default function FeedbackScreen() {
       } catch (error) { setCachedVideoUrl(selectedVideo.videoUrl); } finally { setIsCaching(false); }
     }
     cacheAndPlay();
+    setPlaybackRate(1.0);
+    setShowSpeedPicker(false);
     if (isFormation) { setFormationTime(0); setIsFormationPlaying(true); }
-  }, [selectedVideo?.id]); 
+  }, [selectedVideo?.id]);
+
+  useEffect(() => {
+    if (player && !isFormation) {
+      try { player.playbackRate = playbackRate; } catch (e) {}
+    }
+  }, [playbackRate, isFormation]);
 
   useEffect(() => {
     if (!selectedVideo) return;
@@ -285,19 +297,24 @@ export default function FeedbackScreen() {
                   </View>
                 ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
               ) : (
-                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} contentFit="contain" />
+                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} contentFit="contain" allowsFullscreen={false} />
               )}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
                 </TouchableOpacity>
                 <View style={{flex: 1}} />
+                {!isFormation && (
+                  <TouchableOpacity style={styles.speedBtn} onPress={() => setShowSpeedPicker(v => !v)}>
+                    <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
+                  </TouchableOpacity>
+                )}
                 {isFullScreen && (
                   <>
-                    <TouchableOpacity style={{marginRight: 20}} onPress={() => setEnableFloatingComments(!enableFloatingComments)}>
+                    <TouchableOpacity style={{marginRight: 16}} onPress={() => setEnableFloatingComments(!enableFloatingComments)}>
                       <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={{marginRight: 20}} onPress={() => setShowSidebar(!showSidebar)}>
+                    <TouchableOpacity style={{marginRight: 16}} onPress={() => setShowSidebar(!showSidebar)}>
                       <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
                     </TouchableOpacity>
                   </>
@@ -306,6 +323,24 @@ export default function FeedbackScreen() {
                   <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
+
+              {showSpeedPicker && !isFormation && (
+                <View style={styles.speedPickerPanel}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
+                    {speedOptions.map(speed => (
+                      <TouchableOpacity
+                        key={speed}
+                        style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
+                        onPress={() => { setPlaybackRate(speed); setShowSpeedPicker(false); }}
+                      >
+                        <Text style={[styles.speedOptionText, speed === playbackRate && { color: '#fff' }]}>
+                          {speed % 1 === 0 ? speed.toFixed(1) : speed}×
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
 
               {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
               {activeFloatingBubbles.length > 0 && (
@@ -507,6 +542,12 @@ const styles = StyleSheet.create({
   landscapeVideo: { flex: 1 },
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
+  speedBtn: { marginRight: 16, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  speedBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  speedPickerPanel: { position: 'absolute', top: 64, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.82)', zIndex: 200 },
+  speedPickerScroll: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
+  speedOption: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
+  speedOptionText: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: 13 },
   sidebar: { flex: 1 },
   landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
   sidebarHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, alignItems: 'center' },
