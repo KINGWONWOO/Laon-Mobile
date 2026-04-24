@@ -331,19 +331,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const videosQuery = useQuery({ queryKey: ['videos', roomIds], queryFn: async () => {
     const { data: v } = await supabase.from('videos').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    const { data: c } = await supabase.from('video_comments').select('*').in('video_id', (v || []).map(x => x.id)).order('created_at', { ascending: true });
+    const { data: c = [] } = await supabase.from('video_comments').select('*').in('video_id', (v || []).map(x => x.id)).order('created_at', { ascending: true });
     return (v || []).map(video => ({ ...video, video_comments: (c || []).filter(comment => comment.video_id === video.id) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
   const photosQuery = useQuery({ queryKey: ['photos', roomIds], queryFn: async () => {
     const { data: p } = await supabase.from('gallery_items').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    const { data: c } = await supabase.from('gallery_comments').select('*').in('gallery_item_id', (p || []).map(x => x.id)).order('created_at', { ascending: true });
+    const { data: c = [] } = await supabase.from('gallery_comments').select('*').in('gallery_item_id', (p || []).map(x => x.id)).order('created_at', { ascending: true });
     return (p || []).map(photo => ({ ...photo, gallery_comments: (c || []).filter(comment => comment.gallery_item_id === photo.id) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
   const schedulesQuery = useQuery({ queryKey: ['schedules', roomIds], queryFn: async () => {
     const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
-    const { data: o } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
+    const { data: o = [] } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
     return (s || []).map(sch => ({ ...sch, schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({ ...opt, schedule_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
@@ -390,11 +390,42 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteAccount = async () => {
     if (!currentUserRef.current) return;
     try {
-      await supabase.rpc('delete_user');
+      console.log('[Account] Starting deleteAccount process...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      const userToken = session?.access_token;
+      if (!userToken) throw new Error('인증 세션이 만료되었습니다.');
+
+      const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      
+      // 💡 [최종 보안 전략]
+      // 1. Authorization 헤더에는 문지기 통과를 위한 Anon Key를 보냅니다.
+      // 2. X-User-Token 헤더에 실제 삭제할 유저의 진짜 토큰을 담습니다.
+      // 3. 서버 함수는 X-User-Token을 읽어 '진짜 유저'인지 다시 한 번 Auth 서버에 확인합니다.
+      const response = await fetch(`${projectUrl}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey || '',
+          'Authorization': `Bearer ${anonKey}`,
+          'X-User-Token': userToken 
+        },
+        body: JSON.stringify({ user_token: userToken }),
+      });
+      
+      const result = await response.json().catch(() => ({ success: false, error: '응답 파싱 실패' }));
+      console.log('[Account] Edge Function response:', result);
+
+      if (!response.ok || (result && !result.success)) {
+        throw new Error(result.error || result.details || `서버 오류 (${response.status})`);
+      }
+      
       await logout();
-    } catch (e) {
-      console.error(e);
-      await logout();
+      Alert.alert('탈퇴 완료', '계정이 완전히 삭제되었습니다.');
+    } catch (e: any) {
+      console.error('[Account] Delete account failed:', e);
+      Alert.alert('탈퇴 오류', e.message || '탈퇴 처리 중 문제가 발생했습니다.');
     }
   };
   const updateUserProfile = async (n: string, i?: string) => { 
