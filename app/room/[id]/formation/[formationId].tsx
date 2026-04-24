@@ -475,6 +475,8 @@ export default function FormationEditorScreen() {
   const [nextSceneId, setNextSceneId] = useState<string | null>(null);
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
+  const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
+
   const [, setChangeCount] = useState(0);
 
   // Auto-save logic
@@ -627,11 +629,10 @@ export default function FormationEditorScreen() {
 
   useAnimatedReaction(
     () => {
-      const sorted = [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
-      const next = sorted.find(e => e.timestampMillis > currentTimeMs.value);
-      
+      // Use pre-sorted array — avoid sort on every animation frame
+      const next = sortedTimeline.find(e => e.timestampMillis > currentTimeMs.value);
       let currentEntryId = null;
-      for (let e of sorted) {
+      for (let e of sortedTimeline) {
         if (currentTimeMs.value >= e.timestampMillis && currentTimeMs.value < e.timestampMillis + e.durationMillis) {
           currentEntryId = e.id;
           break;
@@ -643,16 +644,18 @@ export default function FormationEditorScreen() {
       if (data.nextId !== nextSceneId) runOnJS(setNextSceneId)(data.nextId);
       if (data.currentEntryId !== activeEntryIdInPlace) runOnJS(setActiveEntryIdInPlace)(data.currentEntryId);
     },
-    [timeline]
+    [sortedTimeline]
   );
 
   const activeSceneIdToEdit = useMemo(() => {
     if (mode === 'create') return activeSceneId;
-    if (mode === 'place' && activeEntryIdInPlace) {
-      return timeline.find(e => e.id === activeEntryIdInPlace)?.sceneId || null;
+    if (mode === 'place') {
+      // selectedEntryId (user explicitly selected block) takes priority over playhead position
+      const editEntryId = selectedEntryId || activeEntryIdInPlace;
+      if (editEntryId) return timeline.find(e => e.id === editEntryId)?.sceneId || null;
     }
     return null;
-  }, [mode, activeSceneId, activeEntryIdInPlace, timeline]);
+  }, [mode, activeSceneId, activeEntryIdInPlace, selectedEntryId, timeline]);
 
   const pushHistory = useCallback(() => {
     incrementChange();
@@ -726,6 +729,7 @@ export default function FormationEditorScreen() {
   useEffect(() => {
     isPlayerPlayingSV.value = status.playing;
     if (status.playing && status.duration > 0) {
+      // Sync once on play start, then let withTiming run uninterrupted
       const remaining = (status.duration - status.currentTime) * 1000;
       currentTimeMs.value = status.currentTime * 1000;
       currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
@@ -733,7 +737,9 @@ export default function FormationEditorScreen() {
       cancelAnimation(currentTimeMs);
       if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
     }
-  }, [status.playing, status.currentTime, status.duration, currentTimeMs, isPlayerPlayingSV]);
+  // status.currentTime intentionally omitted: re-syncing every frame causes stutter
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.playing, status.duration]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -765,15 +771,14 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, timeline, mode, scenes }), (data) => {
+  useAnimatedReaction(() => ({ time: currentTimeMs.value, sortedTimeline, mode, scenes }), (data) => {
     if (data.mode === 'place') {
-      const sorted = [...data.timeline].sort((a, b) => a.timestampMillis - b.timestampMillis);
       let prevE = null, nextE = null;
-      for (let e of sorted) { if (e.timestampMillis <= data.time) prevE = e; else { nextE = e; break; } }
+      for (let e of data.sortedTimeline) { if (e.timestampMillis <= data.time) prevE = e; else { nextE = e; break; } }
       dancers.forEach(d => {
         let p = { x: 0.5, y: 0.5 };
         const getScenePos = (sId: string) => data.scenes.find(s => s.id === sId)?.positions[d.id] || { x: 0.5, y: 0.5 };
-        if (!prevE) p = sorted.length > 0 ? getScenePos(sorted[0]?.sceneId) : { x: 0.5, y: 0.5 };
+        if (!prevE) p = data.sortedTimeline.length > 0 ? getScenePos(data.sortedTimeline[0]?.sceneId) : { x: 0.5, y: 0.5 };
         else {
           const prevPos = getScenePos(prevE.sceneId);
           if (data.time <= prevE.timestampMillis + prevE.durationMillis) p = prevPos;
@@ -788,7 +793,7 @@ export default function FormationEditorScreen() {
         if (dancerPositions[d.id]) dancerPositions[d.id].value = p;
       });
     }
-  }, [mode, timeline, scenes, dancers]);
+  }, [mode, sortedTimeline, scenes, dancers]);
 
   const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
   const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; setTimeline([...timeline, newEntry]); setShowTimelineMenu(false); };
@@ -923,7 +928,6 @@ export default function FormationEditorScreen() {
 
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
 
-  const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
   const sceneNamesMap = useMemo(() => { const map: any = {}; scenes.forEach(s => { map[s.id] = s.name; }); return map; }, [scenes]);
 
   const handleSceneCardSelect = useCallback((sceneId: string, isActive: boolean) => {
@@ -1033,7 +1037,7 @@ export default function FormationEditorScreen() {
               
 
               {dancers.map((d, i) => (
-                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!activeEntryIdInPlace} />
+                <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!(activeEntryIdInPlace || selectedEntryId)} />
               ))}
               <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
                 <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
