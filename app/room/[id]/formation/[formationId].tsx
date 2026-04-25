@@ -8,11 +8,13 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, w
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 import { OptionModal } from '../../../../components/ui/RoomComponents';
+import { storageService } from '../../../../services/storageService';
 
 const { width } = Dimensions.get('window');
 const PX_PER_SEC = 60; 
@@ -124,6 +126,131 @@ const TransitionX = React.memo(function TransitionX({ width, left }: { width: nu
       <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
       <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `-${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
     </View>
+  );
+});
+
+const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void }) {
+  const { theme } = useAppContext();
+  const [showControls, setShowControls] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDurationPip, setVideoDurationPip] = useState(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+  const startScale = useSharedValue(1);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!videoPlayer) return;
+      const t = videoPlayer.currentTime;
+      const d = videoPlayer.duration;
+      if (typeof t === 'number') setVideoCurrentTime(t);
+      if (typeof d === 'number' && d > 0) setVideoDurationPip(d);
+    }, 250);
+    return () => clearInterval(interval);
+  }, [videoPlayer]);
+
+  useEffect(() => () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); }, []);
+
+  const showAndAutoHide = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+  }, []);
+
+  const pan = Gesture.Pan()
+    .onStart(() => { 'worklet'; startX.value = x.value; startY.value = y.value; })
+    .onUpdate((e) => { 'worklet'; x.value = startX.value + e.translationX; y.value = startY.value + e.translationY; });
+
+  const pinch = Gesture.Pinch()
+    .onStart(() => { 'worklet'; startScale.value = scale.value; })
+    .onUpdate((e) => { 'worklet'; scale.value = Math.max(0.5, Math.min(3, startScale.value * e.scale)); });
+
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .maxDistance(10)
+    .onEnd(() => showAndAutoHide());
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }]
+  }));
+
+  const togglePlay = useCallback(() => {
+    if (!videoPlayer) return;
+    if (isVideoPlaying) { videoPlayer.pause(); setIsVideoPlaying(false); }
+    else { videoPlayer.play(); setIsVideoPlaying(true); }
+    showAndAutoHide();
+  }, [videoPlayer, isVideoPlaying, showAndAutoHide]);
+
+  if (!videoPlayer) return null;
+
+  if (isMinimized) {
+    return (
+      <GestureDetector gesture={Gesture.Simultaneous(pan, pinch)}>
+        <Animated.View style={[styles.pipContainerMin, animatedStyle, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <TouchableOpacity style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} onPress={() => setIsMinimized(false)}>
+            <Ionicons name="videocam" size={18} color={theme.text} />
+          </TouchableOpacity>
+        </Animated.View>
+      </GestureDetector>
+    );
+  }
+
+  const progress = videoDurationPip > 0 ? videoCurrentTime / videoDurationPip : 0;
+
+  return (
+    <GestureDetector gesture={Gesture.Simultaneous(Gesture.Simultaneous(pan, pinch), tap)}>
+      <Animated.View style={[styles.pipContainer, animatedStyle, { borderColor: theme.border }]}>
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          <VideoView player={videoPlayer} style={styles.pipVideo} allowsFullscreen={false} allowsPictureInPicture={false} nativeControls={false} contentFit="contain" />
+        </View>
+        {showControls && (
+          <View style={[StyleSheet.absoluteFillObject, styles.pipOverlay]}>
+            <View style={styles.pipTopRow}>
+              <TouchableOpacity style={styles.pipBtn} onPress={onClose}>
+                <Ionicons name="close" size={14} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pipBtn} onPress={() => { setIsMinimized(true); setShowControls(false); }}>
+                <Ionicons name="remove" size={14} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.pipMidRow}>
+              <TouchableOpacity style={styles.pipBtn} onPress={() => {
+                if (videoPlayer) videoPlayer.currentTime = Math.max(0, videoCurrentTime - 5);
+                showAndAutoHide();
+              }}>
+                <Ionicons name="play-back" size={16} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pipPlayBtn} onPress={togglePlay}>
+                <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={18} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pipBtn} onPress={() => {
+                if (videoPlayer) videoPlayer.currentTime = Math.min(videoDurationPip || 9999, videoCurrentTime + 5);
+                showAndAutoHide();
+              }}>
+                <Ionicons name="play-forward" size={16} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            <Pressable
+              style={styles.pipSeekRow}
+              onPress={(e) => {
+                if (videoDurationPip > 0 && videoPlayer) {
+                  const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / 144));
+                  videoPlayer.currentTime = ratio * videoDurationPip;
+                }
+                showAndAutoHide();
+              }}
+            >
+              <View style={styles.pipSeekTrack}>
+                <View style={[styles.pipSeekFill, { width: `${progress * 100}%` as any }]} />
+              </View>
+            </Pressable>
+          </View>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 });
 
@@ -412,6 +539,13 @@ export default function FormationEditorScreen() {
   const [scenes, setScenes] = useState<FormationScene[]>(formation?.data?.scenes || []);
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
   const [audioUrl, setAudioUrl] = useState<string>(formation?.audioUrl || '');
+  const [videoUrl, setVideoUrl] = useState<string>(formation?.videoSettings?.videoUrl || '');
+  const [useVideoAudio, setUseVideoAudio] = useState<boolean>(formation?.videoSettings?.useVideoAudio || false);
+  const [videoDuration, setVideoDuration] = useState<number>(0);
+  const pipX = useSharedValue(formation?.videoSettings?.pipPosition?.x ?? width - 170);
+  const pipY = useSharedValue(formation?.videoSettings?.pipPosition?.y ?? 60);
+  const pipScale = useSharedValue(1);
+
   const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
@@ -463,14 +597,50 @@ export default function FormationEditorScreen() {
   const player = useAudioPlayer(audioUrl);
   const status = useAudioPlayerStatus(player);
 
-  const dancerPositionsRef = useRef<Record<string, any>>({});
-  dancers.forEach(d => {
-    if (!dancerPositionsRef.current[d.id]) {
-      const activeScene = scenes.find(s => s.id === activeSceneId);
-      const initialPos = activeScene?.positions[d.id] || { x: 0.5, y: 0.5 };
-      dancerPositionsRef.current[d.id] = makeMutable(initialPos);
-    }
+  const videoPlayer = useVideoPlayer(videoUrl || null, (p) => {
+    p.loop = false;
+    p.muted = !useVideoAudio;
   });
+
+  useEffect(() => {
+    if (videoPlayer) {
+      videoPlayer.muted = !useVideoAudio;
+    }
+  }, [useVideoAudio, videoPlayer]);
+
+  // Poll videoPlayer.duration when using video audio (expo-audio reports 0 for video files)
+  useEffect(() => {
+    if (!useVideoAudio || !videoPlayer) { setVideoDuration(0); return; }
+    const tryGet = () => {
+      const d = videoPlayer.duration;
+      if (typeof d === 'number' && d > 0) { setVideoDuration(d); return true; }
+      return false;
+    };
+    if (tryGet()) return;
+    const interval = setInterval(() => { if (tryGet()) clearInterval(interval); }, 200);
+    return () => clearInterval(interval);
+  }, [useVideoAudio, videoPlayer]);
+
+
+  const dancerPositionsRef = useRef<Record<string, any>>({});
+  
+  // Robust initialization of dancer positions
+  const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
+  
+  useEffect(() => {
+    if (!activeScene) return;
+    
+    dancers.forEach(d => {
+      const posInScene = activeScene.positions[d.id] || { x: 0.5, y: 0.5 };
+      if (!dancerPositionsRef.current[d.id]) {
+        dancerPositionsRef.current[d.id] = makeMutable(posInScene);
+      } else {
+        // Sync mutable value when active scene changes
+        dancerPositionsRef.current[d.id].value = posInScene;
+      }
+    });
+  }, [dancers, activeScene]);
+
   const dancerPositions = dancerPositionsRef.current;
 
   // 히스토리 관리 (모드별 분리)
@@ -519,95 +689,41 @@ export default function FormationEditorScreen() {
   // [NEW: 실제 오디오 PCM 디코딩 로직]
   const analyzeAudio = async (uri: string) => {
     if (!uri) return;
+    // AudioContext cannot decode video container formats — show flat waveform
+    const lowerUri = uri.toLowerCase();
+    if (lowerUri.includes('.mp4') || lowerUri.includes('.mov') || lowerUri.includes('.m4v')) {
+      setWaveformPeaks([]);
+      return;
+    }
     setIsAnalyzing(true);
     try {
       let targetUri = uri;
-      
-      // 1. 원격 URL인 경우 로컬로 다운로드 (readAsStringAsync는 원격 URL을 지원하지 않음)
-      if (uri.startsWith('http')) {
-        const fileExt = uri.split('.').pop()?.split('?')[0] || 'mp3';
-        targetUri = `${FileSystem.cacheDirectory}temp_analysis.${fileExt}`;
-        const downloadRes = await FileSystem.downloadAsync(uri, targetUri);
-        targetUri = downloadRes.uri;
-      }
-
-      // 2. 다각도 파일 읽기 시도 (Resilient Reading)
-      // Android 시스템 및 Expo FileSystem의 특수문자([]) 및 한글 처리 버그를 해결하기 위해 여러 조합 시도
-      let base64 = null;
-      const candidates = [
-        targetUri,                                                          // 원본
-        decodeURI(targetUri),                                               // 디코딩 상태
-        encodeURI(decodeURI(targetUri)).replace(/\[/g, '%5B').replace(/\]/g, '%5D'), // 표준 인코딩 + 대괄호 강제 처리
-        targetUri.replace(/\[/g, '%5B').replace(/\]/g, '%5D'),              // 원본에서 대괄호만 처리
-      ];
-
-      for (const candidate of candidates) {
-        try {
-          base64 = await FileSystem.readAsStringAsync(candidate, { encoding: FileSystem.EncodingType.Base64 });
-          if (base64) break;
-        } catch (e) {
-          // 실패 시 다음 후보로 진행
-        }
-      }
-
-      // 만약 여전히 실패한다면, getInfoAsync로 존재 여부 확인 후 최후의 수단(복사) 사용
-      if (!base64) {
-        let exists = false;
-        let finalPath = targetUri;
-        for (const candidate of candidates) {
-          const info = await FileSystem.getInfoAsync(candidate);
-          if (info.exists) {
-            exists = true;
-            finalPath = candidate;
-            break;
-          }
-        }
-
-        if (!exists) {
-          setIsAnalyzing(false);
-          // UI를 건드리지 않기 위해 에러는 콘솔에만 기록하고 분석 중단
-          console.warn('Audio file not found for analysis even after multiple attempts.');
-          return;
-        }
-
-        // 파일은 존재하는데 읽기만 안되는 경우: 안전한 이름으로 복사 후 읽기
-        const safeUri = `${FileSystem.cacheDirectory}analysis_fix_${Date.now()}.mp3`;
-        await FileSystem.copyAsync({ from: finalPath, to: safeUri });
-        base64 = await FileSystem.readAsStringAsync(safeUri, { encoding: FileSystem.EncodingType.Base64 });
-        await FileSystem.deleteAsync(safeUri, { idempotent: true });
+      if (uri.startsWith('/')) {
+        targetUri = `file://${uri}`;
       }
 
       const analysisScript = `
         (async () => {
           try {
-            const base64Data = "${base64}";
-            const binaryString = window.atob(base64Data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
-            
+            const response = await fetch("${targetUri}");
+            const arrayBuffer = await response.arrayBuffer();
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
-            
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
             const rawData = audioBuffer.getChannelData(0); 
             const samplesPerSec = 10;
             const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
             const blockSize = Math.floor(rawData.length / totalSamples);
             const peaks = [];
-            
             for (let i = 0; i < totalSamples; i++) {
               let start = blockSize * i;
               let sum = 0;
               for (let j = 0; j < blockSize; j++) {
-                const abs = Math.abs(rawData[start + j]);
-                sum += abs;
+                const val = rawData[start + j];
+                if (val !== undefined) sum += Math.abs(val);
               }
-              // 평균 진폭 사용 (단순 Peak보다 소리의 밀도를 더 잘 표현)
               peaks.push(sum / blockSize);
             }
-            
-            const maxPeak = Math.max(...peaks);
-            // 지수를 1.3으로 조정하여 적절한 고저차 유지 (1.8에서 수정)
+            const maxPeak = Math.max(...peaks) || 1;
             const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.3));
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
           } catch (e) {
@@ -630,8 +746,11 @@ export default function FormationEditorScreen() {
     try {
       const event = JSON.parse(e.nativeEvent.data);
       if (event.type === 'ANALYSIS_COMPLETE') setWaveformPeaks(event.data);
+      else if (event.type === 'ERROR') console.warn('WebView Analysis Error:', event.message);
       setIsAnalyzing(false);
-    } catch (err) {}
+    } catch (err) {
+      setIsAnalyzing(false);
+    }
   };
 
   useAnimatedReaction(
@@ -741,18 +860,17 @@ export default function FormationEditorScreen() {
 
   useEffect(() => {
     isPlayerPlayingSV.value = status.playing;
-    if (status.playing && status.duration > 0) {
-      // Sync once on play start, then let withTiming run uninterrupted
-      const remaining = (status.duration - status.currentTime) * 1000;
+    const effectiveDuration = status.duration > 0 ? status.duration : videoDuration;
+    if (status.playing && effectiveDuration > 0) {
+      const remaining = (effectiveDuration - status.currentTime) * 1000;
       currentTimeMs.value = status.currentTime * 1000;
-      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
+      currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     } else {
       cancelAnimation(currentTimeMs);
       if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
     }
-  // status.currentTime intentionally omitted: re-syncing every frame causes stutter
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status.playing, status.duration]);
+  }, [status.playing, status.duration, videoDuration]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -882,9 +1000,55 @@ export default function FormationEditorScreen() {
     }
   };
 
+  const handleAddVideo = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
+      if (res.canceled) return;
+
+      const asset = res.assets[0];
+      const sourceUri = asset.uri;
+      const fileName = `video_${Date.now()}_${asset.name.replace(/\s+/g, '_')}`;
+      const destUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+
+      Alert.alert(
+        '음원 설정',
+        '어떤 음원을 사용할까요?',
+        [
+          {
+            text: '영상 음원 사용',
+            onPress: () => {
+              pushHistory();
+              setVideoUrl(destUri);
+              setAudioUrl(destUri);
+              setUseVideoAudio(true);
+              setWaveformPeaks([]);
+            }
+          },
+          {
+            text: '기존 음원 유지',
+            onPress: () => {
+              pushHistory();
+              setVideoUrl(destUri);
+              setUseVideoAudio(false);
+            }
+          }
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert('실패', e.message);
+    }
+  };
+
   const handleSave = async () => { 
     try { 
-      await updateFormation(formationId!, { audioUrl, settings, data: { dancers, scenes, timeline } }); 
+      await updateFormation(formationId!, { 
+        audioUrl, 
+        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        settings, 
+        data: { dancers, scenes, timeline } 
+      }); 
       setShowSaveToast(true);
       setTimeout(() => setShowSaveToast(false), 2000);
     } catch (e: any) { 
@@ -895,7 +1059,13 @@ export default function FormationEditorScreen() {
   const handleExportJSON = async () => {
     try {
       const finalName = (exportFileName || '동선').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
-      const data = { title: formation?.title, audioUrl, settings, data: { dancers, scenes, timeline } };
+      const data = { 
+        title: formation?.title, 
+        audioUrl, 
+        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        settings, 
+        data: { dancers, scenes, timeline } 
+      };
       const filePath = `${FileSystem.documentDirectory}${finalName}.json`;
       await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
       if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
@@ -920,7 +1090,12 @@ export default function FormationEditorScreen() {
     if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
     try {
       setIsExporting(true);
-      await publishFormationAsFeedback(id!, formationId!, publishTitle, { settings, data: { dancers, scenes, timeline } });
+      await publishFormationAsFeedback(id!, formationId!, publishTitle, { 
+        audioUrl,
+        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        settings, 
+        data: { dancers, scenes, timeline } 
+      });
       setShowPublishModal(false); setShowExportModal(false);
       Alert.alert('성공', '피드백이 성공적으로 업로드되었습니다.');
     } catch (e: any) {
@@ -994,6 +1169,7 @@ export default function FormationEditorScreen() {
 
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: theme.background }]}>
+      {videoUrl && <DraggableVideo videoPlayer={videoPlayer} x={pipX} y={pipY} scale={pipScale} onClose={() => setVideoUrl('')} />}
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={[styles.modeToggle, { backgroundColor: theme.card }]}>
@@ -1018,7 +1194,14 @@ export default function FormationEditorScreen() {
 
       {/* Hidden WebView for Audio Analysis */}
       <View style={{ height: 0, width: 0, opacity: 0, position: 'absolute' }}>
-        <WebView ref={webViewRef} onMessage={onWebViewMessage} source={{ html: '<html><body></body></html>' }} />
+        <WebView 
+          ref={webViewRef} 
+          onMessage={onWebViewMessage} 
+          source={{ html: '<html><body></body></html>' }} 
+          originWhitelist={['*']}
+          allowFileAccess={true}
+          allowUniversalAccessFromFileURLs={true}
+        />
       </View>
 
       {/* Save Success Toast */}
@@ -1090,14 +1273,27 @@ export default function FormationEditorScreen() {
               </Animated.ScrollView>
               <View style={[styles.needle, { left: CENTER_OFFSET }]} pointerEvents="none" />
             </View>
-            <View style={styles.controls}>
-              <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
-              <PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} /><PlaybackTimeDisplay player={player} />
+            <View style={{ height: 50 }}>
+              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
+              </View>
+              <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }} pointerEvents="box-none">
+                <PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} />
+              </View>
+              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' }}>
+                <PlaybackTimeDisplay player={player} />
+              </View>
             </View>
           </View>
         ) : (
           <View style={styles.createDock}>
-            <View style={styles.createToolbar}><TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity><TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity></View>
+            <View style={styles.createToolbar}>
+              <TouchableOpacity style={styles.toolBtn} onPress={handleAddVideo}><Ionicons name="videocam-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity>
+            </View>
             <View style={styles.sceneSection}>
               <View style={styles.actionColumn}>
                 <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.primary }]} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={16} color={theme.background} /><Text style={[styles.addSceneText, { color: theme.background }]}>대형 추가</Text></TouchableOpacity>
@@ -1200,7 +1396,7 @@ const styles = StyleSheet.create({
   blockPreview: { width: '100%', height: 55, marginBottom: 4, pointerEvents: 'none', alignItems: 'center' },
   blockText: { fontSize: 9, fontWeight: 'bold' },
   needle: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#FFD700', zIndex: 100, marginLeft: -1 },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   toolBtnSmall: { alignItems: 'center', width: 60 },
   playBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   timeText: { fontSize: 16, fontWeight: 'bold', width: 60, textAlign: 'right' },
@@ -1253,5 +1449,33 @@ const styles = StyleSheet.create({
   toast: { position: 'absolute', top: 120, left: '10%', right: '10%', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', zIndex: 999, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
   toastText: { marginLeft: 10, fontWeight: 'bold', fontSize: 14 },
   analysisLoader: { position: 'absolute', top: 120, alignSelf: 'center', padding: 15, borderRadius: 12, alignItems: 'center', zIndex: 1000 },
-
+  pipContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 160,
+    height: 90,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    backgroundColor: '#000',
+    zIndex: 1000
+  },
+  pipContainerMin: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    zIndex: 1000,
+  },
+  pipVideo: { flex: 1 },
+  pipOverlay: { backgroundColor: 'rgba(0,0,0,0.55)' },
+  pipTopRow: { position: 'absolute', top: 5, left: 5, right: 5, flexDirection: 'row', justifyContent: 'space-between' },
+  pipMidRow: { position: 'absolute', bottom: 5, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  pipBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  pipPlayBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
 });

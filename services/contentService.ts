@@ -102,6 +102,7 @@ export const contentService = {
     const dbUpdates: any = {};
     if (updates.title) dbUpdates.title = updates.title;
     if (updates.audioUrl) dbUpdates.audio_url = updates.audioUrl;
+    if (updates.videoSettings) dbUpdates.video_settings = updates.videoSettings;
     if (updates.settings) dbUpdates.settings = updates.settings;
     if (updates.data) dbUpdates.data = updates.data;
     return await supabase.from('formations').update(dbUpdates).eq('id', id);
@@ -109,9 +110,9 @@ export const contentService = {
   deleteRemoteFormation: async (id: string) => {
     return await supabase.from('formations').delete().eq('id', id);
   },
-  publishFormation: async (rid: string, uid: string, t: string, audio: string, settings: any, data: any) => {
+  publishFormation: async (rid: string, uid: string, t: string, audio: string, settings: any, data: any, videoSettings?: any) => {
     return await supabase.from('formations').insert([{
-      room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data
+      room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data, video_settings: videoSettings
     }]).select().single();
   }
 };

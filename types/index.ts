@@ -172,6 +172,13 @@ export type FormationData = {
   dancers: Dancer[];
   scenes: FormationScene[];
   timeline: TimelineEntry[];
+  extraVideoUrl?: string;
+};
+
+export type VideoSettings = {
+  videoUrl?: string;
+  useVideoAudio: boolean;
+  pipPosition: { x: number, y: number };
 };
 
 export type FormationSettings = {
@@ -188,6 +195,7 @@ export type Formation = {
   userId: string;
   title: string;
   audioUrl?: string; // supabase storage URL or external
+  videoSettings?: VideoSettings;
   settings: FormationSettings;
   data: FormationData;
   createdAt: number;

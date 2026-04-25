@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Formation } from '../../types';
 import { useAudioPlayer } from 'expo-audio';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
@@ -73,29 +74,39 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const gridRows = formation?.settings?.gridRows || 10;
   const gridCols = formation?.settings?.gridCols || 10;
   const stageDirection = formation?.settings?.stageDirection || 'top';
+  const videoSettings = formation?.videoSettings;
 
   const STAGE_CELL_SIZE = (WINDOW_WIDTH - 40) / gridCols;
   const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
 
   const player = useAudioPlayer(formation?.audioUrl || '');
+  const videoPlayer = useVideoPlayer(videoSettings?.videoUrl || null, (p) => {
+    p.loop = true;
+    p.muted = !videoSettings?.useVideoAudio;
+  });
 
   useEffect(() => {
     if (player) {
       player.loop = true;
       if (isPlaying) {
         player.play();
+        if (videoPlayer && videoPlayer.src) videoPlayer.play();
       } else {
         player.pause();
+        if (videoPlayer && videoPlayer.src) videoPlayer.pause();
       }
     }
-  }, [isPlaying, player]);
+  }, [isPlaying, player, videoPlayer]);
 
   useEffect(() => {
     if (player && Math.abs(player.currentTime - (currentTimeMs / 1000)) > 0.3) {
       player.seekTo(currentTimeMs / 1000);
     }
-  }, [currentTimeMs, player]);
+    if (videoPlayer && videoPlayer.src && Math.abs(videoPlayer.currentTime - (currentTimeMs / 1000)) > 0.3) {
+      videoPlayer.currentTime = currentTimeMs / 1000;
+    }
+  }, [currentTimeMs, player, videoPlayer]);
 
   useEffect(() => {
     if (timeline && timeline.length > 0) {
@@ -110,6 +121,18 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
 
   return (
     <View style={styles.container}>
+      {videoSettings?.videoUrl && (
+        <View style={[styles.pipContainer, { left: videoSettings.pipPosition.x, top: videoSettings.pipPosition.y }]}>
+          <VideoView 
+            player={videoPlayer} 
+            style={styles.pipVideo} 
+            allowsFullscreen={false} 
+            allowsPictureInPicture={false}
+            nativeControls={false}
+            contentFit="contain"
+          />
+        </View>
+      )}
       <View style={styles.stageWrapper}>
         <View style={[styles.directionLabelBox, { top: -35, backgroundColor: stageDirection === 'top' ? 'rgba(255, 51, 102, 0.2)' : 'rgba(255, 255, 255, 0.05)' }]}>
           <Text style={[styles.directionLabelText, { color: stageDirection === 'top' ? '#FF3366' : '#AAA', fontSize: 10, fontWeight: '900' }]}>
@@ -160,5 +183,17 @@ const styles = StyleSheet.create({
   dancerNode: { position: 'absolute', alignItems: 'center' },
   dancerCircle: { justifyContent: 'center', alignItems: 'center' },
   dancerInitial: { color: '#FFF', fontWeight: 'bold' },
-  dancerNameText: { color: '#AAA', marginTop: 4, fontSize: 8 }
+  dancerNameText: { color: '#AAA', marginTop: 4, fontSize: 8 },
+  pipContainer: { 
+    position: 'absolute', 
+    width: 160, 
+    height: 90, 
+    borderRadius: 8, 
+    overflow: 'hidden', 
+    borderWidth: 1, 
+    borderColor: '#333',
+    backgroundColor: '#000',
+    zIndex: 1000
+  },
+  pipVideo: { flex: 1 },
 });

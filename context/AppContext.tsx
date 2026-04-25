@@ -364,7 +364,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const localRaw = await AsyncStorage.getItem('local_formations');
     const local = localRaw ? JSON.parse(localRaw) : [];
-    const mappedRemote = (remote || []).map(form => ({ id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url, settings: form.settings, data: form.data, createdAt: new Date(form.created_at).getTime(), isLocal: false })) as Formation[];
+    const mappedRemote = (remote || []).map(form => ({ id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url, videoSettings: form.video_settings, settings: form.settings, data: form.data, createdAt: new Date(form.created_at).getTime(), isLocal: false })) as Formation[];
     const filteredLocal = local.filter((f: any) => roomIds.includes(f.roomId)).map((f: any) => ({ ...f, isLocal: true }));
     return [...filteredLocal, ...mappedRemote] as Formation[];
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
@@ -553,8 +553,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const finalData = currentData?.data || formation?.data;
     const finalSettings = currentData?.settings || formation?.settings;
     const finalAudioUrl = currentData?.audioUrl || formation?.audioUrl;
+    const finalVideoSettings = currentData?.videoSettings || formation?.videoSettings;
     if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
-    const { data: remote, error } = await contentService.publishFormation(roomId, currentUserRef.current.id, title, finalAudioUrl || '', finalSettings, finalData);
+    const { data: remote, error } = await contentService.publishFormation(roomId, currentUserRef.current.id, title, finalAudioUrl || '', finalSettings, finalData, finalVideoSettings);
     if (error) throw error;
     await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
     await refreshAllData();
