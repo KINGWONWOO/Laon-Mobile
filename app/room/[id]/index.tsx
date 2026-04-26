@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Alert, RefreshControl, Image, Platform, Share, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Alert, RefreshControl, Image, Platform, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -11,6 +11,7 @@ import { storageService } from '../../../services/storageService';
 import { RoomActionBtn, NoticeItem, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
+import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -50,12 +51,27 @@ export default function RoomMainScreen() {
   const onRefresh = async () => { setRefreshing(true); await refreshAllData(); setRefreshing(false); };
 
   const handlePickImages = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.7 });
-    if (!result.canceled) setSelectedImages(result.assets.map(a => a.uri));
+    const result = await ImagePicker.launchImageLibraryAsync({ 
+      mediaTypes: ['images'], 
+      allowsMultipleSelection: true, 
+      quality: 0.7,
+      selectionLimit: 5 - selectedImages.length 
+    });
+    
+    if (!result.canceled) {
+      const newImages = [...selectedImages, ...result.assets.map(a => a.uri)];
+      if (newImages.length > 5) {
+        Alert.alert('알림', '사진은 최대 5장까지만 등록 가능합니다.');
+        setSelectedImages(newImages.slice(0, 5));
+      } else {
+        setSelectedImages(newImages);
+      }
+    }
   };
 
   const handleAddNotice = async () => {
     if (!noticeTitle.trim() || !noticeContent.trim()) return Alert.alert('오류', '제목과 내용을 입력해주세요.');
+    if (selectedImages.length > 5) return Alert.alert('오류', '사진은 최대 5장까지만 등록 가능합니다.');
     setIsSubmitting(true);
     try {
       await addNotice(id as string, noticeTitle, noticeContent, false, selectedImages);
@@ -84,8 +100,7 @@ export default function RoomMainScreen() {
   };
 
   const handleInvite = async () => {
-    const message = `[LAON DANCE] '${room.name}' 크루룸 초대장\n\n참여 코드: ${room.passcode}`;
-    try { await Share.share({ title: room.name, message }); } catch (error) { Alert.alert('오류', '공유할 수 없습니다.'); }
+    try { await LinkingService.shareRoomInvite(room.name, room.id, room.passcode); } catch (error) { Alert.alert('오류', '공유할 수 없습니다.'); }
   };
 
   const deleteOptions = [
@@ -289,7 +304,23 @@ export default function RoomMainScreen() {
                 <TextInput style={[styles.fancyTitleInput, { color: theme.text }]} placeholder="제목" placeholderTextColor={theme.textSecondary + '80'} value={noticeTitle} onChangeText={setNoticeTitle} />
                 <TextInput style={[styles.fancyContentInput, { color: theme.text }]} placeholder="내용을 입력하세요..." placeholderTextColor={theme.textSecondary + '80'} value={noticeContent} onChangeText={setNoticeContent} multiline />
                 <View style={styles.imagePickerArea}>
-                  <TouchableOpacity activeOpacity={0.7} style={[styles.bigImageAddBtn, { backgroundColor: theme.card }]} onPress={handlePickImages}><Ionicons name="camera" size={32} color={theme.primary} /><Text style={{marginTop: 8, color: theme.textSecondary, fontWeight: '700'}}>사진 추가</Text></TouchableOpacity>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: '800' }}>사진 첨부</Text>
+                    <Text style={{ color: selectedImages.length >= 5 ? theme.error : theme.textSecondary, fontSize: 13, fontWeight: '700' }}>
+                      ({selectedImages.length}/5)
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    activeOpacity={0.7} 
+                    style={[styles.bigImageAddBtn, { backgroundColor: theme.card, opacity: selectedImages.length >= 5 ? 0.5 : 1 }]} 
+                    onPress={handlePickImages}
+                    disabled={selectedImages.length >= 5}
+                  >
+                    <Ionicons name="camera" size={32} color={selectedImages.length >= 5 ? theme.textSecondary : theme.primary} />
+                    <Text style={{marginTop: 8, color: theme.textSecondary, fontWeight: '700'}}>
+                      {selectedImages.length >= 5 ? '최대 개수 도달' : '사진 추가'}
+                    </Text>
+                  </TouchableOpacity>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 16}}>
                     {selectedImages.map((uri, idx) => (
                       <View key={idx} style={styles.imageThumbWrapper}><Image source={{ uri }} style={styles.imageThumb} /><TouchableOpacity style={styles.removeThumbBtn} onPress={() => setSelectedImages(selectedImages.filter((_, i) => i !== idx))}><Ionicons name="close" size={14} color="#fff" /></TouchableOpacity></View>
@@ -356,9 +387,9 @@ const styles = StyleSheet.create({
   fancyContentInput: { fontSize: 17, minHeight: 200, textAlignVertical: 'top', lineHeight: 26 },
   imagePickerArea: { marginTop: 30, paddingBottom: 50 },
   bigImageAddBtn: { width: '100%', height: 120, borderRadius: 32, borderStyle: 'dashed', borderWidth: 1, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-  imageThumbWrapper: { marginRight: 12, position: 'relative' },
+  imageThumbWrapper: { marginRight: 12, position: 'relative', paddingTop: 8, paddingRight: 8 },
   imageThumb: { width: 90, height: 90, borderRadius: 20 },
-  removeThumbBtn: { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  removeThumbBtn: { position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,59,48,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 1, ...Shadows.soft },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 30 },
   polishedModal: { width: '100%', padding: 32, borderRadius: 40, alignItems: 'center' },
   polishedModalTitle: { fontSize: 22, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5 },

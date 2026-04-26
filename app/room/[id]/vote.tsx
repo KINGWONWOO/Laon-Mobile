@@ -143,15 +143,23 @@ export default function VoteScreen() {
     const participants = Object.keys(vote.responses).length;
     const isClosed = vote.deadline && new Date(vote.deadline) < new Date();
     return (
-      <TouchableOpacity activeOpacity={0.8} style={[styles.listCard, { backgroundColor: theme.card }, Shadows.soft]} onPress={() => setSelectedVoteId(vote.id)}>
-        <View style={styles.listInfo}>
+      <TouchableOpacity 
+        activeOpacity={0.8} 
+        style={[
+          styles.listCard, 
+          { backgroundColor: isClosed ? (theme.isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)') : theme.card }, 
+          isClosed ? { elevation: 0, shadowOpacity: 0 } : Shadows.soft
+        ]} 
+        onPress={() => setSelectedVoteId(vote.id)}
+      >
+        <View style={[styles.listInfo, isClosed && { opacity: 0.5 }]}>
           <View style={{flexDirection:'row', alignItems:'center', marginBottom: 6}}>
             <Text style={[styles.listTitle, { color: theme.text }]} numberOfLines={1}>{vote.question}</Text>
             {isClosed && <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '20'}]}><Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '800'}}>종료</Text></View>}
           </View>
           <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participants}명 • {formatDateFull(vote.createdAt)}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: 0.5}} />
+        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: isClosed ? 0.2 : 0.5}} />
       </TouchableOpacity>
     );
   };

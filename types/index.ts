@@ -59,6 +59,7 @@ export type VideoFeedback = {
   roomId: string;
   userId: string; // ID of the user who uploaded the video
   videoUrl: string; // uri or remote url
+  choreographyVideoUrl?: string; // 추가 안무 영상 URL
   title: string;
   useNotification?: boolean;
   comments: Comment[];

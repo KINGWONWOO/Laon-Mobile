@@ -24,8 +24,18 @@ export const contentService = {
   },
 
   // --- Videos ---
-  addVideo: async (rid: string, uid: string, url: string, t: string, useNoti: boolean) => {
-    return await supabase.from('videos').insert([{ room_id: rid, user_id: uid, title: t, storage_path: url, youtube_id: 'R2_UPLOAD', use_notification: useNoti }]);
+  addVideo: async (rid: string, uid: string, url: string, t: string, useNoti: boolean, choreographyUrl?: string) => {
+    const payload: Record<string, any> = {
+      room_id: rid,
+      user_id: uid,
+      title: t,
+      storage_path: url,
+      youtube_id: 'R2_UPLOAD',
+      use_notification: useNoti,
+    };
+    if (choreographyUrl !== undefined) payload.choreography_video_url = choreographyUrl;
+    const { error } = await supabase.from('videos').insert([payload]);
+    if (error) throw error;
   },
   updateVideo: async (id: string, title: string) => {
     return await supabase.from('videos').update({ title }).eq('id', id);
@@ -114,5 +124,11 @@ export const contentService = {
     return await supabase.from('formations').insert([{
       room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data, video_settings: videoSettings
     }]).select().single();
-  }
+  },
+
+  // --- Developer Feedback ---
+  submitFeedback: async (userId: string, type: 'bug' | 'feature' | 'other', content: string) => {
+    const { error } = await supabase.from('developer_feedback').insert([{ user_id: userId, type, content }]);
+    if (error) throw error;
+  },
 };

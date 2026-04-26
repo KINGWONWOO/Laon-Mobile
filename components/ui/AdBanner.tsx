@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Platform, StyleSheet, Text } from 'react-native';
 import { AD_UNIT_ID } from '../../constants/Ads';
+import { useAppContext } from '../../context/AppContext';
 
 // Native module check
 let BannerAd: any = null;
@@ -23,6 +24,11 @@ if (Platform.OS !== 'web') {
 }
 
 const AdBanner = () => {
+  const { isPro } = useAppContext();
+
+  // Pro 이용자이면 광고를 표시하지 않음
+  if (isPro) return null;
+
   // 웹이거나, 네이티브 모듈 로드에 실패했으면 표시하지 않음
   if (Platform.OS === 'web' || !adsLoaded || !BannerAd) {
     if (__DEV__) {

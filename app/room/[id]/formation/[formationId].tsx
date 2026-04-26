@@ -136,20 +136,36 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDurationPip, setVideoDurationPip] = useState(0);
+  const [seekTrackWidth, setSeekTrackWidth] = useState(140);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startScale = useSharedValue(1);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!videoPlayer) return;
-      const t = videoPlayer.currentTime;
-      const d = videoPlayer.duration;
-      if (typeof t === 'number') setVideoCurrentTime(t);
-      if (typeof d === 'number' && d > 0) setVideoDurationPip(d);
-    }, 250);
-    return () => clearInterval(interval);
+    if (!videoPlayer) return;
+
+    // 타임 업데이트 리스너 개선: 이벤트 객체에 의존하지 않고 플레이어에서 직접 현재 시간 추출
+    const timeSub = videoPlayer.addListener('timeUpdate', () => {
+      const ct = videoPlayer.currentTime;
+      const dur = videoPlayer.duration;
+      if (typeof ct === 'number') setVideoCurrentTime(ct);
+      if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
+    });
+
+    const playSub = videoPlayer.addListener('playingChange', (playing: boolean) => {
+      setIsVideoPlaying(playing);
+    });
+
+    // 마운트 시 초기값 즉시 동기화
+    setVideoCurrentTime(videoPlayer.currentTime || 0);
+    setVideoDurationPip(videoPlayer.duration || 0);
+    setIsVideoPlaying(videoPlayer.playing || false);
+
+    return () => {
+      timeSub.remove();
+      playSub.remove();
+    };
   }, [videoPlayer]);
 
   useEffect(() => () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); }, []);
@@ -171,7 +187,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   const tap = Gesture.Tap()
     .runOnJS(true)
     .maxDistance(10)
-    .onEnd(() => showAndAutoHide());
+    .onEnd(() => { if (!showControls) showAndAutoHide(); });
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }]
@@ -179,10 +195,10 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
 
   const togglePlay = useCallback(() => {
     if (!videoPlayer) return;
-    if (isVideoPlaying) { videoPlayer.pause(); setIsVideoPlaying(false); }
-    else { videoPlayer.play(); setIsVideoPlaying(true); }
+    if (videoPlayer.playing) videoPlayer.pause();
+    else videoPlayer.play();
     showAndAutoHide();
-  }, [videoPlayer, isVideoPlaying, showAndAutoHide]);
+  }, [videoPlayer, showAndAutoHide]);
 
   if (!videoPlayer) return null;
 
@@ -207,7 +223,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
           <VideoView player={videoPlayer} style={styles.pipVideo} allowsFullscreen={false} allowsPictureInPicture={false} nativeControls={false} contentFit="contain" />
         </View>
         {showControls && (
-          <View style={[StyleSheet.absoluteFillObject, styles.pipOverlay]}>
+          <Pressable style={[StyleSheet.absoluteFillObject, styles.pipOverlay]} onPress={() => setShowControls(false)}>
             <View style={styles.pipTopRow}>
               <TouchableOpacity style={styles.pipBtn} onPress={onClose}>
                 <Ionicons name="close" size={14} color="#FFF" />
@@ -217,17 +233,28 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
               </TouchableOpacity>
             </View>
             <View style={styles.pipMidRow}>
-              <TouchableOpacity style={styles.pipBtn} onPress={() => {
-                if (videoPlayer) videoPlayer.currentTime = Math.max(0, videoCurrentTime - 5);
+              <TouchableOpacity style={styles.pipBtn} onPress={(e) => {
+                e.stopPropagation();
+                if (videoPlayer) {
+                  const targetTime = Math.max(0, videoCurrentTime - 5);
+                  videoPlayer.seekTo(targetTime);
+                }
                 showAndAutoHide();
               }}>
                 <Ionicons name="play-back" size={16} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pipPlayBtn} onPress={togglePlay}>
+              <TouchableOpacity style={styles.pipPlayBtn} onPress={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}>
                 <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={18} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pipBtn} onPress={() => {
-                if (videoPlayer) videoPlayer.currentTime = Math.min(videoDurationPip || 9999, videoCurrentTime + 5);
+              <TouchableOpacity style={styles.pipBtn} onPress={(e) => {
+                e.stopPropagation();
+                if (videoPlayer) {
+                  const targetTime = Math.min(videoDurationPip || 9999, videoCurrentTime + 5);
+                  videoPlayer.seekTo(targetTime);
+                }
                 showAndAutoHide();
               }}>
                 <Ionicons name="play-forward" size={16} color="#FFF" />
@@ -235,10 +262,15 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
             </View>
             <Pressable
               style={styles.pipSeekRow}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                if (w > 0) setSeekTrackWidth(w);
+              }}
               onPress={(e) => {
+                e.stopPropagation();
                 if (videoDurationPip > 0 && videoPlayer) {
-                  const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / 144));
-                  videoPlayer.currentTime = ratio * videoDurationPip;
+                  const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekTrackWidth));
+                  videoPlayer.seekTo(ratio * videoDurationPip);
                 }
                 showAndAutoHide();
               }}
@@ -247,7 +279,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 <View style={[styles.pipSeekFill, { width: `${progress * 100}%` as any }]} />
               </View>
             </Pressable>
-          </View>
+          </Pressable>
         )}
       </Animated.View>
     </GestureDetector>
@@ -653,6 +685,7 @@ export default function FormationEditorScreen() {
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
+  const effectiveDuration = (useVideoAudio && videoDuration > 0) ? videoDuration : (status.duration || 0);
 
   const [, setChangeCount] = useState(0);
 
@@ -689,12 +722,6 @@ export default function FormationEditorScreen() {
   // [NEW: 실제 오디오 PCM 디코딩 로직]
   const analyzeAudio = async (uri: string) => {
     if (!uri) return;
-    // AudioContext cannot decode video container formats — show flat waveform
-    const lowerUri = uri.toLowerCase();
-    if (lowerUri.includes('.mp4') || lowerUri.includes('.mov') || lowerUri.includes('.m4v')) {
-      setWaveformPeaks([]);
-      return;
-    }
     setIsAnalyzing(true);
     try {
       let targetUri = uri;
@@ -705,36 +732,56 @@ export default function FormationEditorScreen() {
       const analysisScript = `
         (async () => {
           try {
-            const response = await fetch("${targetUri}");
-            const arrayBuffer = await response.arrayBuffer();
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            const rawData = audioBuffer.getChannelData(0); 
-            const samplesPerSec = 10;
-            const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
-            const blockSize = Math.floor(rawData.length / totalSamples);
-            const peaks = [];
-            for (let i = 0; i < totalSamples; i++) {
-              let start = blockSize * i;
-              let sum = 0;
-              for (let j = 0; j < blockSize; j++) {
-                const val = rawData[start + j];
-                if (val !== undefined) sum += Math.abs(val);
-              }
-              peaks.push(sum / blockSize);
+            function loadArrayBuffer(url) {
+              return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', url, true);
+                xhr.responseType = 'arraybuffer';
+                xhr.onload = function() {
+                  if (this.status === 200 || this.status === 0) resolve(this.response);
+                  else reject(new Error('HTTP Status ' + this.status));
+                };
+                xhr.onerror = function() { reject(new Error('Network Error')); };
+                xhr.send();
+              });
             }
-            const maxPeak = Math.max(...peaks) || 1;
-            const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.3));
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
+
+            const arrayBuffer = await loadArrayBuffer("${targetUri}");
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            audioCtx.decodeAudioData(arrayBuffer, (audioBuffer) => {
+              const rawData = audioBuffer.getChannelData(0); 
+              const samplesPerSec = 10;
+              const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
+              const blockSize = Math.floor(rawData.length / totalSamples);
+              const peaks = [];
+              for (let i = 0; i < totalSamples; i++) {
+                let start = blockSize * i;
+                let sum = 0;
+                for (let j = 0; j < blockSize; j++) {
+                  const val = rawData[start + j];
+                  if (val !== undefined) sum += Math.abs(val);
+                }
+                peaks.push(sum / blockSize);
+              }
+              const maxPeak = Math.max(...peaks) || 1;
+              const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.3));
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
+            }, (err) => {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Decode failed: ' + err.message }));
+            });
           } catch (e) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
           }
         })();
       `;
-      webViewRef.current?.injectJavaScript(analysisScript);
+      setTimeout(() => {
+        webViewRef.current?.injectJavaScript(analysisScript);
+      }, 1000);
     } catch (e) {
       console.error('Audio Analysis Error:', e);
       setIsAnalyzing(false);
+      setWaveformPeaks([]);
     }
   };
 
@@ -882,7 +929,10 @@ export default function FormationEditorScreen() {
       const newTimeMs = (offset / PX_PER_SEC) * 1000;
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
-      runOnJS((t: number) => { player.seekTo(t / 1000); })(newTimeMs);
+      runOnJS((t: number) => {
+        player.seekTo(t / 1000);
+        if (useVideoAudio && videoPlayer) videoPlayer.seekTo(t / 1000);
+      })(newTimeMs);
     }
   };
 
@@ -890,8 +940,8 @@ export default function FormationEditorScreen() {
     isUserScrollingSV.value = false;
     if (isPlayerPlayingSV.value) {
       const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
-      const remaining = (status.duration * 1000) - time;
-      currentTimeMs.value = withTiming(status.duration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
+      const remaining = (effectiveDuration * 1000) - time;
+      currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     }
   };
 
@@ -1062,7 +1112,7 @@ export default function FormationEditorScreen() {
       const data = { 
         title: formation?.title, 
         audioUrl, 
-        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        // videoSettings removed as per requirement
         settings, 
         data: { dancers, scenes, timeline } 
       };
@@ -1088,14 +1138,41 @@ export default function FormationEditorScreen() {
 
   const handlePublish = async () => {
     if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
+    
+    const uploadChoreography = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        '안무 영상 추가',
+        '피드백 영상과 함께 볼 추가 안무 영상을 업로드하시겠습니까?',
+        [
+          { text: '아니오', onPress: () => resolve(false) },
+          { text: '네 (영상 선택)', onPress: () => resolve(true) }
+        ]
+      );
+    });
+
+    let choreographyUrl = undefined;
+    if (uploadChoreography) {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setIsExporting(true);
+        try {
+          const videoUri = result.assets[0].uri;
+          const fileName = `choreography_${Date.now()}.mp4`;
+          choreographyUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
+        } catch (e) {
+          Alert.alert('오류', '안무 영상 업로드에 실패했습니다. 동선만 업로드합니다.');
+        }
+      }
+    }
+
     try {
       setIsExporting(true);
       await publishFormationAsFeedback(id!, formationId!, publishTitle, { 
         audioUrl,
-        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        // videoSettings removed as per requirement
         settings, 
         data: { dancers, scenes, timeline } 
-      });
+      }, choreographyUrl);
       setShowPublishModal(false); setShowExportModal(false);
       Alert.alert('성공', '피드백이 성공적으로 업로드되었습니다.');
     } catch (e: any) {
@@ -1257,13 +1334,13 @@ export default function FormationEditorScreen() {
             <View style={[styles.timelineWrapper, { backgroundColor: theme.card }]}>
               <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
                 <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
-                  <View style={{ width: (status.duration || 60) * PX_PER_SEC, height: 120 }}>
-                    <WaveformBackground duration={status.duration || 60} peaks={waveformPeaks} />
-                    <TimeMarkers duration={status.duration || 60} />
+                  <View style={{ width: (effectiveDuration || 60) * PX_PER_SEC, height: 120 }}>
+                    <WaveformBackground duration={effectiveDuration || 60} peaks={waveformPeaks} />
+                    <TimeMarkers duration={effectiveDuration || 60} />
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (status.duration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
+                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (effectiveDuration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
                       ))}
@@ -1478,4 +1555,7 @@ const styles = StyleSheet.create({
   pipMidRow: { position: 'absolute', bottom: 5, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   pipBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
   pipPlayBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
+  pipSeekRow: { position: 'absolute', bottom: 35, left: 10, right: 10, height: 10, justifyContent: 'center' },
+  pipSeekTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 1.5, overflow: 'hidden' },
+  pipSeekFill: { height: '100%', backgroundColor: '#FFD700' },
 });

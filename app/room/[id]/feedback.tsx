@@ -15,6 +15,7 @@ import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponen
 import { Shadows } from '../../../constants/theme';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import AdBanner from '../../../components/ui/AdBanner';
+import { saveMediaToDevice } from '../../../services/downloadService';
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -27,8 +28,10 @@ export default function FeedbackScreen() {
   
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
   const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
+  const [cachedChoreographyUrl, setCachedChoreographyUrl] = useState<string | null>(null);
   const [isCaching, setIsCaching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSwapped, setIsSwapped] = useState(false);
 
   const [newComment, setNewComment] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
@@ -46,6 +49,9 @@ export default function FeedbackScreen() {
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
   const [selectedCommentForOptions, setSelectedCommentForOptions] = useState<any>(null);
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isMirrorMode, setIsMirrorMode] = useState(false);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -87,6 +93,12 @@ export default function FeedbackScreen() {
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
     if (cachedVideoUrl) p.play();
+  });
+
+  const subPlayer = useVideoPlayer(cachedChoreographyUrl || '', p => {
+    p.loop = true;
+    p.muted = true;
+    if (cachedChoreographyUrl) p.play();
   });
 
   useEffect(() => {
@@ -152,20 +164,49 @@ export default function FeedbackScreen() {
 
   useEffect(() => {
     async function cacheAndPlay() {
-      if (!selectedVideo || isFormation) { setCachedVideoUrl(null); return; }
+      if (!selectedVideo) {
+        setCachedVideoUrl(null);
+        setCachedChoreographyUrl(null);
+        setIsSwapped(false);
+        setIsMirrorMode(false);
+        return;
+      }
+      
       markItemAsAccessed('video', selectedVideo.id);
       setIsCaching(true);
+      
       try {
-        const remoteUrl = selectedVideo.videoUrl;
-        const fileName = remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4';
-        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (fileInfo.exists) setCachedVideoUrl(fileUri);
-        else {
-          const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
-          setCachedVideoUrl(uri);
+        if (!isFormation) {
+          const remoteUrl = selectedVideo.videoUrl;
+          const fileName = remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4';
+          const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+          const fileInfo = await FileSystem.getInfoAsync(fileUri);
+          if (fileInfo.exists) setCachedVideoUrl(fileUri);
+          else {
+            const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
+            setCachedVideoUrl(uri);
+          }
         }
-      } catch (error) { setCachedVideoUrl(selectedVideo.videoUrl); } finally { setIsCaching(false); }
+
+        if (selectedVideo.choreographyVideoUrl) {
+          const remoteUrl = selectedVideo.choreographyVideoUrl;
+          const fileName = `choreo_${remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4'}`;
+          const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+          const fileInfo = await FileSystem.getInfoAsync(fileUri);
+          if (fileInfo.exists) setCachedChoreographyUrl(fileUri);
+          else {
+            const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
+            setCachedChoreographyUrl(uri);
+          }
+        } else {
+          setCachedChoreographyUrl(null);
+        }
+      } catch (error) { 
+        setCachedVideoUrl(selectedVideo.videoUrl); 
+        if (selectedVideo.choreographyVideoUrl) setCachedChoreographyUrl(selectedVideo.choreographyVideoUrl);
+      } finally { 
+        setIsCaching(false); 
+      }
     }
     cacheAndPlay();
     setPlaybackRate(1.0);
@@ -280,25 +321,105 @@ export default function FeedbackScreen() {
     return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
   };
 
+  const handleTogglePlay = () => {
+    if (isFormation) {
+      setIsFormationPlaying(!isFormationPlaying);
+      if (subPlayer) {
+        if (!isFormationPlaying) subPlayer.play();
+        else subPlayer.pause();
+      }
+    } else {
+      if (player.playing) {
+        player.pause();
+        if (subPlayer) subPlayer.pause();
+      } else {
+        player.play();
+        if (subPlayer) subPlayer.play();
+      }
+    }
+  };
+
+  const handleSwap = () => {
+    setIsSwapped(!isSwapped);
+    if (player && subPlayer) {
+      player.muted = !isSwapped;
+      subPlayer.muted = isSwapped;
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!selectedVideo || isFormation || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await saveMediaToDevice(selectedVideo.videoUrl);
+    } catch (e: any) {
+      if (e.message !== 'PERMISSION_DENIED' && e.message !== 'SHARING_UNAVAILABLE') {
+        Alert.alert('저장 실패', '저장 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   if (selectedVideo) {
     const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
+    const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
+
+    const renderMainContent = () => {
+      if (isSwapped && hasChoreography) {
+        return <VideoView style={styles.vPlayer} player={subPlayer} contentFit="contain" allowsFullscreen={false} />;
+      }
+
+      if (isFormation) {
+        return selectedFormation ? (
+          <View style={{flex: 1}}>
+            <FormationPlayer formation={selectedFormation} currentTimeMs={formationTime} onDurationDetected={setFormationDuration} isPlaying={isFormationPlaying} />
+            <TouchableOpacity style={styles.formationPlayOverlay} onPress={handleTogglePlay}>
+              <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
+            </TouchableOpacity>
+          </View>
+        ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>;
+      }
+
+      return isCaching
+        ? <ActivityIndicator size="large" color={theme.primary} />
+        : (
+          <View style={[styles.vPlayer, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
+            <VideoView style={{ flex: 1 }} player={player} contentFit="contain" allowsFullscreen={false} />
+          </View>
+        );
+    };
+
+    const renderSubContent = () => {
+      if (!hasChoreography) return null;
+
+      return (
+        <TouchableOpacity style={[styles.subVideoContainer, Shadows.medium]} onPress={handleSwap}>
+          {isSwapped ? (
+            isFormation ? (
+              <View style={{flex: 1, backgroundColor: '#111'}}>
+                <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
+              </View>
+            ) : (
+              <VideoView style={{flex: 1}} player={player} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+            )
+          ) : (
+            <VideoView style={{flex: 1}} player={subPlayer} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+          )}
+          <View style={styles.swapIconOverlay}>
+            <Ionicons name="swap-horizontal" size={16} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      );
+    };
+
     return (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
             <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
-              {isFormation ? (
-                selectedFormation ? (
-                  <View style={{flex: 1}}>
-                    <FormationPlayer formation={selectedFormation} currentTimeMs={formationTime} onDurationDetected={setFormationDuration} isPlaying={isFormationPlaying} />
-                    <TouchableOpacity style={styles.formationPlayOverlay} onPress={() => setIsFormationPlaying(!isFormationPlaying)}>
-                      <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
-                    </TouchableOpacity>
-                  </View>
-                ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>
-              ) : (
-                isCaching ? <ActivityIndicator size="large" color={theme.primary} /> : <VideoView style={styles.vPlayer} player={player} contentFit="contain" allowsFullscreen={false} />
-              )}
+              {renderMainContent()}
+              {renderSubContent()}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
@@ -330,6 +451,18 @@ export default function FeedbackScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity style={{marginRight: 16}} onPress={() => setShowSidebar(!showSidebar)}>
                       <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
+                    </TouchableOpacity>
+                  </>
+                )}
+                {!isFormation && (
+                  <>
+                    <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setIsMirrorMode(v => !v)}>
+                      <Ionicons name="camera-reverse-outline" size={24} color={isMirrorMode ? theme.primary : '#fff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ marginRight: 16 }} onPress={handleDownload} disabled={isDownloading}>
+                      {isDownloading
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Ionicons name="download-outline" size={24} color="#fff" />}
                     </TouchableOpacity>
                   </>
                 )}
@@ -586,5 +719,7 @@ const styles = StyleSheet.create({
   bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
-  bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 }
+  bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  subVideoContainer: { position: 'absolute', top: 70, right: 20, width: 120, height: 68, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#fff', backgroundColor: '#000', zIndex: 110 },
+  swapIconOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' }
 });

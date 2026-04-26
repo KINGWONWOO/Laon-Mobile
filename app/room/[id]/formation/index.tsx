@@ -85,9 +85,13 @@ export default function FormationListScreen() {
 
         setIsSubmitting(true);
         const newId = await addFormation(id as string, importedData.title || '가져온 동선', undefined);
+        
+        // Strip videoSettings on import as per requirement
+        const { videoSettings, ...restData } = importedData;
+        
         await updateFormation(newId, {
-          settings: importedData.settings,
-          data: importedData.data
+          settings: restData.settings,
+          data: restData.data
         });
         
         Alert.alert('성공', '동선 파일을 성공적으로 가져왔습니다.');

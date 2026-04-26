@@ -45,7 +45,7 @@ interface AppContextType {
   deleteNoticeComment: (id: string) => Promise<void>;
 
   videos: VideoFeedback[];
-  addVideo: (rid: string, url: string, t: string, useNoti?: boolean) => Promise<void>;
+  addVideo: (rid: string, url: string, t: string, useNoti?: boolean, choreographyUrl?: string) => Promise<void>;
   updateVideo: (id: string, t: string) => Promise<void>;
   deleteVideo: (id: string) => Promise<void>;
   addComment: (vid: string, t: string, ts: number, pid?: string) => Promise<void>;
@@ -79,7 +79,7 @@ interface AppContextType {
   addFormation: (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
   updateFormation: (fid: string, updates: Partial<Formation>) => Promise<void>;
   deleteFormation: (fid: string) => Promise<void>;
-  publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any) => Promise<void>;
+  publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any, choreographyVideoUrl?: string) => Promise<void>;
 
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
@@ -374,7 +374,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     comments: (n.notice_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() }))
   })).filter(n => !blockedUsers.includes(n.userId)).sort((a, b) => (a.isPinned === b.isPinned) ? b.createdAt - a.createdAt : (a.isPinned ? -1 : 1));
 
-  const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({ id: v.id, roomId: v.room_id, userId: v.user_id, videoUrl: v.storage_path || v.youtube_url, title: v.title, useNotification: v.use_notification, createdAt: new Date(v.created_at).getTime(), comments: (v.video_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) })).filter(v => !blockedUsers.includes(v.userId));
+  const videosMapped: VideoFeedback[] = (videosQuery.data || []).map(v => ({ 
+    id: v.id, 
+    roomId: v.room_id, 
+    userId: v.user_id, 
+    videoUrl: v.storage_path || v.youtube_url, 
+    choreographyVideoUrl: v.choreography_video_url,
+    title: v.title, 
+    useNotification: v.use_notification, 
+    createdAt: new Date(v.created_at).getTime(), 
+    comments: (v.video_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, timestampMillis: c.timestamp_millis, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) 
+  })).filter(v => !blockedUsers.includes(v.userId));
   const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({ id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, description: p.description, useNotification: p.use_notification, createdAt: new Date(p.created_at).getTime(), comments: (p.gallery_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) })).filter(p => !blockedUsers.includes(p.userId));
   const schedulesMapped: Schedule[] = (schedulesQuery.data || []).map(s => {
     const resp: Record<string, string[]> = {}; (s.schedule_options || []).forEach((o: any) => (o.schedule_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
@@ -456,7 +466,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const updateNoticeComment = async (id: string, t: string) => { await contentService.updateNoticeComment(id, t); await refreshAllData(); };
   const deleteNoticeComment = async (id: string) => { await contentService.deleteNoticeComment(id); await refreshAllData(); };
 
-  const addVideo = async (rid: string, url: string, t: string, useNoti = true) => { if (!currentUserRef.current) return; await contentService.addVideo(rid, currentUserRef.current.id, url, t, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 피드백 영상', t); await refreshAllData(); };
+  const addVideo = async (rid: string, url: string, t: string, useNoti = true, choreographyUrl?: string) => { 
+    if (!currentUserRef.current) return; 
+    await contentService.addVideo(rid, currentUserRef.current.id, url, t, useNoti, choreographyUrl); 
+    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 피드백 영상', t); 
+    await refreshAllData(); 
+  };
   const updateVideo = async (id: string, t: string) => { await contentService.updateVideo(id, t); await refreshAllData(); };
   const deleteVideo = async (id: string) => { await contentService.deleteVideo(id); await refreshAllData(); };
   const addComment = async (vid: string, t: string, ts: number, pid?: string) => { if (!currentUserRef.current) return; await contentService.addVideoComment(vid, currentUserRef.current.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUserRef.current.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); };
@@ -547,7 +562,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const addFormation = async (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => { if (!currentUserRef.current) throw new Error('로그인이 필요합니다.'); const newId = Math.random().toString(36).substr(2, 9); const newFormation: Formation = { id: newId, roomId: rid, userId: currentUserRef.current.id, title, audioUrl, settings: settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true }, data: data || { dancers: [], scenes: [], timeline: [] }, createdAt: Date.now() }; const localRaw = await AsyncStorage.getItem('local_formations'); const local = localRaw ? JSON.parse(localRaw) : []; await AsyncStorage.setItem('local_formations', JSON.stringify([...local, newFormation])); await refreshAllData(); return newId; };
   const updateFormation = async (fid: string, updates: Partial<Formation>) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.map((f: any) => f.id === fid ? { ...f, ...updates } : f))); await refreshAllData(); return; } } await contentService.updateRemoteFormation(fid, updates); await refreshAllData(); };
   const deleteFormation = async (fid: string) => { const localRaw = await AsyncStorage.getItem('local_formations'); if (localRaw) { const local = JSON.parse(localRaw); if (local.some((f: any) => f.id === fid)) { await AsyncStorage.setItem('local_formations', JSON.stringify(local.filter((f: any) => f.id !== fid))); await refreshAllData(); return; } } await contentService.deleteRemoteFormation(fid); await refreshAllData(); };
-  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any) => {
+  const publishFormationAsFeedback = async (roomId: string, formationId: string, title: string, currentData?: any, choreographyVideoUrl?: string) => {
     if (!currentUserRef.current) return;
     let formation = (formationsQuery.data as any[] || []).find(f => f.id === formationId);
     const finalData = currentData?.data || formation?.data;
@@ -557,7 +572,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!finalData) throw new Error('동선 정보를 찾을 수 없습니다.');
     const { data: remote, error } = await contentService.publishFormation(roomId, currentUserRef.current.id, title, finalAudioUrl || '', finalSettings, finalData, finalVideoSettings);
     if (error) throw error;
-    await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`);
+    await addVideo(roomId, `formation://${remote.id}`, `[동선] ${title}`, true, choreographyVideoUrl);
     await refreshAllData();
   };
 

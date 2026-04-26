@@ -14,15 +14,17 @@ export const LinkingService = {
   // Open Native Share Sheet
   shareRoomInvite: async (roomName: string, roomId: string, passcode: string) => {
     const url = LinkingService.createRoomInviteLink(roomId, passcode);
-    const message = `[LAON DANCE] '${roomName}' 팀에 초대되셨습니다!\n\n아래 링크를 클릭하여 팀에 바로 합류하세요.\n\n링크: ${url}\n비밀번호: ${passcode}`;
+    // Android embeds the URL in the message text; iOS receives it as a separate url field
+    const message = Platform.OS === 'ios'
+      ? `[LAON DANCE] '${roomName}' 팀에 초대되셨습니다!\n\n방 ID: ${roomId}\n참여 코드: ${passcode}`
+      : `[LAON DANCE] '${roomName}' 팀에 초대되셨습니다!\n\n링크: ${url}\n\n방 ID: ${roomId}\n참여 코드: ${passcode}`;
 
     try {
       await Share.share({
         title: `'${roomName}' 팀 초대`,
-        message: Platform.OS === 'android' ? message : undefined,
-        url: url, // iOS handles URL specifically
+        message,
+        url: Platform.OS === 'ios' ? url : undefined,
       }, {
-        // Android specific
         dialogTitle: `'${roomName}' 초대장 보내기`,
       });
     } catch (error) {

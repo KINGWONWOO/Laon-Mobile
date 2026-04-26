@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
 import { Image } from 'expo-image';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -10,11 +10,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
+import { saveMediaToDevice } from '../../../services/downloadService';
 
 const { width } = Dimensions.get('window');
-const COLUMN_COUNT = 2;
-const ITEM_MARGIN = 12;
-const ITEM_SIZE = (width - 48 - (ITEM_MARGIN * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
+const COLUMN_COUNT = 3;
+const ITEM_MARGIN = 8;
+const ITEM_SIZE = (width - 32 - (ITEM_MARGIN * (COLUMN_COUNT + 1))) / COLUMN_COUNT;
 
 export default function ArchiveScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -61,6 +62,8 @@ export default function ArchiveScreen() {
   const [editDesc, setEditDesc] = useState('');
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
+
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Option Modal states
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
@@ -211,6 +214,19 @@ export default function ArchiveScreen() {
     ]);
   };
 
+  const handleDownload = async () => {
+    if (!selectedPhoto || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await saveMediaToDevice(selectedPhoto.photoUrl);
+      Alert.alert('저장 완료', '기기 갤러리에 저장되었습니다.');
+    } catch (e: any) {
+      if (e.message !== 'PERMISSION_DENIED') Alert.alert('저장 실패', e.message || '저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const photoOptions = [
     { label: '설명 수정', icon: 'create-outline', onPress: () => {
       setEditDesc(selectedPhoto.description || '');
@@ -283,11 +299,18 @@ export default function ArchiveScreen() {
               <Ionicons name="close" size={28} color={theme.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>아카이브 상세</Text>
-            {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) ? (
-              <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>
-                <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={handleDownload} style={styles.deleteBtn} disabled={isDownloading}>
+                {isDownloading
+                  ? <ActivityIndicator size="small" color={theme.primary} />
+                  : <Ionicons name="download-outline" size={24} color={theme.primary} />}
               </TouchableOpacity>
-            ) : <View style={{ width: 40 }} />}
+              {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
+                <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>
+                  <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <FlatList
@@ -481,8 +504,8 @@ const styles = StyleSheet.create({
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
   deleteBtn: { padding: 5 },
-  listContent: { padding: 16 },
-  gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.2, margin: 8, borderRadius: 28, overflow: 'hidden' },
+  listContent: { paddingHorizontal: 16, paddingTop: 16 },
+  gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.1, margin: ITEM_MARGIN / 2, borderRadius: 20, overflow: 'hidden' },
   gridImage: { width: '100%', height: '100%' },
   contentSection: { padding: 20 },
   authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },

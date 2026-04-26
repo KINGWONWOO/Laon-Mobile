@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ScrollView, Image, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch , Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,7 @@ import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../../components/ui/RoomComponents';
 import { Shadows } from '../../../../constants/theme';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
@@ -20,6 +21,7 @@ export default function NoticeDetailScreen() {
   const [showEditNotice, setShowEditNotice] = useState(false);
   const [editNoticeTitle, setEditNoticeTitle] = useState('');
   const [editNoticeContent, setEditNoticeContent] = useState('');
+  const [editNoticeImages, setEditNoticeImages] = useState<string[]>([]);
   const [useNotification, setUseNotification] = useState(true);
   const [isUpdatingNotice, setIsUpdatingNotice] = useState(false);
 
@@ -32,7 +34,21 @@ export default function NoticeDetailScreen() {
   const [showCommentOptions, setShowCommentOptions] = useState(false);
   const [selectedComment, setSelectedComment] = useState<any>(null);
 
+  // Full Screen Image Viewer state
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerImageUrl, setViewerImageUrl] = useState('');
+
   const notice = useMemo(() => notices.find(n => n.id === noticeId), [notices, noticeId]);
+  
+  useEffect(() => {
+    if (notice && showEditNotice) {
+      setEditNoticeTitle(notice.title);
+      setEditNoticeContent(notice.content);
+      setEditNoticeImages(notice.imageUrls || []);
+      setUseNotification(notice.useNotification !== false);
+    }
+  }, [notice, showEditNotice]);
+
   const author = useMemo(() => notice ? getUserById(notice.userId) : null, [notice]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
 
@@ -72,15 +88,44 @@ export default function NoticeDetailScreen() {
 
   const handleUpdateNotice = async () => {
     if (!editNoticeTitle.trim() || !editNoticeContent.trim()) return;
+    if (editNoticeImages.length > 5) return Alert.alert('오류', '사진은 최대 5장까지만 등록 가능합니다.');
     setIsUpdatingNotice(true);
     try {
-      await updateNotice(notice.id, { title: editNoticeTitle.trim(), content: editNoticeContent.trim(), useNotification } as any);
+      await updateNotice(notice.id, { 
+        title: editNoticeTitle.trim(), 
+        content: editNoticeContent.trim(), 
+        useNotification,
+        imageUrls: editNoticeImages
+      } as any);
       setShowEditNotice(false);
     } catch (e: any) {
       Alert.alert('오류', e.message);
     } finally {
       setIsUpdatingNotice(false);
     }
+  };
+
+  const handlePickImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ 
+      mediaTypes: ['images'], 
+      allowsMultipleSelection: true, 
+      quality: 0.7,
+      selectionLimit: 5 - editNoticeImages.length
+    });
+    if (!result.canceled) {
+      const newImages = [...editNoticeImages, ...result.assets.map(a => a.uri)];
+      if (newImages.length > 5) {
+        Alert.alert('알림', '사진은 최대 5장까지만 등록 가능합니다.');
+        setEditNoticeImages(newImages.slice(0, 5));
+      } else {
+        setEditNoticeImages(newImages);
+      }
+    }
+  };
+
+  const openImageViewer = (url: string) => {
+    setViewerImageUrl(url);
+    setViewerVisible(true);
   };
 
   const handleUpdateComment = async () => {
@@ -101,10 +146,7 @@ export default function NoticeDetailScreen() {
     { label: notice.isPinned ? '고정 해제' : '상단 고정', icon: 'pin-outline', onPress: async () => {
       try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert('오류', e.message); }
     }},
-    { label: '제목/내용 수정', icon: 'create-outline', onPress: () => {
-      setEditNoticeTitle(notice.title);
-      setEditNoticeContent(notice.content);
-      setUseNotification(notice.useNotification !== false);
+    { label: '수정하기', icon: 'create-outline', onPress: () => {
       setShowEditNotice(true);
     }},
     { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
@@ -175,7 +217,9 @@ export default function NoticeDetailScreen() {
             {notice.imageUrls && notice.imageUrls.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
                 {notice.imageUrls.map((url, idx) => (
-                  <Image key={idx} source={{ uri: url }} style={styles.noticeImage} />
+                  <TouchableOpacity key={idx} activeOpacity={0.9} onPress={() => openImageViewer(url)}>
+                    <Image source={{ uri: url }} style={styles.noticeImage} />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             )}
@@ -241,25 +285,69 @@ export default function NoticeDetailScreen() {
       />
 
       <Modal visible={showEditNotice} transparent animationType="slide" onRequestClose={() => setShowEditNotice(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>공지 수정</Text>
-              <TouchableOpacity onPress={() => setShowEditNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, marginBottom: 15 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
-              <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, backgroundColor: theme.background, marginBottom: 20 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
-              <View style={[styles.settingItem, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}]}>
-                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>푸시 알림 전송</Text>
-                <Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" />
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={{ flex: 1 }}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay} 
+            activeOpacity={1} 
+            onPress={() => setShowEditNotice(false)}
+          >
+            <TouchableOpacity 
+              activeOpacity={1} 
+              onPress={(e) => e.stopPropagation()} 
+              style={[styles.modalContent, { backgroundColor: theme.card, paddingBottom: insets.bottom + 20 }]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>공지 수정</Text>
+                <TouchableOpacity onPress={() => setShowEditNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
               </View>
-              <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateNotice} disabled={isUpdatingNotice}>
-                {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>수정 완료</Text>}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, marginBottom: 15 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
+                <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, backgroundColor: theme.background, marginBottom: 20 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
+                
+                <View style={styles.imagePickerArea}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <Text style={{ color: theme.text, fontSize: 14, fontWeight: '800' }}>사진 첨부 (최대 5장)</Text>
+                    <Text style={{ color: editNoticeImages.length >= 5 ? theme.error : theme.textSecondary, fontSize: 12, fontWeight: '700' }}>
+                      ({editNoticeImages.length}/5)
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    activeOpacity={0.7} 
+                    style={[styles.bigImageAddBtn, { backgroundColor: theme.background, borderColor: theme.border, opacity: editNoticeImages.length >= 5 ? 0.5 : 1 }]} 
+                    onPress={handlePickImages}
+                    disabled={editNoticeImages.length >= 5}
+                  >
+                    <Ionicons name="camera" size={28} color={editNoticeImages.length >= 5 ? theme.textSecondary : theme.primary} />
+                    <Text style={{marginTop: 6, color: theme.textSecondary, fontWeight: '700', fontSize: 13}}>
+                      {editNoticeImages.length >= 5 ? '최대 개수 도달' : '사진 추가'}
+                    </Text>
+                  </TouchableOpacity>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 15}}>
+                    {editNoticeImages.map((uri, idx) => (
+                      <View key={idx} style={styles.imageThumbWrapper}>
+                        <Image source={{ uri }} style={styles.imageThumb} />
+                        <TouchableOpacity style={styles.removeThumbBtn} onPress={() => setEditNoticeImages(editNoticeImages.filter((_, i) => i !== idx))}>
+                          <Ionicons name="close" size={14} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={[styles.settingItem, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, marginTop: 10}]}>
+                  <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>푸시 알림 전송</Text>
+                  <Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" />
+                </View>
+                <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateNotice} disabled={isUpdatingNotice}>
+                  {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>수정 완료</Text>}
+                </TouchableOpacity>
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
@@ -279,6 +367,15 @@ export default function NoticeDetailScreen() {
           <Ionicons name="send" size={20} color={theme.background} />
         </TouchableOpacity>
       </View>
+
+      <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)}>
+        <View style={styles.viewerContainer}>
+          <TouchableOpacity style={[styles.viewerCloseBtn, { top: insets.top + 20 }]} onPress={() => setViewerVisible(false)}>
+            <Ionicons name="close" size={32} color="#fff" />
+          </TouchableOpacity>
+          <Image source={{ uri: viewerImageUrl }} style={styles.viewerImage} resizeMode="contain" />
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -318,5 +415,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
   submitBtn: { padding: 15, borderRadius: 28, alignItems: 'center', marginTop: 10, ...Shadows.soft },
   submitBtnText: { fontWeight: '800', letterSpacing: -0.5 },
-  settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }
+  settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  imagePickerArea: { marginBottom: 20 },
+  bigImageAddBtn: { width: '100%', height: 100, borderRadius: 24, borderStyle: 'dashed', borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  imageThumbWrapper: { marginRight: 12, position: 'relative', paddingTop: 8, paddingRight: 8 },
+  imageThumb: { width: 80, height: 80, borderRadius: 16 },
+  removeThumbBtn: { position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,59,48,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 1, ...Shadows.soft },
+  viewerContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  viewerImage: { width: '100%', height: '80%' },
+  viewerCloseBtn: { position: 'absolute', right: 20, zIndex: 10, padding: 10 }
 });
+

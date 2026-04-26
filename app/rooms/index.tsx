@@ -33,6 +33,10 @@ export default function RoomsScreen() {
   const [newImage, setNewImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'other'>('bug');
+  const [feedbackContent, setFeedbackContent] = useState('');
+
   const originalTheme = useRef({
     type: themeType,
     primary: customColor,
@@ -104,6 +108,27 @@ export default function RoomsScreen() {
         }
       ]
     );
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackContent.trim()) return Alert.alert('알림', '의견 내용을 입력해주세요.');
+    const typeLabels = { bug: '버그 제보', feature: '기능 제안', other: '기타' };
+    const subject = encodeURIComponent(`[LAON] ${typeLabels[feedbackType]}`);
+    const body = encodeURIComponent(feedbackContent.trim());
+    const mailUrl = `mailto:hjlree@gmail.com?subject=${subject}&body=${body}`;
+    try {
+      const canOpen = await Linking.canOpenURL(mailUrl);
+      if (!canOpen) {
+        Alert.alert('이메일 앱 없음', '이메일 앱이 설치되어 있지 않습니다.\nhhjlree@gmail.com 으로 직접 보내주세요.');
+        return;
+      }
+      await Linking.openURL(mailUrl);
+      setShowFeedbackModal(false);
+      setFeedbackContent('');
+      setFeedbackType('bug');
+    } catch {
+      Alert.alert('오류', '이메일 앱을 열 수 없습니다.');
+    }
   };
 
   const handleCreateRoom = () => {
@@ -207,6 +232,60 @@ export default function RoomsScreen() {
         }
       />
 
+      <TouchableOpacity
+        style={[styles.feedbackFab, { backgroundColor: theme.primary }]}
+        onPress={() => setShowFeedbackModal(true)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.background} />
+        <Text style={[styles.feedbackFabText, { color: theme.background }]}>의견 제공</Text>
+      </TouchableOpacity>
+
+      <Modal visible={showFeedbackModal} animationType="slide" transparent onRequestClose={() => setShowFeedbackModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.feedbackOverlay}>
+          <View style={[styles.feedbackSheet, { backgroundColor: theme.card }]}>
+            <View style={styles.feedbackHeader}>
+              <Text style={[styles.feedbackTitle, { color: theme.text }]}>개발자에게 의견 보내기</Text>
+              <TouchableOpacity onPress={() => setShowFeedbackModal(false)}>
+                <Ionicons name="close" size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary }]}>의견 유형</Text>
+            <View style={styles.feedbackTypeRow}>
+              {([
+                { key: 'bug', label: '🐛 버그 제보' },
+                { key: 'feature', label: '💡 기능 제안' },
+                { key: 'other', label: '💬 기타' },
+              ] as const).map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.feedbackTypeBtn, { borderColor: feedbackType === key ? theme.primary : theme.border, backgroundColor: feedbackType === key ? theme.primary + '18' : 'transparent' }]}
+                  onPress={() => setFeedbackType(key)}
+                >
+                  <Text style={[styles.feedbackTypeBtnText, { color: feedbackType === key ? theme.primary : theme.textSecondary }]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary, marginTop: 16 }]}>내용</Text>
+            <TextInput
+              style={[styles.feedbackInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+              value={feedbackContent}
+              onChangeText={setFeedbackContent}
+              placeholder="불편한 점이나 개선 아이디어를 자유롭게 작성해주세요."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[styles.feedbackSubmitBtn, { backgroundColor: theme.primary }]}
+              onPress={handleSubmitFeedback}
+            >
+              <Text style={[styles.feedbackSubmitText, { color: theme.background }]}>이메일로 보내기</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={showProfileModal} animationType="slide" transparent onRequestClose={handleCancel}>
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -308,5 +387,18 @@ const styles = StyleSheet.create({
   policyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   policyText: { fontSize: 13, textDecorationLine: 'underline' },
   deleteAccountBtn: { marginTop: 20, padding: 10 },
-  deleteAccountText: { color: '#EF4444', fontSize: 13, fontWeight: 'bold', textDecorationLine: 'underline' }
+  deleteAccountText: { color: '#EF4444', fontSize: 13, fontWeight: 'bold', textDecorationLine: 'underline' },
+  feedbackFab: { position: 'absolute', right: 24, bottom: 90, flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 24, gap: 6, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 4 },
+  feedbackFabText: { fontSize: 13, fontWeight: 'bold' },
+  feedbackOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  feedbackSheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36 },
+  feedbackHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  feedbackTitle: { fontSize: 18, fontWeight: 'bold' },
+  feedbackSubtitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 8 },
+  feedbackTypeRow: { flexDirection: 'row', gap: 8 },
+  feedbackTypeBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
+  feedbackTypeBtnText: { fontSize: 12, fontWeight: 'bold' },
+  feedbackInput: { borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 14, height: 120, marginBottom: 16 },
+  feedbackSubmitBtn: { padding: 16, borderRadius: 14, alignItems: 'center' },
+  feedbackSubmitText: { fontWeight: 'bold', fontSize: 15 },
 });

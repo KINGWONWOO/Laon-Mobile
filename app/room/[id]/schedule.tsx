@@ -183,10 +183,14 @@ export default function ScheduleScreen() {
     return (
       <TouchableOpacity 
         activeOpacity={0.8}
-        style={[styles.listCard, { backgroundColor: theme.card }, Shadows.soft]} 
+        style={[
+          styles.listCard, 
+          { backgroundColor: isClosed ? (theme.isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)') : theme.card }, 
+          isClosed ? { elevation: 0, shadowOpacity: 0 } : Shadows.soft
+        ]} 
         onPress={() => setSelectedScheduleId(schedule.id)}
       >
-        <View style={styles.listInfo}>
+        <View style={[styles.listInfo, isClosed && { opacity: 0.5 }]}>
           <View style={{flexDirection:'row', alignItems:'center', marginBottom: 6}}>
             <Text style={[styles.listTitle, { color: theme.text }]} numberOfLines={1}>{schedule.title}</Text>
             {isClosed && (
@@ -197,7 +201,7 @@ export default function ScheduleScreen() {
           </View>
           <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participantsCount}명 • {formatDateFull(schedule.createdAt)}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: 0.5}} />
+        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: isClosed ? 0.2 : 0.5}} />
       </TouchableOpacity>
     );
   };
@@ -520,7 +524,23 @@ export default function ScheduleScreen() {
           <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>날짜</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>시간</Text></TouchableOpacity>
         </View>
-        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => <TouchableOpacity key={i} style={[styles.smallDateBtn, date.toDateString() === d.toDateString() && {backgroundColor: theme.primary}, Shadows.soft]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}><Text style={{fontSize: 10, color: date.toDateString() === d.toDateString() ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontSize: 16, fontWeight: '900', color: date.toDateString() === d.toDateString() ? '#fff' : theme.text}}>{d.getDate()}</Text></TouchableOpacity>)}</ScrollView>}
+        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => {
+          const isSelected = date.toDateString() === d.toDateString();
+          return (
+            <TouchableOpacity 
+              key={i} 
+              style={[
+                styles.smallDateBtn, 
+                { backgroundColor: isSelected ? theme.primary : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') },
+                isSelected && Shadows.glow
+              ]} 
+              onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}
+            >
+              <Text style={{fontSize: 10, color: isSelected ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+              <Text style={{fontSize: 16, fontWeight: '900', color: isSelected ? '#fff' : theme.text}}>{d.getDate()}</Text>
+            </TouchableOpacity>
+          );
+        })}</ScrollView>}
         {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
@@ -564,21 +584,59 @@ export default function ScheduleScreen() {
               <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 차주 정기 연습 시간" placeholderTextColor={theme.textSecondary} value={title} onChangeText={setTitle} />
               
               <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>날짜 선택 (다중)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
-                {Array.from({length: 14}).map((_, i) => {
-                  const d = new Date(); d.setDate(d.getDate() + i);
-                  const isSel = !!selectedDates.find(sd => sd.toDateString() === d.toDateString());
-                  return (
-                    <TouchableOpacity key={i} onPress={() => toggleDate(d)} style={[styles.smallDateBtn, isSel && {backgroundColor: theme.primary}, Shadows.soft]}><Text style={{fontSize: 10, color: isSel ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={{fontSize: 16, fontWeight: '900', color: isSel ? '#fff' : theme.text}}>{d.getDate()}</Text></TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              <View style={[styles.dateSelectionContainer, { backgroundColor: theme.background }]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {Array.from({length: 14}).map((_, i) => {
+                    const d = new Date(); d.setDate(d.getDate() + i);
+                    const isSel = !!selectedDates.find(sd => sd.toDateString() === d.toDateString());
+                    return (
+                      <TouchableOpacity 
+                        key={i} 
+                        onPress={() => toggleDate(d)} 
+                        style={[
+                          styles.smallDateBtn, 
+                          { backgroundColor: isSel ? theme.primary : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') },
+                          isSel && Shadows.glow
+                        ]}
+                      >
+                        <Text style={{fontSize: 10, color: isSel ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                        <Text style={{fontSize: 16, fontWeight: '900', color: isSel ? '#fff' : theme.text}}>{d.getDate()}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                {selectedDates.length === 0 && (
+                  <View style={styles.dateSelectionPlaceholder}>
+                    <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '600' }}>연습 가능한 날짜들을 모두 선택해주세요</Text>
+                  </View>
+                )}
+              </View>
 
-              <Text style={[styles.label, { color: theme.text }]}>시간 범위 설정</Text>
-              <View style={{flexDirection:'row', alignItems:'center', gap: 10, marginBottom: 30}}>
-                <View style={{flex:1, alignItems:'center'}}><Text style={{color: theme.textSecondary, fontSize:12, marginBottom:6}}>시작 시각</Text><ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>{Array.from({length: 24}).map((_,h) => <TouchableOpacity key={h} onPress={()=>setStartTime(h)} style={[styles.timeSlotBtn, startTime===h && {backgroundColor:theme.primary}]}><Text style={{color:startTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text></TouchableOpacity>)}</ScrollView></View>
-                <Ionicons name="arrow-forward" size={20} color={theme.textSecondary} />
-                <View style={{flex:1, alignItems:'center'}}><Text style={{color: theme.textSecondary, fontSize:12, marginBottom:6}}>종료 시각</Text><ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>{Array.from({length: 24}).map((_,h) => <TouchableOpacity key={h} onPress={()=>setEndTime(h)} style={[styles.timeSlotBtn, endTime===h && {backgroundColor:theme.primary}]}><Text style={{color:endTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text></TouchableOpacity>)}</ScrollView></View>
+              <Text style={[styles.label, { color: theme.text, marginTop: 25 }]}>시간 범위 설정</Text>
+              <View style={[styles.timeRangeContainer, { backgroundColor: theme.background }]}>
+                <View style={{flex:1, alignItems:'center'}}>
+                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>시작</Text>
+                  <ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>
+                    {Array.from({length: 24}).map((_,h) => (
+                      <TouchableOpacity key={h} onPress={()=>setStartTime(h)} style={[styles.timeSlotBtn, startTime===h && {backgroundColor:theme.primary, ...Shadows.soft}]}>
+                        <Text style={{color:startTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View style={{ paddingHorizontal: 10, paddingTop: 20 }}>
+                  <Ionicons name="arrow-forward" size={18} color={theme.textSecondary} />
+                </View>
+                <View style={{flex:1, alignItems:'center'}}>
+                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>종료</Text>
+                  <ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>
+                    {Array.from({length: 24}).map((_,h) => (
+                      <TouchableOpacity key={h} onPress={()=>setEndTime(h)} style={[styles.timeSlotBtn, endTime===h && {backgroundColor:theme.primary, ...Shadows.soft}]}>
+                        <Text style={{color:endTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
               
               <View style={[styles.settingItem, {marginTop: 10}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
@@ -676,8 +734,11 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
   label: { fontSize: 15, fontWeight: '800', marginBottom: 12, opacity: 0.8 },
   input: { borderRadius: 20, padding: 18, fontSize: 16, fontWeight: '600', marginBottom: 16 },
+  dateSelectionContainer: { padding: 15, borderRadius: 24, marginBottom: 10 },
+  dateSelectionPlaceholder: { marginTop: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: 10 },
   smallDateBtn: { width: 50, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
-  timeSlotBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginRight: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
+  timeRangeContainer: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 24, marginBottom: 20 },
+  timeSlotBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, marginRight: 8, backgroundColor: 'rgba(0,0,0,0.05)' },
   settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 12 },
   settingLabel: { fontSize: 16, fontWeight: '700' },
   compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20 },
