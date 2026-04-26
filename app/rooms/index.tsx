@@ -112,22 +112,19 @@ export default function RoomsScreen() {
 
   const handleSubmitFeedback = async () => {
     if (!feedbackContent.trim()) return Alert.alert('알림', '의견 내용을 입력해주세요.');
-    const typeLabels = { bug: '버그 제보', feature: '기능 제안', other: '기타' };
-    const subject = encodeURIComponent(`[LAON] ${typeLabels[feedbackType]}`);
-    const body = encodeURIComponent(feedbackContent.trim());
-    const mailUrl = `mailto:hjlree@gmail.com?subject=${subject}&body=${body}`;
+    if (!currentUser) return Alert.alert('알림', '로그인이 필요합니다.');
+    
+    setIsUpdating(true);
     try {
-      const canOpen = await Linking.canOpenURL(mailUrl);
-      if (!canOpen) {
-        Alert.alert('이메일 앱 없음', '이메일 앱이 설치되어 있지 않습니다.\nhhjlree@gmail.com 으로 직접 보내주세요.');
-        return;
-      }
-      await Linking.openURL(mailUrl);
+      await contentService.submitFeedback(currentUser.id, feedbackType, feedbackContent.trim());
+      Alert.alert('감사합니다', '소중한 의견이 개발자에게 전달되었습니다.');
       setShowFeedbackModal(false);
       setFeedbackContent('');
       setFeedbackType('bug');
-    } catch {
-      Alert.alert('오류', '이메일 앱을 열 수 없습니다.');
+    } catch (e) {
+      Alert.alert('오류', '의견 전송 중 문제가 발생했습니다.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -279,8 +276,9 @@ export default function RoomsScreen() {
             <TouchableOpacity
               style={[styles.feedbackSubmitBtn, { backgroundColor: theme.primary }]}
               onPress={handleSubmitFeedback}
+              disabled={isUpdating}
             >
-              <Text style={[styles.feedbackSubmitText, { color: theme.background }]}>이메일로 보내기</Text>
+              {isUpdating ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.feedbackSubmitText, { color: theme.background }]}>의견 보내기</Text>}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

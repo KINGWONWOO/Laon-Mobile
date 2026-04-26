@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "댄스 영상 촬영을 위해 카메라 권한이 필요합니다.",
         "NSMicrophoneUsageDescription": "댄스 영상 촬영 시 오디오 녹음을 위해 마이크 권한이 필요합니다.",
-        "NSPhotoLibraryUsageDescription": "피드백할 댄스 영상을 선택하기 위해 사진첩 접근 권한이 필요합니다."
+        "NSPhotoLibraryUsageDescription": "피드백할 댄스 영상을 선택하기 위해 사진첩 접근 권한이 필요합니다.",
+        "NSPhotoLibraryAddUsageDescription": "영상을 갤러리에 저장하기 위해 사진첩 쓰기 권한이 필요합니다."
       }
     },
     "android": {

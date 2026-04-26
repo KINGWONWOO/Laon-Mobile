@@ -303,7 +303,7 @@ export default function ArchiveScreen() {
               <TouchableOpacity onPress={handleDownload} style={styles.deleteBtn} disabled={isDownloading}>
                 {isDownloading
                   ? <ActivityIndicator size="small" color={theme.primary} />
-                  : <Ionicons name="download-outline" size={24} color={theme.primary} />}
+                  : <Ionicons name="download" size={24} color={theme.primary} />}
               </TouchableOpacity>
               {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                 <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>

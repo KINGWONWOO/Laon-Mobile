@@ -367,7 +367,11 @@ export default function FeedbackScreen() {
 
     const renderMainContent = () => {
       if (isSwapped && hasChoreography) {
-        return <VideoView style={styles.vPlayer} player={subPlayer} contentFit="contain" allowsFullscreen={false} />;
+        return (
+          <View style={styles.vPlayer}>
+            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" allowsFullscreen={false} />
+          </View>
+        );
       }
 
       if (isFormation) {
@@ -384,8 +388,8 @@ export default function FeedbackScreen() {
       return isCaching
         ? <ActivityIndicator size="large" color={theme.primary} />
         : (
-          <View style={[styles.vPlayer, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
-            <VideoView style={{ flex: 1 }} player={player} contentFit="contain" allowsFullscreen={false} />
+          <View style={styles.vPlayer}>
+            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" allowsFullscreen={false} />
           </View>
         );
     };
@@ -401,10 +405,10 @@ export default function FeedbackScreen() {
                 <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
               </View>
             ) : (
-              <VideoView style={{flex: 1}} player={player} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+              <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
             )
           ) : (
-            <VideoView style={{flex: 1}} player={subPlayer} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+            <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
           )}
           <View style={styles.swapIconOverlay}>
             <Ionicons name="swap-horizontal" size={16} color="#fff" />
@@ -462,7 +466,7 @@ export default function FeedbackScreen() {
                     <TouchableOpacity style={{ marginRight: 16 }} onPress={handleDownload} disabled={isDownloading}>
                       {isDownloading
                         ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="download-outline" size={24} color="#fff" />}
+                        : <Ionicons name="download" size={24} color="#fff" />}
                     </TouchableOpacity>
                   </>
                 )}
