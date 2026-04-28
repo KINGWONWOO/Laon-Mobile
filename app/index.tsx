@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { authService } from '../services/authService';
 import { useAppContext } from '../context/AppContext';
+import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../constants/translations';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -18,11 +19,11 @@ export default function LoginScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   
-  const { theme, loginWithSocial } = useAppContext();
+  const { theme, loginWithSocial, language, setLanguage, t } = useAppContext();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('알림', '이메일과 비밀번호를 입력해주세요.');
+      Alert.alert(t('notification'), t('emailPasswordRequired'));
       return;
     }
     setLoading(true);
@@ -35,7 +36,7 @@ export default function LoginScreen() {
       router.replace('/rooms');
     } catch (err: any) {
       console.error('[LoginScreen] Login error:', err);
-      setErrorMsg(err.message || '로그인에 실패했습니다.');
+      setErrorMsg(err.message || t('loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +50,7 @@ export default function LoginScreen() {
       if (data?.session) router.replace('/rooms');
     } catch (err: any) {
       console.error(`[SocialAuth] Error:`, err);
-      Alert.alert('알림', `${provider} 로그인 중 오류가 발생했습니다.\n${err.message || ''}`);
+      Alert.alert(t('notification'), `${provider} ${t('loginFailed')}\n${err.message || ''}`);
     } finally {
       setSocialLoading(null);
     }
@@ -67,7 +68,7 @@ export default function LoginScreen() {
           <Text style={[styles.title, { color: currentColors.primary }]}>LAON</Text>
           <Text style={[styles.subtitle, { color: currentColors.text }]}>DANCE FEEDBACK</Text>
           <Text style={[styles.description, { color: currentColors.textSecondary }]}>
-            더 나은 춤을 위한 크루들의 공간
+            {t('tagline')}
           </Text>
         </View>
 
@@ -76,7 +77,7 @@ export default function LoginScreen() {
             <Ionicons name="mail-outline" size={20} color={currentColors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { color: currentColors.text }]}
-              placeholder="이메일 주소"
+              placeholder={t('emailAddress')}
               placeholderTextColor={currentColors.textSecondary}
               value={email}
               onChangeText={setEmail}
@@ -89,7 +90,7 @@ export default function LoginScreen() {
             <Ionicons name="lock-closed-outline" size={20} color={currentColors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { color: currentColors.text }]}
-              placeholder="비밀번호"
+              placeholder={t('password')}
               placeholderTextColor={currentColors.textSecondary}
               value={password}
               onChangeText={setPassword}
@@ -103,7 +104,7 @@ export default function LoginScreen() {
             style={[styles.forgotPassword, { marginTop: 12 }]}
             onPress={() => router.push('/forgot-password')}
           >
-            <Text style={{ color: currentColors.textSecondary, fontSize: 13, fontWeight: '600' }}>비밀번호를 잊으셨나요?</Text>
+            <Text style={{ color: currentColors.textSecondary, fontSize: 13, fontWeight: '600' }}>{t('forgotPassword')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -112,12 +113,12 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>로그인</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginButtonText}>{t('login')}</Text>}
           </TouchableOpacity>
 
           <View style={styles.dividerContainer}>
             <View style={[styles.divider, { backgroundColor: currentColors.border }]} />
-            <Text style={[styles.dividerText, { color: currentColors.textSecondary }]}>간편 로그인</Text>
+            <Text style={[styles.dividerText, { color: currentColors.textSecondary }]}>{t('socialLogin')}</Text>
             <View style={[styles.divider, { backgroundColor: currentColors.border }]} />
           </View>
 
@@ -150,10 +151,22 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={{ color: currentColors.textSecondary, fontWeight: '500' }}>계정이 없으신가요? </Text>
+            <Text style={{ color: currentColors.textSecondary, fontWeight: '500' }}>{t('noAccount')} </Text>
             <TouchableOpacity onPress={() => router.push('/register')}>
-              <Text style={{ color: currentColors.primary, fontWeight: '800' }}>회원가입</Text>
+              <Text style={{ color: currentColors.primary, fontWeight: '800' }}>{t('signup')}</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.langRow}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <TouchableOpacity
+                key={lang}
+                style={[styles.langChip, { borderColor: language === lang ? currentColors.primary : currentColors.border, backgroundColor: language === lang ? currentColors.primary + '18' : 'transparent' }]}
+                onPress={() => setLanguage(lang)}
+              >
+                <Text style={[styles.langChipText, { color: language === lang ? currentColors.primary : currentColors.textSecondary }]}>{LANGUAGE_NAMES[lang]}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -181,5 +194,8 @@ const styles = StyleSheet.create({
   dividerText: { marginHorizontal: 20, fontSize: 13, fontWeight: '700', opacity: 0.6 },
   socialButtons: { flexDirection: 'row', justifyContent: 'center' },
   socialBtn: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 50 }
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 50 },
+  langRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 24, gap: 8 },
+  langChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  langChipText: { fontSize: 11, fontWeight: '700' }
 });

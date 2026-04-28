@@ -15,7 +15,7 @@ import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -61,7 +61,7 @@ export default function RoomMainScreen() {
     if (!result.canceled) {
       const newImages = [...selectedImages, ...result.assets.map(a => a.uri)];
       if (newImages.length > 5) {
-        Alert.alert('알림', '사진은 최대 5장까지만 등록 가능합니다.');
+        Alert.alert(t('notification'), t('maxImages'));
         setSelectedImages(newImages.slice(0, 5));
       } else {
         setSelectedImages(newImages);
@@ -70,56 +70,56 @@ export default function RoomMainScreen() {
   };
 
   const handleAddNotice = async () => {
-    if (!noticeTitle.trim() || !noticeContent.trim()) return Alert.alert('오류', '제목과 내용을 입력해주세요.');
-    if (selectedImages.length > 5) return Alert.alert('오류', '사진은 최대 5장까지만 등록 가능합니다.');
+    if (!noticeTitle.trim() || !noticeContent.trim()) return Alert.alert(t('error'), t('titleAndContentRequired'));
+    if (selectedImages.length > 5) return Alert.alert(t('error'), t('maxImages'));
     setIsSubmitting(true);
     try {
       await addNotice(id as string, noticeTitle, noticeContent, false, selectedImages);
       setNoticeTitle(''); setNoticeContent(''); setSelectedImages([]); setShowAddAddNotice(false);
-    } catch (e: any) { Alert.alert('오류', e.message); } finally { setIsSubmitting(false); }
+    } catch (e: any) { Alert.alert(t('error'), e.message); } finally { setIsSubmitting(false); }
   };
 
   const handleUpdateRoomInfo = async () => {
-    if (!roomName.trim()) return Alert.alert('오류', '방 이름을 입력해주세요.');
+    if (!roomName.trim()) return Alert.alert(t('error'), t('roomNameRequired'));
     setIsUpdating(true);
     try {
       await updateRoom(id as string, roomName, roomImage);
       setShowRoomEditModal(false);
-      Alert.alert('성공', '방 정보가 업데이트되었습니다.');
-    } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsUpdating(false); }
+      Alert.alert(t('success'), t('roomUpdateSuccess'));
+    } catch (e: any) { Alert.alert(t('failure'), e.message); } finally { setIsUpdating(false); }
   };
 
   const handleUpdateUserProfile = async () => {
-    if (!userNickname.trim()) return Alert.alert('오류', '이름을 입력해주세요.');
+    if (!userNickname.trim()) return Alert.alert(t('error'), t('nameRequired'));
     setIsUpdating(true);
     try {
       await updateRoomUserProfile(id as string, userNickname, userImage);
       setShowUserProfileModal(false);
-      Alert.alert('성공', '나의 방 프로필이 업데이트되었습니다.');
-    } catch (e: any) { Alert.alert('실패', e.message); } finally { setIsUpdating(false); }
+      Alert.alert(t('success'), t('profileUpdateSuccess'));
+    } catch (e: any) { Alert.alert(t('failure'), e.message); } finally { setIsUpdating(false); }
   };
 
   const handleInvite = async () => {
-    try { await LinkingService.shareRoomInvite(room.name, room.id, room.passcode); } catch (error) { Alert.alert('오류', '공유할 수 없습니다.'); }
+    try { await LinkingService.shareRoomInvite(room.name, room.id, room.passcode); } catch (error) { Alert.alert(t('error'), t('shareError')); }
   };
 
   const deleteOptions = [
-    { label: '방 삭제하기', destructive: true, bold: true, onPress: () => {
+    { label: t('deleteRoom'), destructive: true, bold: true, onPress: () => {
       deleteRoom(id as string);
       router.replace('/rooms');
     }}
   ];
 
   const coreActions = [
-    { title: '연습 일정 조율', icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B', desc: '함께 모일 수 있는 최적의 시간 찾기' },
-    { title: '연습 투표', icon: 'checkbox', path: `/room/${id}/vote`, color: '#A06CD5', desc: '크루의 중요한 의사결정 투표하기' },
-    { title: '동선 에디터', icon: 'layers', path: `/room/${id}/formation`, color: '#FF9F43', desc: '대형을 제작하고 애니메이션 확인' },
-    { title: '영상 피드백', icon: 'videocam', path: `/room/${id}/feedback`, color: '#5E5CE6', desc: '함께 영상을 보며 의견 나누기' },
+    { title: t('scheduleMenuTitle'), icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B', desc: t('scheduleMenuDesc') },
+    { title: t('voteMenuTitle'), icon: 'checkbox', path: `/room/${id}/vote`, color: '#A06CD5', desc: t('voteMenuDesc') },
+    { title: t('formationMenuTitle'), icon: 'layers', path: `/room/${id}/formation`, color: '#FF9F43', desc: t('formationMenuDesc') },
+    { title: t('videoFeedbackMenuTitle'), icon: 'videocam', path: `/room/${id}/feedback`, color: '#5E5CE6', desc: t('videoFeedbackMenuDesc') },
   ];
 
   const manageActions = [
-    { title: '팀 아카이브', icon: 'images', path: `/room/${id}/archive`, color: '#4ECDC4' },
-    { title: '멤버 목록', icon: 'people', path: `/room/${id}/members`, color: '#45B7D1' }
+    { title: t('archiveMenuTitle'), icon: 'images', path: `/room/${id}/archive`, color: '#4ECDC4' },
+    { title: t('membersMenuTitle'), icon: 'people', path: `/room/${id}/members`, color: '#45B7D1' }
   ];
 
   return (
@@ -142,11 +142,11 @@ export default function RoomMainScreen() {
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
                 <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginRight: 8}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
                   <Ionicons name="person-circle-outline" size={16} color="#fff" />
-                  <Text style={styles.smallMemberText}>프로필 변경</Text>
+                  <Text style={styles.smallMemberText}>{t('profileChange')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary + 'CC'}]} onPress={() => router.push(`/room/${id}/members`)}>
                   <Ionicons name="people" size={16} color="#fff" />
-                  <Text style={styles.smallMemberText}>멤버</Text>
+                  <Text style={styles.smallMemberText}>{t('memberBtn')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.shareCircle, {marginLeft: 8}]} onPress={handleInvite}><Ionicons name="share-social" size={20} color="#fff" /></TouchableOpacity>
               </View>
@@ -171,7 +171,7 @@ export default function RoomMainScreen() {
               <View style={styles.secureInfoRow}>
                 <View style={[styles.idBadgeRow, {backgroundColor: theme.textSecondary + '20', marginRight: 8}]}>
                   <Text style={[styles.idBadgeText, {color: theme.textSecondary}]}>ID: {room.id.slice(0, 8)}...</Text>
-                  <TouchableOpacity onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert('복사완료', '방 ID가 복사되었습니다.'); }} style={{marginLeft: 8}}><Ionicons name="copy-outline" size={14} color={theme.textSecondary} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => { Clipboard.setStringAsync(room.id); Alert.alert(t('copyDone'), t('roomIdCopied')); }} style={{marginLeft: 8}}><Ionicons name="copy-outline" size={14} color={theme.textSecondary} /></TouchableOpacity>
                 </View>
 
                 <TouchableOpacity 
@@ -193,7 +193,7 @@ export default function RoomMainScreen() {
           <View style={styles.noticeHeaderRow}>
             <View>
               <Text style={[styles.sectionLabel, { color: theme.primary }]}>NOTICE</Text>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>공지사항</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('notice')}</Text>
             </View>
             <TouchableOpacity style={[styles.addNoticeSmallBtn, {backgroundColor: theme.primary}]} onPress={() => setShowAddAddNotice(true)}>
               <Ionicons name="add" size={24} color="#fff" />

@@ -9,6 +9,7 @@ import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Alert } from 'react-native';
 import { authService } from '../services/authService';
+import { Language, SUPPORTED_LANGUAGES, createTranslator } from '../constants/translations';
 
 interface AppContextType {
   currentUser: User | null;
@@ -98,6 +99,11 @@ interface AppContextType {
   purchasePro: (durationDays?: number) => Promise<void>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
+
+  // Language
+  language: Language;
+  setLanguage: (lang: Language) => Promise<void>;
+  t: (key: string) => string;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -111,6 +117,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
   const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [language, setLanguageState] = useState<Language>('ko');
   const currentUserRef = useRef<User | null>(null);
 
   useEffect(() => {
@@ -119,7 +126,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     AsyncStorage.getItem('theme_custom_bg_color').then(val => { if (val) setCustomBackgroundColorState(val); });
     AsyncStorage.getItem('room_profiles').then(val => { if (val) setRoomProfiles(JSON.parse(val)); });
     AsyncStorage.getItem('blocked_users').then(val => { if (val) setBlockedUsers(JSON.parse(val)); });
+    AsyncStorage.getItem('app_language').then(val => {
+      if (val && SUPPORTED_LANGUAGES.includes(val as Language)) setLanguageState(val as Language);
+    });
   }, []);
+
+  const setLanguage = async (lang: Language) => {
+    setLanguageState(lang);
+    await AsyncStorage.setItem('app_language', lang);
+  };
+
+  const t = useCallback((key: string): string => {
+    return createTranslator(language)(key);
+  }, [language]);
 
   const blockUser = async (userId: string) => {
     const newList = [...blockedUsers, userId];
@@ -592,10 +611,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
     refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder
+    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder,
+    language, setLanguage, t
   }), [
-    currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data, 
-    themeType, customColor, customBackgroundColor, theme, roomProfiles, blockedUsers, isPro
+    currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,
+    themeType, customColor, customBackgroundColor, theme, roomProfiles, blockedUsers, isPro, language, t
   ]);
 
   return (

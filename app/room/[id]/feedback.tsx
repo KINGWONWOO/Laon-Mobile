@@ -463,10 +463,10 @@ export default function FeedbackScreen() {
                     <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setIsMirrorMode(v => !v)}>
                       <Ionicons name="camera-reverse-outline" size={24} color={isMirrorMode ? theme.primary : '#fff'} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={{ marginRight: 16 }} onPress={handleDownload} disabled={isDownloading}>
+                    <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={handleDownload} disabled={isDownloading}>
                       {isDownloading
                         ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="download" size={24} color="#fff" />}
+                        : <Ionicons name="download-outline" size={22} color="#fff" />}
                     </TouchableOpacity>
                   </>
                 )}
@@ -725,5 +725,6 @@ const styles = StyleSheet.create({
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
   bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   subVideoContainer: { position: 'absolute', top: 70, right: 20, width: 120, height: 68, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#fff', backgroundColor: '#000', zIndex: 110 },
-  swapIconOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' }
+  swapIconOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' },
+  saveBtn: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, padding: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' }
 });

@@ -300,10 +300,10 @@ export default function ArchiveScreen() {
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>아카이브 상세</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={handleDownload} style={styles.deleteBtn} disabled={isDownloading}>
+              <TouchableOpacity onPress={handleDownload} style={[styles.saveIconBtn, { backgroundColor: theme.primary + '18', borderColor: theme.primary + '44' }]} disabled={isDownloading}>
                 {isDownloading
                   ? <ActivityIndicator size="small" color={theme.primary} />
-                  : <Ionicons name="download" size={24} color={theme.primary} />}
+                  : <Ionicons name="download-outline" size={22} color={theme.primary} />}
               </TouchableOpacity>
               {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                 <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>
@@ -504,6 +504,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
   deleteBtn: { padding: 5 },
+  saveIconBtn: { padding: 7, borderRadius: 10, borderWidth: 1, marginRight: 4 },
   listContent: { paddingHorizontal: 16, paddingTop: 16 },
   gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.1, margin: ITEM_MARGIN / 2, borderRadius: 20, overflow: 'hidden' },
   gridImage: { width: '100%', height: '100%' },

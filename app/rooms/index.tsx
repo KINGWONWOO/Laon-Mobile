@@ -7,23 +7,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
 import { Shadows } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
+import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../../constants/translations';
 
 export default function RoomsScreen() {
-  const { 
-    rooms, 
-    currentUser, 
-    logout, 
+  const {
+    rooms,
+    currentUser,
+    logout,
     deleteAccount,
-    updateUserProfile, 
-    theme, 
-    themeType, 
-    setThemeType, 
-    customColor, 
-    setCustomColor, 
-    customBackgroundColor, 
+    updateUserProfile,
+    theme,
+    themeType,
+    setThemeType,
+    customColor,
+    setCustomColor,
+    customBackgroundColor,
     setCustomBackgroundColor,
     isPro,
-    checkProAccess
+    checkProAccess,
+    language,
+    setLanguage,
+    t,
   } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -72,14 +77,14 @@ export default function RoomsScreen() {
   };
 
   const handleUpdateProfile = async () => {
-    if (!newName.trim()) return Alert.alert('오류', '이름을 입력해주세요.');
+    if (!newName.trim()) return Alert.alert(t('error'), t('nameRequired2'));
     setIsUpdating(true);
     try {
       await updateUserProfile(newName, newImage || currentUser?.profileImage);
       setShowProfileModal(false);
-      Alert.alert('성공', '프로필과 테마가 저장되었습니다.');
+      Alert.alert(t('success'), t('profileSaveSuccess'));
     } catch (e: any) {
-      Alert.alert('실패', e.message);
+      Alert.alert(t('failure'), e.message);
     } finally {
       setIsUpdating(false);
     }
@@ -87,20 +92,19 @@ export default function RoomsScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      '회원 탈퇴',
-      '정말로 탈퇴하시겠습니까? 모든 데이터가 삭제되며 복구할 수 없습니다.',
+      t('deleteAccount'),
+      t('deleteAccountConfirm'),
       [
-        { text: '취소', style: 'cancel' },
-        { 
-          text: '탈퇴하기', 
-          style: 'destructive', 
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('deleteAccountAction'),
+          style: 'destructive',
           onPress: async () => {
             try {
               setIsUpdating(true);
               await deleteAccount();
-              Alert.alert('탈퇴 완료', '회원 탈퇴가 완료되었습니다.');
             } catch (e: any) {
-              Alert.alert('오류', '탈퇴 처리 중 문제가 발생했습니다.');
+              Alert.alert(t('error'), '탈퇴 처리 중 문제가 발생했습니다.');
             } finally {
               setIsUpdating(false);
             }
@@ -111,20 +115,20 @@ export default function RoomsScreen() {
   };
 
   const handleSubmitFeedback = async () => {
-    if (!feedbackContent.trim()) return Alert.alert('알림', '의견 내용을 입력해주세요.');
-    if (!currentUser) return Alert.alert('알림', '로그인이 필요합니다.');
-    
-    setIsUpdating(true);
+    if (!feedbackContent.trim()) return Alert.alert(t('notification'), t('feedbackRequired'));
     try {
-      await contentService.submitFeedback(currentUser.id, feedbackType, feedbackContent.trim());
-      Alert.alert('감사합니다', '소중한 의견이 개발자에게 전달되었습니다.');
+      const { error } = await supabase.from('developer_feedback').insert({
+        user_id: currentUser?.id,
+        type: feedbackType,
+        content: feedbackContent.trim(),
+      });
+      if (error) throw error;
       setShowFeedbackModal(false);
       setFeedbackContent('');
       setFeedbackType('bug');
-    } catch (e) {
-      Alert.alert('오류', '의견 전송 중 문제가 발생했습니다.');
-    } finally {
-      setIsUpdating(false);
+      Alert.alert(t('success'), t('feedbackSuccess'));
+    } catch {
+      Alert.alert(t('error'), t('feedbackError'));
     }
   };
 
@@ -158,13 +162,13 @@ export default function RoomsScreen() {
             </View>
           )}
           <View style={styles.headerTextInfo}>
-            <Text style={[styles.welcomeText, { color: theme.textSecondary }]}>반가워요!</Text>
+            <Text style={[styles.welcomeText, { color: theme.textSecondary }]}>{t('welcome')}</Text>
             <TouchableOpacity 
               activeOpacity={0.7} 
               onPress={() => router.push('/subscription')}
               style={styles.membershipRow}
             >
-              <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>{currentUser?.name} 님</Text>
+              <Text style={[styles.userName, { color: theme.text }]} numberOfLines={1}>{currentUser?.name}{t('honorific') ? ` ${t('honorific')}` : ''}</Text>
               <View style={[
                 styles.tierBadge, 
                 { backgroundColor: isPro ? theme.primary : theme.textSecondary + '22' }
@@ -181,17 +185,17 @@ export default function RoomsScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} onPress={handleOpenSettings}>
             <Ionicons name="settings-outline" size={20} color={theme.text} />
-            <Text style={[styles.actionIconText, { color: theme.text }]}>설정</Text>
+            <Text style={[styles.actionIconText, { color: theme.text }]}>{t('settings')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.error + '22', marginLeft: 8 }]} onPress={logout}>
             <Ionicons name="log-out-outline" size={20} color={theme.error} />
-            <Text style={[styles.actionIconText, { color: theme.error }]}>로그아웃</Text>
+            <Text style={[styles.actionIconText, { color: theme.error }]}>{t('logout')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: theme.text }]}>내 크루룸</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('myRooms')}</Text>
         <View style={{ flexDirection: 'row' }}>
           <TouchableOpacity style={[styles.actionBtn, { marginRight: 10, backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
             <Ionicons name="enter-outline" size={24} color={theme.background} />
@@ -224,7 +228,7 @@ export default function RoomsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="people-outline" size={60} color={theme.border} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>참여 중인 방이 없습니다.</Text>
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('noRooms')}</Text>
           </View>
         }
       />
@@ -235,24 +239,24 @@ export default function RoomsScreen() {
         activeOpacity={0.85}
       >
         <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.background} />
-        <Text style={[styles.feedbackFabText, { color: theme.background }]}>의견 제공</Text>
+        <Text style={[styles.feedbackFabText, { color: theme.background }]}>{t('feedbackFab')}</Text>
       </TouchableOpacity>
 
       <Modal visible={showFeedbackModal} animationType="slide" transparent onRequestClose={() => setShowFeedbackModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.feedbackOverlay}>
           <View style={[styles.feedbackSheet, { backgroundColor: theme.card }]}>
             <View style={styles.feedbackHeader}>
-              <Text style={[styles.feedbackTitle, { color: theme.text }]}>개발자에게 의견 보내기</Text>
+              <Text style={[styles.feedbackTitle, { color: theme.text }]}>{t('feedbackModalTitle')}</Text>
               <TouchableOpacity onPress={() => setShowFeedbackModal(false)}>
                 <Ionicons name="close" size={24} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary }]}>의견 유형</Text>
+            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary }]}>{t('feedbackTypeLabel')}</Text>
             <View style={styles.feedbackTypeRow}>
               {([
-                { key: 'bug', label: '🐛 버그 제보' },
-                { key: 'feature', label: '💡 기능 제안' },
-                { key: 'other', label: '💬 기타' },
+                { key: 'bug', label: t('bugReport') },
+                { key: 'feature', label: t('featureRequest') },
+                { key: 'other', label: t('otherFeedback') },
               ] as const).map(({ key, label }) => (
                 <TouchableOpacity
                   key={key}
@@ -263,12 +267,12 @@ export default function RoomsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary, marginTop: 16 }]}>내용</Text>
+            <Text style={[styles.feedbackSubtitle, { color: theme.textSecondary, marginTop: 16 }]}>{t('feedbackContentLabel')}</Text>
             <TextInput
               style={[styles.feedbackInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
               value={feedbackContent}
               onChangeText={setFeedbackContent}
-              placeholder="불편한 점이나 개선 아이디어를 자유롭게 작성해주세요."
+              placeholder={t('feedbackPlaceholder')}
               placeholderTextColor={theme.textSecondary}
               multiline
               textAlignVertical="top"
@@ -278,7 +282,7 @@ export default function RoomsScreen() {
               onPress={handleSubmitFeedback}
               disabled={isUpdating}
             >
-              {isUpdating ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.feedbackSubmitText, { color: theme.background }]}>의견 보내기</Text>}
+              <Text style={[styles.feedbackSubmitText, { color: theme.background }]}>{t('sendFeedback')}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -289,7 +293,7 @@ export default function RoomsScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <ScrollView style={{ width: '100%' }} contentContainerStyle={{ alignItems: 'center', paddingVertical: 10 }} showsVerticalScrollIndicator={false}>
               <View style={styles.modalHeaderBalance}>
-                <Text style={[styles.modalTitleBalance, { color: theme.text }]}>프로필 및 테마 설정</Text>
+                <Text style={[styles.modalTitleBalance, { color: theme.text }]}>{t('profileAndTheme')}</Text>
                 <TouchableOpacity onPress={handleCancel}><Ionicons name="close-circle" size={28} color={theme.textSecondary} /></TouchableOpacity>
               </View>
               <View style={styles.profileSectionBalance}>
@@ -301,34 +305,47 @@ export default function RoomsScreen() {
                   )}
                 </TouchableOpacity>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>사용자 이름</Text>
-                  <TextInput style={[styles.inputBalance, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder="이름" placeholderTextColor={theme.textSecondary} />
+                  <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>{t('username')}</Text>
+                  <TextInput style={[styles.inputBalance, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newName} onChangeText={setNewName} placeholder={t('name')} placeholderTextColor={theme.textSecondary} />
                 </View>
               </View>
-              <Text style={[styles.sectionTitleBalance, { color: theme.text }]}>포인트 색상</Text>
+              <Text style={[styles.sectionTitleBalance, { color: theme.text }]}>{t('primaryColor')}</Text>
               <View style={styles.colorPaletteBalance}>{primaryPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customColor === color ? theme.text : 'transparent' }]} onPress={() => setCustomColor(color)} /> ))}</View>
-              <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>배경 색상</Text>
+              <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>{t('bgColor')}</Text>
               <View style={styles.colorPaletteBalance}>{bgPresetColors.map((color) => ( <TouchableOpacity key={color} style={[styles.colorOptionBalance, { backgroundColor: color, borderColor: customBackgroundColor === color ? theme.primary : 'transparent' }]} onPress={() => { setCustomBackgroundColor(color); const isDark = color.toLowerCase().includes('0f17') || color.toLowerCase().includes('1e29') || color.toLowerCase().includes('1c1c') || color.toLowerCase().includes('1212'); setThemeType(isDark ? 'dark' : 'light'); }} /> ))}</View>
-              
+
+              <Text style={[styles.sectionTitleBalance, { color: theme.text, marginTop: 10 }]}>{t('language')}</Text>
+              <View style={styles.langPaletteRow}>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <TouchableOpacity
+                    key={lang}
+                    style={[styles.langBtn, { borderColor: language === lang ? theme.primary : theme.border, backgroundColor: language === lang ? theme.primary + '18' : 'transparent' }]}
+                    onPress={() => setLanguage(lang)}
+                  >
+                    <Text style={[styles.langBtnText, { color: language === lang ? theme.primary : theme.textSecondary }]}>{LANGUAGE_NAMES[lang]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <View style={styles.modalBtnsBalance}>
-                <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}><Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>취소</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.cancelBtnBalance} onPress={handleCancel}><Text style={{ color: theme.textSecondary, fontWeight: 'bold' }}>{t('cancel')}</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.submitBtnBalance, { backgroundColor: theme.primary }]} onPress={handleUpdateProfile} disabled={isUpdating}>
-                  {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>변경사항 저장</Text>}
+                  {isUpdating ? <ActivityIndicator color={theme.background} /> : <Text style={{ fontWeight: 'bold', color: theme.background }}>{t('saveChanges')}</Text>}
                 </TouchableOpacity>
               </View>
 
               <View style={styles.policyRow}>
                 <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/privacy-policy.html')}>
-                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>개인정보 처리방침</Text>
+                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>{t('privacyPolicy')}</Text>
                 </TouchableOpacity>
                 <Text style={{ color: theme.border, marginHorizontal: 8 }}>|</Text>
                 <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/terms.html')}>
-                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>이용약관</Text>
+                  <Text style={[styles.policyText, { color: theme.textSecondary }]}>{t('termsOfService')}</Text>
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
-                <Text style={styles.deleteAccountText}>회원 탈퇴</Text>
+                <Text style={styles.deleteAccountText}>{t('deleteAccount')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -386,6 +403,9 @@ const styles = StyleSheet.create({
   policyText: { fontSize: 13, textDecorationLine: 'underline' },
   deleteAccountBtn: { marginTop: 20, padding: 10 },
   deleteAccountText: { color: '#EF4444', fontSize: 13, fontWeight: 'bold', textDecorationLine: 'underline' },
+  langPaletteRow: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', marginBottom: 20, gap: 8 },
+  langBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5 },
+  langBtnText: { fontSize: 12, fontWeight: '700' },
   feedbackFab: { position: 'absolute', right: 24, bottom: 90, flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 24, gap: 6, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 4 },
   feedbackFabText: { fontSize: 13, fontWeight: 'bold' },
   feedbackOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
