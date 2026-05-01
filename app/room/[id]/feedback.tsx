@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, TouchableWithoutFeedback } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video'; 
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as ScreenOrientation from 'expo-screen-orientation'; 
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback } from '../../../types';
@@ -28,9 +28,9 @@ export default function FeedbackScreen() {
   const insets = useSafeAreaInsets();
 
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
-  
+
   const [selectedVideo, setSelectedVideo] = useState<VideoFeedback | null>(null);
-  const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null); 
+  const [cachedVideoUrl, setCachedVideoUrl] = useState<string | null>(null);
   const [cachedChoreographyUrl, setCachedChoreographyUrl] = useState<string | null>(null);
   const [isCaching, setIsCaching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,17 +151,16 @@ export default function FeedbackScreen() {
     }
     return () => { if (interval) clearInterval(interval); };
   }, [selectedVideo?.id, isFormation, player, videoDuration]);
-  
+
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
-  // 플로팅 말풍선 데이터 (시간순 정렬 + 고정 컨테이너 조합으로 안정성 확보)
   const activeFloatingBubbles = useMemo(() => {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
     return selectedVideo.comments.filter(c => {
       const triggerTime = c.timestampMillis - 1000;
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis); // 오름차순: 오래된 것이 위, 최신이 아래
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -201,10 +200,10 @@ export default function FeedbackScreen() {
         setIsMirrorMode(false);
         return;
       }
-      
+
       markItemAsAccessed('video', selectedVideo.id);
       setIsCaching(true);
-      
+
       try {
         if (!isFormation) {
           const remoteUrl = selectedVideo.videoUrl;
@@ -231,11 +230,11 @@ export default function FeedbackScreen() {
         } else {
           setCachedChoreographyUrl(null);
         }
-      } catch (error) { 
-        setCachedVideoUrl(selectedVideo.videoUrl); 
+      } catch (error) {
+        setCachedVideoUrl(selectedVideo.videoUrl);
         if (selectedVideo.choreographyVideoUrl) setCachedChoreographyUrl(selectedVideo.choreographyVideoUrl);
-      } finally { 
-        setIsCaching(false); 
+      } finally {
+        setIsCaching(false);
       }
     }
     cacheAndPlay();
@@ -341,9 +340,9 @@ export default function FeedbackScreen() {
     ]);
   };
 
-  const seekTo = (ms: number) => { 
+  const seekTo = (ms: number) => {
     if (isFormation) setFormationTime(ms);
-    else if (player) player.currentTime = ms / 1000; 
+    else if (player) player.currentTime = ms / 1000;
   };
 
   const formatTime = (ms: number) => {
@@ -397,62 +396,104 @@ export default function FeedbackScreen() {
   const [barWidth, setBarWidth] = useState(0);
 
   if (selectedVideo) {
-    const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
+    const videoObj = videos.find((v) => v.id === selectedVideo.id) || selectedVideo;
     const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
 
     const renderMainContent = () => {
       if (isSwapped && hasChoreography) {
         return (
           <View style={styles.vPlayer}>
-            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
+            <VideoView
+              style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
+              player={subPlayer}
+              contentFit="contain"
+              fullscreenOptions={{ allowsFullscreen: false }}
+              nativeControls={false}
+              surfaceType="textureView"
+            />
             {isMirrorMode && (
               <View style={[styles.mirrorIndicator, { left: insets.left + 20 }]}>
                 <Ionicons name="swap-horizontal" size={10} color="#fff" />
                 <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
               </View>
-            )}          </View>
+            )}
+          </View>
         );
       }
 
       if (isFormation) {
         return selectedFormation ? (
-          <View style={{flex: 1}}>
-            <FormationPlayer formation={selectedFormation} currentTimeMs={formationTime} onDurationDetected={setFormationDuration} isPlaying={isFormationPlaying} />
+          <View style={{ flex: 1 }}>
+            <FormationPlayer
+              formation={selectedFormation}
+              currentTimeMs={formationTime}
+              onDurationDetected={setFormationDuration}
+              isPlaying={isFormationPlaying}
+            />
             <TouchableOpacity style={styles.formationPlayOverlay} onPress={handleTogglePlay}>
               <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
             </TouchableOpacity>
           </View>
-        ) : <View style={styles.errorContainer}><Text style={{color: theme.textSecondary}}>동선 정보를 불러올 수 없습니다.</Text></View>;
+        ) : (
+          <View style={styles.errorContainer}>
+            <Text style={{ color: theme.textSecondary }}>동선 정보를 불러올 수 없습니다.</Text>
+          </View>
+        );
       }
 
-      return isCaching
-        ? <ActivityIndicator size="large" color={theme.primary} />
-        : (
-          <View style={styles.vPlayer}>
-            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
-            {isMirrorMode && (
-              <View style={[styles.mirrorIndicator, { left: insets.left + 20 }]}>
-                <Ionicons name="swap-horizontal" size={10} color="#fff" />
-                <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
-              </View>
-            )}          </View>
-        );
+      return isCaching ? (
+        <ActivityIndicator size="large" color={theme.primary} />
+      ) : (
+        <View style={styles.vPlayer}>
+          <VideoView
+            style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
+            player={player}
+            contentFit="contain"
+            fullscreenOptions={{ allowsFullscreen: false }}
+            nativeControls={false}
+            surfaceType="textureView"
+          />
+          {isMirrorMode && (
+            <View style={[styles.mirrorIndicator, { left: insets.left + 20 }]}>
+              <Ionicons name="swap-horizontal" size={10} color="#fff" />
+              <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
+            </View>
+          )}
+        </View>
+      );
     };
 
     const renderSubContent = () => {
       if (!hasChoreography) return null;
-
       return (
-        <TouchableOpacity style={[styles.subVideoContainer, { right: insets.right + 20 }, Shadows.medium]} onPress={handleSwap}>          {isSwapped ? (
+        <TouchableOpacity
+          style={[styles.subVideoContainer, { right: insets.right + 20 }, Shadows.medium]}
+          onPress={handleSwap}
+        >
+          {isSwapped ? (
             isFormation ? (
-              <View style={{flex: 1, backgroundColor: '#111'}}>
+              <View style={{ flex: 1, backgroundColor: "#111" }}>
                 <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
               </View>
             ) : (
-              <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
+              <VideoView
+                style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
+                player={player}
+                contentFit="contain"
+                fullscreenOptions={{ allowsFullscreen: false }}
+                nativeControls={false}
+                surfaceType="textureView"
+              />
             )
           ) : (
-            <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
+            <VideoView
+              style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
+              player={subPlayer}
+              contentFit="contain"
+              fullscreenOptions={{ allowsFullscreen: false }}
+              nativeControls={false}
+              surfaceType="textureView"
+            />
           )}
           <View style={styles.swapIconOverlay}>
             <Ionicons name="swap-horizontal" size={16} color="#fff" />
@@ -461,172 +502,283 @@ export default function FeedbackScreen() {
       );
     };
 
-  const handleSeek = (event: any) => {
-    resetControlsTimer();
-    if (videoDuration <= 0 || barWidth <= 0) return;
-    const { locationX } = event.nativeEvent;
-    const ratio = Math.max(0, Math.min(1, locationX / barWidth));
-    seekTo(ratio * videoDuration * 1000);
-  };
+    const handleSeek = (event: any) => {
+      resetControlsTimer();
+      if (videoDuration <= 0 || barWidth <= 0) return;
+      const { locationX } = event.nativeEvent;
+      const ratio = Math.max(0, Math.min(1, locationX / barWidth));
+      seekTo(ratio * videoDuration * 1000);
+    };
 
-  const renderCustomControls = () => {
-    if (isFormation) return null;
-    const progress = videoDuration > 0 ? (videoTime / 1000) / videoDuration : 0;
-    
-    return (
-      <View style={[styles.customBottomControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
-        <View style={{ position: 'absolute', bottom: 60, left: insets.left + 15, alignItems: 'center' }}>
-          {!isFormation && (
-            <View style={styles.speedBtnGroup}>
-              <TouchableOpacity
-                style={styles.speedArrowBtn}
-                onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100)); }}
-              >
-                <Ionicons name="chevron-back" size={14} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.speedBtn} onPress={() => { resetControlsTimer(); setShowSpeedPicker(v => !v); }}>
-                <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.speedArrowBtn}
-                onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100)); }}
-              >
-                <Ionicons name="chevron-forward" size={14} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+    const renderCustomControls = () => {
+      if (isFormation) return null;
+      const progress = videoDuration > 0 ? videoTime / 1000 / videoDuration : 0;
 
-        <TouchableOpacity onPress={handleTogglePlay} style={styles.mainPlayBtn}>
-          <Ionicons name={player.playing ? "pause" : "play"} size={28} color="#fff" />
-        </TouchableOpacity>
-        
-        <View style={styles.progressSection}>
-          <Text style={styles.timeText}>{formatTime(videoTime)}</Text>
-          <TouchableOpacity 
-            activeOpacity={1}
-            style={styles.progressBarBg}
-            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-            onPress={handleSeek}
-          >
-            <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
+      return (
+        <View style={[styles.customBottomControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
+          <View style={{ position: "absolute", bottom: 60, left: insets.left + 15, alignItems: "center" }}>
+            {!isFormation && (
+              <View style={styles.speedBtnGroup}>
+                <TouchableOpacity
+                  style={styles.speedArrowBtn}
+                  onPress={() => {
+                    resetControlsTimer();
+                    setPlaybackRate((r) => Math.max(0.25, Math.round((r - 0.05) * 100) / 100));
+                  }}
+                >
+                  <Ionicons name="chevron-back" size={14} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.speedBtn}
+                  onPress={() => {
+                    resetControlsTimer();
+                    setShowSpeedPicker((v) => !v);
+                  }}
+                >
+                  <Text style={styles.speedBtnText}>
+                    {playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.speedArrowBtn}
+                  onPress={() => {
+                    resetControlsTimer();
+                    setPlaybackRate((r) => Math.min(2.0, Math.round((r + 0.05) * 100) / 100));
+                  }}
+                >
+                  <Ionicons name="chevron-forward" size={14} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity onPress={handleTogglePlay} style={styles.mainPlayBtn}>
+            <Ionicons name={player.playing ? "pause" : "play"} size={28} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.timeText}>{formatTime(videoDuration * 1000)}</Text>
+
+          <View style={styles.progressSection}>
+            <Text style={styles.timeText}>{formatTime(videoTime)}</Text>
+            <TouchableOpacity
+              activeOpacity={1}
+              style={styles.progressBarBg}
+              onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+              onPress={handleSeek}
+            >
+              <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
+            </TouchableOpacity>
+            <Text style={styles.timeText}>{formatTime(videoDuration * 1000)}</Text>
+          </View>
         </View>
-      </View>
-    );
-  };
+      );
+    };
 
     return (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
-        <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
+        <View
+          style={[
+            styles.fullView,
+            {
+              backgroundColor: theme.background,
+              paddingTop: isFullScreen ? 0 : insets.top,
+              paddingBottom: isFullScreen ? 0 : insets.bottom,
+            },
+          ]}
+        >
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
-            <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
+            <View
+              style={[
+                styles.videoSection,
+                isFullScreen ? styles.landscapeVideo : styles.portraitVideo,
+                { backgroundColor: "#000" },
+              ]}
+            >
               {renderMainContent()}
-              
+
               <TouchableWithoutFeedback onPress={toggleControls}>
                 <View style={StyleSheet.absoluteFill} />
               </TouchableWithoutFeedback>
 
               {showControls && (
-                <Animated.View pointerEvents="box-none" entering={FadeIn} exiting={FadeOut} style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
+                <Animated.View
+                  pointerEvents="box-none"
+                  entering={FadeIn}
+                  exiting={FadeOut}
+                  style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
+                >
                   {renderSubContent()}
                   {renderCustomControls()}
                   <View style={[styles.vControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
-                    <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
-                      <Ionicons name="chevron-back" size={28} color="#fff" />
-                    </TouchableOpacity>                    <View style={{flex: 1}} />
-                    {isFullScreen && (                  <>
-                    <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setEnableFloatingComments(!enableFloatingComments); }}>
-                      <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setShowSidebar(!showSidebar); }}>
-                      <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
-                    </TouchableOpacity>
-                  </>
-                )}
-                {!isFormation && (
-                  <>
-                    <TouchableOpacity 
-                      style={[styles.mirrorBtn, isMirrorMode && { backgroundColor: theme.primary + '44', borderColor: theme.primary }]} 
-                      onPress={() => { resetControlsTimer(); setIsMirrorMode(v => !v); }}
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (isFullScreen) setIsFullScreen(false);
+                        else setSelectedVideo(null);
+                      }}
                     >
-                      <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : '#fff'} />
-                      <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : '#fff' }]}>{t('mirror')}</Text>
+                      <Ionicons name="chevron-back" size={28} color="#fff" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={() => { resetControlsTimer(); handleDownload(); }} disabled={isDownloading}>
-                      {isDownloading
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="cloud-download-outline" size={22} color="#fff" />}
+                    <View style={{ flex: 1 }} />
+                    {isFullScreen && (
+                      <>
+                        <TouchableOpacity
+                          style={{ marginRight: 16 }}
+                          onPress={() => {
+                            resetControlsTimer();
+                            setEnableFloatingComments(!enableFloatingComments);
+                          }}
+                        >
+                          <Ionicons
+                            name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"}
+                            size={24}
+                            color={enableFloatingComments ? theme.primary : "#fff"}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ marginRight: 16 }}
+                          onPress={() => {
+                            resetControlsTimer();
+                            setShowSidebar(!showSidebar);
+                          }}
+                        >
+                          <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {!isFormation && (
+                      <>
+                        <TouchableOpacity
+                          style={[
+                            styles.mirrorBtn,
+                            isMirrorMode && { backgroundColor: theme.primary + "44", borderColor: theme.primary },
+                          ]}
+                          onPress={() => {
+                            resetControlsTimer();
+                            setIsMirrorMode((v) => !v);
+                          }}
+                        >
+                          <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : "#fff"} />
+                          <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : "#fff" }]}>
+                            {t("mirror")}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.saveBtn, { marginRight: 16 }]}
+                          onPress={() => {
+                            resetControlsTimer();
+                            handleDownload();
+                          }}
+                          disabled={isDownloading}
+                        >
+                          {isDownloading ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => {
+                        resetControlsTimer();
+                        setIsFullScreen(!isFullScreen);
+                      }}
+                    >
+                      <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                     </TouchableOpacity>
-                  </>
-                )}
-                <TouchableOpacity onPress={() => { resetControlsTimer(); setIsFullScreen(!isFullScreen); }}>
-                  <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
-                </TouchableOpacity>
-                </View>
+                  </View>
 
-                {showSpeedPicker && !isFormation && (
-                <View style={[styles.speedPickerPanel, { left: insets.left + 15 }]}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
-                    {speedOptions.map(speed => (                      <TouchableOpacity
-                        key={speed}
-                        style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
-                        onPress={() => { resetControlsTimer(); setPlaybackRate(speed); setShowSpeedPicker(false); }}
+                  {showSpeedPicker && !isFormation && (
+                    <View style={[styles.speedPickerPanel, { left: insets.left + 15 }]}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.speedPickerScroll}
                       >
-                        <Text style={[styles.speedOptionText, speed === playbackRate && { color: '#fff' }]}>
-                          {speed % 1 === 0 ? speed.toFixed(1) : speed}×
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-                )}
+                        {speedOptions.map((speed) => (
+                          <TouchableOpacity
+                            key={speed}
+                            style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
+                            onPress={() => {
+                              resetControlsTimer();
+                              setPlaybackRate(speed);
+                              setShowSpeedPicker(false);
+                            }}
+                          >
+                            <Text style={[styles.speedOptionText, speed === playbackRate && { color: "#fff" }]}>
+                              {speed % 1 === 0 ? speed.toFixed(1) : speed}×
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
                 </Animated.View>
-                )}
+              )}
 
-                {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
-                {activeFloatingBubbles.length > 0 && (
+              {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
+              {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
-                    <Animated.View 
-                      key={c.id} 
-                      entering={FadeIn.duration(800)} 
+                    <Animated.View
+                      key={c.id}
+                      entering={FadeIn.duration(800)}
                       exiting={FadeOut.duration(800)}
                       layout={LinearTransition.springify().damping(20).stiffness(90)}
-                      style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 3 }, Shadows.medium]}
+                      style={[
+                        styles.bubble,
+                        { backgroundColor: theme.card + "EE", borderColor: theme.primary, borderLeftWidth: 3 },
+                        Shadows.medium,
+                      ]}
                     >
-                      <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
+                      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 2 }}>
                         <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUserById(c.userId)?.name}</Text>
-                        <Text style={[styles.bubbleTime, { color: theme.textSecondary }]}>{formatTime(c.timestampMillis)}</Text>
+                        <Text style={[styles.bubbleTime, { color: theme.textSecondary }]}>
+                          {formatTime(c.timestampMillis)}
+                        </Text>
                       </View>
                       <Text style={[styles.bubbleText, { color: theme.text }]}>{c.text}</Text>
                     </Animated.View>
                   ))}
                 </View>
-                )}
-                </View>
+              )}
+            </View>
 
-                {(!isFullScreen || showSidebar) && (              <View style={[styles.sidebar, isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }], { backgroundColor: theme.background }]}>
+            {(!isFullScreen || showSidebar) && (
+              <View
+                style={[
+                  styles.sidebar,
+                  isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }],
+                  { backgroundColor: theme.background },
+                ]}
+              >
                 <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.sidebarTitle, { color: theme.text }]}>피드백 {videoObj.comments.length}</Text>
-                  <TouchableOpacity onPress={() => setShowCommentInput(true)}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowCommentInput(true)}>
+                    <Ionicons name="add-circle" size={24} color={theme.primary} />
+                  </TouchableOpacity>
                 </View>
                 <FlatList
-                  data={videoObj.comments.sort((a,b)=>a.timestampMillis - b.timestampMillis)}
-                  keyExtractor={item => item.id}
+                  data={videoObj.comments.sort((a, b) => a.timestampMillis - b.timestampMillis)}
+                  keyExtractor={(item) => item.id}
                   renderItem={({ item }) => (
                     <View style={[styles.cItem, { borderBottomColor: theme.border }]}>
-                      <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={{flex: 1}}>
-                        <View style={{flexDirection:'row', alignItems:'center', marginBottom: 4}}>
+                      <TouchableOpacity onPress={() => seekTo(item.timestampMillis)} style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
                           <Text style={[styles.cTime, { color: theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
-                          <Text style={[styles.cUser, { color: theme.textSecondary }]}>{getUserById(item.userId)?.name}</Text>
+                          <Text style={[styles.bubbleUser, { color: theme.text, opacity: 0.8 }]}>
+                            {getUserById(item.userId)?.name}
+                          </Text>
                         </View>
                         <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
                       </TouchableOpacity>
                       {item.userId === currentUser?.id && (
                         <View style={styles.commentActions}>
-                          <TouchableOpacity onPress={() => { setSelectedCommentForOptions(item); setShowCommentOptions(true); }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setSelectedCommentForOptions(item);
+                              setShowCommentOptions(true);
+                            }}
+                            style={{ padding: 5 }}
+                          >
                             <Ionicons name="ellipsis-vertical" size={16} color={theme.textSecondary} />
                           </TouchableOpacity>
                         </View>
@@ -638,41 +790,100 @@ export default function FeedbackScreen() {
             )}
           </View>
 
-          <OptionModal visible={showCommentOptions} onClose={() => setShowCommentOptions(false)} options={[
-            { label: '수정', icon: 'create-outline', onPress: () => {
-              if (!selectedCommentForOptions) return;
-              setEditingComment(selectedCommentForOptions);
-              setEditCommentText(selectedCommentForOptions.text);
-            }},
-            { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
-              if (!selectedCommentForOptions) return;
-              handleDeleteComment(selectedCommentForOptions.id);
-            }}
-          ]} title="댓글 설정" theme={theme} />
+          <OptionModal
+            visible={showCommentOptions}
+            onClose={() => setShowCommentOptions(false)}
+            options={[
+              {
+                label: "수정",
+                icon: "create-outline",
+                onPress: () => {
+                  if (!selectedCommentForOptions) return;
+                  setEditingComment(selectedCommentForOptions);
+                  setEditCommentText(selectedCommentForOptions.text);
+                },
+              },
+              {
+                label: "삭제",
+                icon: "trash-outline",
+                destructive: true,
+                onPress: () => {
+                  if (!selectedCommentForOptions) return;
+                  handleDeleteComment(selectedCommentForOptions.id);
+                },
+              },
+            ]}
+            title="댓글 설정"
+            theme={theme}
+          />
 
-          <Modal visible={showCommentInput} transparent animationType="fade" onRequestClose={() => setShowCommentInput(false)}>
+          <Modal
+            visible={showCommentInput}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowCommentInput(false)}
+          >
             <View style={styles.modalOverlay}>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? "padding" : undefined} style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15, fontWeight: '800'}}>{formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0)*1000))} 시점에 의견 남기기</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={newComment} onChangeText={setNewComment} placeholder="피드백 입력..." placeholderTextColor={theme.textSecondary} autoFocus />
-                <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleAddComment} style={{padding: 10}} disabled={isSubmittingComment}>
-                    {isSubmittingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight:'900'}}>등록</Text>}
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                style={[styles.modalContent, { backgroundColor: theme.card }]}
+              >
+                <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "800" }}>
+                  {formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000))} 시점에 의견
+                  남기기
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 },
+                  ]}
+                  value={newComment}
+                  onChangeText={setNewComment}
+                  placeholder="피드백 입력..."
+                  placeholderTextColor={theme.textSecondary}
+                  autoFocus
+                />
+                <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+                  <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{ marginRight: 20, padding: 10 }}>
+                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleAddComment} style={{ padding: 10 }} disabled={isSubmittingComment}>
+                    {isSubmittingComment ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : (
+                      <Text style={{ color: theme.primary, fontWeight: "900" }}>등록</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
             </View>
           </Modal>
 
-          <Modal visible={!!editingComment} transparent animationType="fade" onRequestClose={() => setEditingComment(null)}>
+          <Modal
+            visible={!!editingComment}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setEditingComment(null)}
+          >
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{color: theme.text, marginBottom: 15, fontWeight: '900'}}>댓글 수정</Text>
-                <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editCommentText} onChangeText={setEditCommentText} multiline />
-                <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
-                  <TouchableOpacity onPress={handleUpdateComment} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
+                <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "900" }}>댓글 수정</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 },
+                  ]}
+                  value={editCommentText}
+                  onChangeText={setEditCommentText}
+                  multiline
+                />
+                <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+                  <TouchableOpacity onPress={() => setEditingComment(null)} style={{ marginRight: 20, padding: 10 }}>
+                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleUpdateComment} style={{ padding: 10 }}>
+                    <Text style={{ color: theme.primary, fontWeight: "900" }}>수정</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -702,7 +913,7 @@ export default function FeedbackScreen() {
           </TouchableOpacity>
         ))}
       </View>
-      
+
       <FlatList
         data={filteredVideos}
         keyExtractor={item => item.id}
