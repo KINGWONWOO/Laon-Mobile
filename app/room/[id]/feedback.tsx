@@ -406,12 +406,11 @@ export default function FeedbackScreen() {
           <View style={styles.vPlayer}>
             <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
             {isMirrorMode && (
-              <View style={styles.mirrorIndicator}>
+              <View style={[styles.mirrorIndicator, { left: insets.left + 20 }]}>
                 <Ionicons name="swap-horizontal" size={10} color="#fff" />
                 <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
               </View>
-            )}
-          </View>
+            )}          </View>
         );
       }
 
@@ -432,12 +431,11 @@ export default function FeedbackScreen() {
           <View style={styles.vPlayer}>
             <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
             {isMirrorMode && (
-              <View style={styles.mirrorIndicator}>
+              <View style={[styles.mirrorIndicator, { left: insets.left + 20 }]}>
                 <Ionicons name="swap-horizontal" size={10} color="#fff" />
                 <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
               </View>
-            )}
-          </View>
+            )}          </View>
         );
     };
 
@@ -445,8 +443,7 @@ export default function FeedbackScreen() {
       if (!hasChoreography) return null;
 
       return (
-        <TouchableOpacity style={[styles.subVideoContainer, Shadows.medium]} onPress={handleSwap}>
-          {isSwapped ? (
+        <TouchableOpacity style={[styles.subVideoContainer, { right: insets.right + 20 }, Shadows.medium]} onPress={handleSwap}>          {isSwapped ? (
             isFormation ? (
               <View style={{flex: 1, backgroundColor: '#111'}}>
                 <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
@@ -477,8 +474,8 @@ export default function FeedbackScreen() {
     const progress = videoDuration > 0 ? (videoTime / 1000) / videoDuration : 0;
     
     return (
-      <View style={styles.customBottomControls}>
-        <View style={{ position: 'absolute', bottom: 60, left: 15, alignItems: 'center' }}>
+      <View style={[styles.customBottomControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
+        <View style={{ position: 'absolute', bottom: 60, left: insets.left + 15, alignItems: 'center' }}>
           {!isFormation && (
             <View style={styles.speedBtnGroup}>
               <TouchableOpacity
@@ -535,11 +532,10 @@ export default function FeedbackScreen() {
                 <Animated.View pointerEvents="box-none" entering={FadeIn} exiting={FadeOut} style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
                   {renderSubContent()}
                   {renderCustomControls()}
-                  <View style={styles.vControls}>
+                  <View style={[styles.vControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
                     <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                       <Ionicons name="chevron-back" size={28} color="#fff" />
-                    </TouchableOpacity>
-                    <View style={{flex: 1}} />
+                    </TouchableOpacity>                    <View style={{flex: 1}} />
                     {isFullScreen && (                  <>
                     <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setEnableFloatingComments(!enableFloatingComments); }}>
                       <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
@@ -571,10 +567,9 @@ export default function FeedbackScreen() {
                 </View>
 
                 {showSpeedPicker && !isFormation && (
-                <View style={styles.speedPickerPanel}>
+                <View style={[styles.speedPickerPanel, { left: insets.left + 15 }]}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
-                    {speedOptions.map(speed => (
-                      <TouchableOpacity
+                    {speedOptions.map(speed => (                      <TouchableOpacity
                         key={speed}
                         style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
                         onPress={() => { resetControlsTimer(); setPlaybackRate(speed); setShowSpeedPicker(false); }}
