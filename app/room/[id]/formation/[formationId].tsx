@@ -237,7 +237,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 e.stopPropagation();
                 if (videoPlayer) {
                   const targetTime = Math.max(0, videoCurrentTime - 5);
-                  videoPlayer.seekTo(targetTime);
+                  videoPlayer.currentTime = targetTime;
                 }
                 showAndAutoHide();
               }}>
@@ -253,7 +253,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 e.stopPropagation();
                 if (videoPlayer) {
                   const targetTime = Math.min(videoDurationPip || 9999, videoCurrentTime + 5);
-                  videoPlayer.seekTo(targetTime);
+                  videoPlayer.currentTime = targetTime;
                 }
                 showAndAutoHide();
               }}>
@@ -270,7 +270,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 e.stopPropagation();
                 if (videoDurationPip > 0 && videoPlayer) {
                   const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekTrackWidth));
-                  videoPlayer.seekTo(ratio * videoDurationPip);
+                  videoPlayer.currentTime = ratio * videoDurationPip;
                 }
                 showAndAutoHide();
               }}
@@ -613,6 +613,7 @@ export default function FormationEditorScreen() {
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const webViewReadyRef = useRef(false);
 
   // SharedValues 및 Refs 선언
   const scale = useSharedValue(1);
@@ -719,47 +720,47 @@ export default function FormationEditorScreen() {
     { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
   ];
 
-  // [NEW: 실제 오디오 PCM 디코딩 로직]
   const analyzeAudio = async (uri: string) => {
     if (!uri) return;
     setIsAnalyzing(true);
     try {
-      let targetUri = uri;
-      if (uri.startsWith('/')) {
-        targetUri = `file://${uri}`;
+      // 원격 URL이면 로컬 캐시로 다운로드 (CORS/파일 접근 문제 우회)
+      let localUri = uri;
+      if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        const fileName = `audio_${uri.split('/').pop()?.split('?')[0] || 'track.mp3'}`;
+        const cacheUri = `${FileSystem.cacheDirectory}${fileName}`;
+        const fileInfo = await FileSystem.getInfoAsync(cacheUri);
+        if (!fileInfo.exists) {
+          const { uri: downloaded } = await FileSystem.downloadAsync(uri, cacheUri);
+          localUri = downloaded;
+        } else {
+          localUri = cacheUri;
+        }
+      } else if (uri.startsWith('/')) {
+        localUri = `file://${uri}`;
       }
+
+      // base64로 읽어서 WebView에 직접 전달 (XHR 없이)
+      const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
 
       const analysisScript = `
         (async () => {
           try {
-            function loadArrayBuffer(url) {
-              return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('GET', url, true);
-                xhr.responseType = 'arraybuffer';
-                xhr.onload = function() {
-                  if (this.status === 200 || this.status === 0) resolve(this.response);
-                  else reject(new Error('HTTP Status ' + this.status));
-                };
-                xhr.onerror = function() { reject(new Error('Network Error')); };
-                xhr.send();
-              });
-            }
-
-            const arrayBuffer = await loadArrayBuffer("${targetUri}");
+            const b64 = "${base64}";
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            audioCtx.decodeAudioData(arrayBuffer, (audioBuffer) => {
-              const rawData = audioBuffer.getChannelData(0); 
+            audioCtx.decodeAudioData(bytes.buffer, (audioBuffer) => {
+              const rawData = audioBuffer.getChannelData(0);
               const samplesPerSec = 10;
               const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
               const blockSize = Math.floor(rawData.length / totalSamples);
               const peaks = [];
               for (let i = 0; i < totalSamples; i++) {
-                let start = blockSize * i;
                 let sum = 0;
                 for (let j = 0; j < blockSize; j++) {
-                  const val = rawData[start + j];
+                  const val = rawData[blockSize * i + j];
                   if (val !== undefined) sum += Math.abs(val);
                 }
                 peaks.push(sum / blockSize);
@@ -775,9 +776,15 @@ export default function FormationEditorScreen() {
           }
         })();
       `;
-      setTimeout(() => {
-        webViewRef.current?.injectJavaScript(analysisScript);
-      }, 1000);
+
+      const inject = () => {
+        if (webViewReadyRef.current && webViewRef.current) {
+          webViewRef.current.injectJavaScript(analysisScript);
+        } else {
+          setTimeout(inject, 300);
+        }
+      };
+      inject();
     } catch (e) {
       console.error('Audio Analysis Error:', e);
       setIsAnalyzing(false);
@@ -931,7 +938,7 @@ export default function FormationEditorScreen() {
       currentTimeMs.value = newTimeMs;
       runOnJS((t: number) => {
         player.seekTo(t / 1000);
-        if (useVideoAudio && videoPlayer) videoPlayer.seekTo(t / 1000);
+        if (useVideoAudio && videoPlayer) videoPlayer.currentTime = t / 1000;
       })(newTimeMs);
     }
   };
@@ -1278,6 +1285,7 @@ export default function FormationEditorScreen() {
           originWhitelist={['*']}
           allowFileAccess={true}
           allowUniversalAccessFromFileURLs={true}
+          onLoad={() => { webViewReadyRef.current = true; }}
         />
       </View>
 
