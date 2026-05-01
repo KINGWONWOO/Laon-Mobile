@@ -11,22 +11,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider, useAppContext } from '../context/AppContext';
 import { initSentry, withSentry } from '../services/logger';
 import { registerForPushNotificationsAsync } from '../services/NotificationService';
+import { initAds } from '../services/adService';
 
-// Google Mobile Ads initialization
-if (Platform.OS !== 'web') {
-  try {
-    const mobileAds = require('react-native-google-mobile-ads').default;
-    mobileAds()
-      .initialize()
-      .then((adapterStatuses: any) => {
-        console.log('[AdMob] Initialization complete!', adapterStatuses);
-      })
-      .catch((err: any) => console.warn('[AdMob] Init error:', err));
-  } catch (e) {
-    console.log('[AdMob] Not available in this environment');
-  }
-}
-
+initAds();
 initSentry();
 const queryClient = new QueryClient();
 

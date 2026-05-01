@@ -42,28 +42,15 @@ export const storageService = {
       const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
       const key = `${bucketPath}/${fileName}`;
 
-      // 💡 1. 세션 및 환경 변수 확인
+      // 💡 1. 세션 확인
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      console.log('[Storage] Auth Diagnosis:', {
-        hasSession: !!session,
-        expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'N/A',
-        hasAccessToken: !!session?.access_token,
-        sessionError: sessionError?.message
-      });
-
       if (!session) {
-        // 세션이 없다면 로그인을 다시 유도해야 합니다.
+        if (sessionError) console.error('[Storage] Session Error:', sessionError.message);
         throw new Error('인증 세션이 없습니다. 다시 로그인해 주세요.');
       }
 
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      console.log('[Storage] Project URL:', supabaseUrl);
-
       // 💡 2. supabase.functions.invoke를 사용하여 Edge Function 호출
-      console.log('[Storage] Requesting signed URL via supabase.functions.invoke...');
-      
-      // invoke는 내부적으로 현재 session.access_token을 Authorization: Bearer <token> 헤더에 담아 보냅니다.
       const { data, error: invokeError } = await supabase.functions.invoke('get-r2-upload-url', {
         body: { bucket: DEFAULT_BUCKET, key, contentType }
       });

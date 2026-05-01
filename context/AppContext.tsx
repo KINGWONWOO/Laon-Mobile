@@ -443,7 +443,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       });
       
       const result = await response.json().catch(() => ({ success: false, error: '응답 파싱 실패' }));
-      console.log('[Account] Edge Function response:', result);
 
       if (!response.ok || (result && !result.success)) {
         throw new Error(result.error || result.details || `서버 오류 (${response.status})`);

@@ -31,7 +31,7 @@ export async function registerForPushNotificationsAsync() {
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     
     token = (await Notifications.getDevicePushTokenAsync()).data;
-    console.log('[Push] Device Token:', token);
+    if (__DEV__) console.log('[Push] Device Token:', token);
 
     // Save to Supabase if user is logged in
     const { data: { user } } = await supabase.auth.getUser();
