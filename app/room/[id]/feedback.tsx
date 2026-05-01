@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
+import { createTranslator } from '../../../constants/translations';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
@@ -20,7 +21,9 @@ import { saveMediaToDevice } from '../../../services/downloadService';
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent } = useAppContext();
+  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, userLanguage } = useAppContext();
+
+  const t = useMemo(() => createTranslator(userLanguage || 'ko'), [userLanguage]);
 
   const insets = useSafeAreaInsets();
 
@@ -357,6 +360,7 @@ export default function FeedbackScreen() {
     setIsDownloading(true);
     try {
       await saveMediaToDevice(selectedVideo.videoUrl);
+      Alert.alert(t('success'), t('saveSuccess'));
     } catch (e: any) {
       if (e.message !== 'PERMISSION_DENIED' && e.message !== 'SHARING_UNAVAILABLE') {
         Alert.alert('저장 실패', '저장 중 오류가 발생했습니다.');
@@ -518,12 +522,12 @@ export default function FeedbackScreen() {
                       onPress={() => setIsMirrorMode(v => !v)}
                     >
                       <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : '#fff'} />
-                      <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : '#fff' }]}>거울</Text>
+                      <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : '#fff' }]}>{t('mirror')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={handleDownload} disabled={isDownloading}>
                       {isDownloading
                         ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="download-outline" size={22} color="#fff" />}
+                        : <Ionicons name="cloud-download-outline" size={22} color="#fff" />}
                     </TouchableOpacity>
                   </>
                 )}

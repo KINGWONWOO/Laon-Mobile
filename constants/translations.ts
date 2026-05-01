@@ -301,6 +301,7 @@ const ko: TranslationDict = {
   formationTitle: '동선 에디터',
   publishFormation: '피드백으로 게시',
   formationPublished: '동선이 피드백으로 게시되었습니다.',
+  mirror: '거울 모드',
 };
 
 const en: TranslationDict = {
@@ -567,6 +568,7 @@ const en: TranslationDict = {
   formationTitle: 'Formation Editor',
   publishFormation: 'Publish as feedback',
   formationPublished: 'Formation published as feedback.',
+  mirror: 'Mirror Mode',
 };
 
 const es: TranslationDict = {
@@ -833,6 +835,7 @@ const es: TranslationDict = {
   formationTitle: 'Editor de formación',
   publishFormation: 'Publicar como feedback',
   formationPublished: 'Formación publicada como feedback.',
+  mirror: 'Modo Espejo',
 };
 
 const id: TranslationDict = {
@@ -1099,6 +1102,7 @@ const id: TranslationDict = {
   formationTitle: 'Editor Formasi',
   publishFormation: 'Publikasikan sebagai feedback',
   formationPublished: 'Formasi dipublikasikan sebagai feedback.',
+  mirror: 'Mode Cermin',
 };
 
 const ja: TranslationDict = {
@@ -1365,6 +1369,7 @@ const ja: TranslationDict = {
   formationTitle: 'フォーメーションエディタ',
   publishFormation: 'フィードバックとして公開',
   formationPublished: 'フィードバックとして公開しました。',
+  mirror: 'ミラーモード',
 };
 
 const zh: TranslationDict = {
@@ -1631,6 +1636,7 @@ const zh: TranslationDict = {
   formationTitle: '队形编辑器',
   publishFormation: '作为反馈发布',
   formationPublished: '已作为反馈发布。',
+  mirror: '镜像模式',
 };
 
 const th: TranslationDict = {
@@ -1899,6 +1905,7 @@ const th: TranslationDict = {
   formationTitle: 'โปรแกรมแก้ไขรูปแบบ',
   publishFormation: 'เผยแพร่เป็นฟีดแบ็ก',
   formationPublished: 'เผยแพร่เป็นฟีดแบ็กแล้ว',
+  mirror: 'โหมดกระจก',
 };
 
 export const translations: Record<Language, TranslationDict> = { ko, en, es, id, ja, zh, th };
