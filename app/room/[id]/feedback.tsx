@@ -572,8 +572,9 @@ export default function FeedbackScreen() {
 
                 {showSpeedPicker && !isFormation && (
                 <View style={styles.speedPickerPanel}>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
-                    {speedOptions.map(speed => (                      <TouchableOpacity
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
+                    {speedOptions.map(speed => (
+                      <TouchableOpacity
                         key={speed}
                         style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
                         onPress={() => { resetControlsTimer(); setPlaybackRate(speed); setShowSpeedPicker(false); }}
@@ -791,9 +792,9 @@ const styles = StyleSheet.create({
   speedArrowBtn: { paddingHorizontal: 6, paddingVertical: 4 },
   speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, minWidth: 45, alignItems: 'center' },
   speedBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  speedPickerPanel: { position: 'absolute', bottom: 95, left: 15, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 12, zIndex: 200, width: 70, maxHeight: 200, overflow: 'hidden' },
-  speedPickerScroll: { paddingVertical: 10, alignItems: 'center', gap: 8 },
-  speedOption: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', width: 50, alignItems: 'center' },
+  speedPickerPanel: { position: 'absolute', bottom: 100, left: 15, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 16, zIndex: 200, width: 220, overflow: 'hidden' },
+  speedPickerScroll: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  speedOption: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', minWidth: 50, alignItems: 'center' },
   speedOptionText: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: 13 },
   sidebar: { flex: 1 },
   landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
