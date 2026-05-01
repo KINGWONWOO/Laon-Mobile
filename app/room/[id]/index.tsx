@@ -74,7 +74,13 @@ export default function RoomMainScreen() {
     if (selectedImages.length > 5) return Alert.alert(t('error'), t('maxImages'));
     setIsSubmitting(true);
     try {
-      await addNotice(id as string, noticeTitle, noticeContent, false, selectedImages);
+      const uploadedUrls = await Promise.all(
+        selectedImages.map(async (uri, idx) => {
+          const fileName = `${Date.now()}_${idx}.jpg`;
+          return storageService.uploadToR2(`notices/${id}`, uri, fileName);
+        })
+      );
+      await addNotice(id as string, noticeTitle, noticeContent, false, uploadedUrls);
       setNoticeTitle(''); setNoticeContent(''); setSelectedImages([]); setShowAddAddNotice(false);
     } catch (e: any) { Alert.alert(t('error'), e.message); } finally { setIsSubmitting(false); }
   };

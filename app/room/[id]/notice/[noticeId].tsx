@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../../components/ui/RoomComponents';
 import { Shadows } from '../../../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
+import { storageService } from '../../../../services/storageService';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
@@ -91,11 +92,18 @@ export default function NoticeDetailScreen() {
     if (editNoticeImages.length > 5) return Alert.alert('오류', '사진은 최대 5장까지만 등록 가능합니다.');
     setIsUpdatingNotice(true);
     try {
-      await updateNotice(notice.id, { 
-        title: editNoticeTitle.trim(), 
-        content: editNoticeContent.trim(), 
+      const uploadedUrls = await Promise.all(
+        editNoticeImages.map(async (uri, idx) => {
+          if (uri.startsWith('http://') || uri.startsWith('https://')) return uri;
+          const fileName = `${Date.now()}_${idx}.jpg`;
+          return storageService.uploadToR2(`notices/${id}`, uri, fileName);
+        })
+      );
+      await updateNotice(notice.id, {
+        title: editNoticeTitle.trim(),
+        content: editNoticeContent.trim(),
         useNotification,
-        imageUrls: editNoticeImages
+        imageUrls: uploadedUrls
       } as any);
       setShowEditNotice(false);
     } catch (e: any) {
