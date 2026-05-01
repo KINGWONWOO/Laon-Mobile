@@ -69,6 +69,8 @@ export default function FeedbackScreen() {
   const formationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [videoTime, setVideoTime] = useState(0);
 
+  const [videoDuration, setVideoDuration] = useState(0);
+
   const isFormation = selectedVideo?.videoUrl?.startsWith('formation://');
   const selectedFormation = useMemo(() => {
     if (!isFormation || !selectedVideo) return null;
@@ -115,12 +117,15 @@ export default function FeedbackScreen() {
         try {
           if (player && typeof player.currentTime === 'number') {
             setVideoTime(Math.floor(player.currentTime * 1000));
+            if (player.duration > 0 && videoDuration === 0) {
+              setVideoDuration(player.duration);
+            }
           }
         } catch (e) {}
       }, 100);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [selectedVideo?.id, isFormation, player]);
+  }, [selectedVideo?.id, isFormation, player, videoDuration]);
   
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
@@ -361,6 +366,8 @@ export default function FeedbackScreen() {
     }
   };
 
+  const [barWidth, setBarWidth] = useState(0);
+
   if (selectedVideo) {
     const videoObj = videos.find(v => v.id === selectedVideo.id) || selectedVideo;
     const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
@@ -369,7 +376,13 @@ export default function FeedbackScreen() {
       if (isSwapped && hasChoreography) {
         return (
           <View style={styles.vPlayer}>
-            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" allowsFullscreen={false} />
+            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
+            {isMirrorMode && (
+              <View style={styles.mirrorIndicator}>
+                <Ionicons name="swap-horizontal" size={10} color="#fff" />
+                <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
+              </View>
+            )}
           </View>
         );
       }
@@ -389,7 +402,13 @@ export default function FeedbackScreen() {
         ? <ActivityIndicator size="large" color={theme.primary} />
         : (
           <View style={styles.vPlayer}>
-            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" allowsFullscreen={false} />
+            <VideoView style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
+            {isMirrorMode && (
+              <View style={styles.mirrorIndicator}>
+                <Ionicons name="swap-horizontal" size={10} color="#fff" />
+                <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
+              </View>
+            )}
           </View>
         );
     };
@@ -405,10 +424,10 @@ export default function FeedbackScreen() {
                 <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
               </View>
             ) : (
-              <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+              <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={player} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
             )
           ) : (
-            <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" allowsFullscreen={false} nativeControls={false} />
+            <VideoView style={[{flex: 1}, isMirrorMode && { transform: [{ scaleX: -1 }] }]} player={subPlayer} contentFit="contain" fullscreenOptions={{ allowsFullscreen: false }} nativeControls={false} surfaceType="textureView" />
           )}
           <View style={styles.swapIconOverlay}>
             <Ionicons name="swap-horizontal" size={16} color="#fff" />
@@ -417,6 +436,39 @@ export default function FeedbackScreen() {
       );
     };
 
+  const handleSeek = (event: any) => {
+    if (videoDuration <= 0 || barWidth <= 0) return;
+    const { locationX } = event.nativeEvent;
+    const ratio = Math.max(0, Math.min(1, locationX / barWidth));
+    seekTo(ratio * videoDuration * 1000);
+  };
+
+  const renderCustomControls = () => {
+    if (isFormation) return null;
+    const progress = videoDuration > 0 ? (videoTime / 1000) / videoDuration : 0;
+    
+    return (
+      <View style={styles.customBottomControls}>
+        <TouchableOpacity onPress={handleTogglePlay} style={styles.mainPlayBtn}>
+          <Ionicons name={player.playing ? "pause" : "play"} size={28} color="#fff" />
+        </TouchableOpacity>
+        
+        <View style={styles.progressSection}>
+          <Text style={styles.timeText}>{formatTime(videoTime)}</Text>
+          <TouchableOpacity 
+            activeOpacity={1}
+            style={styles.progressBarBg}
+            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+            onPress={handleSeek}
+          >
+            <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
+          </TouchableOpacity>
+          <Text style={styles.timeText}>{formatTime(videoDuration * 1000)}</Text>
+        </View>
+      </View>
+    );
+  };
+
     return (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
@@ -424,6 +476,7 @@ export default function FeedbackScreen() {
             <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
               {renderMainContent()}
               {renderSubContent()}
+              {renderCustomControls()}
               <View style={styles.vControls}>
                 <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                   <Ionicons name="chevron-back" size={28} color="#fff" />
@@ -460,8 +513,12 @@ export default function FeedbackScreen() {
                 )}
                 {!isFormation && (
                   <>
-                    <TouchableOpacity style={{ marginRight: 16 }} onPress={() => setIsMirrorMode(v => !v)}>
-                      <Ionicons name="camera-reverse-outline" size={24} color={isMirrorMode ? theme.primary : '#fff'} />
+                    <TouchableOpacity 
+                      style={[styles.mirrorBtn, isMirrorMode && { backgroundColor: theme.primary + '44', borderColor: theme.primary }]} 
+                      onPress={() => setIsMirrorMode(v => !v)}
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : '#fff'} />
+                      <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : '#fff' }]}>거울</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={handleDownload} disabled={isDownloading}>
                       {isDownloading
@@ -719,12 +776,22 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 40, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
+  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 70, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
   bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
   bubbleText: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   subVideoContainer: { position: 'absolute', top: 70, right: 20, width: 120, height: 68, borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#fff', backgroundColor: '#000', zIndex: 110 },
   swapIconOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' },
-  saveBtn: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, padding: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' }
+  saveBtn: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, padding: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
+  customBottomControls: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 20, gap: 15 },
+  mainPlayBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  progressSection: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressBarBg: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 2 },
+  timeText: { color: '#fff', fontSize: 11, fontWeight: '600', width: 35 },
+  mirrorBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', marginRight: 16 },
+  mirrorBtnText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
+  mirrorIndicator: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  mirrorIndicatorText: { color: '#fff', fontSize: 10, fontWeight: '900' },
 });
