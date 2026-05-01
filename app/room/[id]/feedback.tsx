@@ -118,15 +118,16 @@ export default function FeedbackScreen() {
 
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
+    p.preservesPitch = true;
     if (cachedVideoUrl) p.play();
   });
 
   const subPlayer = useVideoPlayer(cachedChoreographyUrl || '', p => {
     p.loop = true;
     p.muted = true;
+    p.preservesPitch = true;
     if (cachedChoreographyUrl) p.play();
   });
-
   useEffect(() => {
     if (cachedVideoUrl && player) {
       player.replace(cachedVideoUrl);
