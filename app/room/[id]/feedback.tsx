@@ -107,14 +107,14 @@ export default function FeedbackScreen() {
       formationTimerRef.current = setInterval(() => {
         setFormationTime(prev => {
           if (prev >= formationDuration * 1000) return 0;
-          return prev + 50;
+          return prev + 50 * playbackRate;
         });
       }, 50);
     } else {
       if (formationTimerRef.current) clearInterval(formationTimerRef.current);
     }
     return () => { if (formationTimerRef.current) clearInterval(formationTimerRef.current); };
-  }, [isFormation, isFormationPlaying, formationDuration]);
+  }, [isFormation, isFormationPlaying, formationDuration, playbackRate]);
 
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
@@ -131,9 +131,18 @@ export default function FeedbackScreen() {
   useEffect(() => {
     if (cachedVideoUrl && player) {
       player.replace(cachedVideoUrl);
+      player.muted = false;
       player.play();
     }
   }, [cachedVideoUrl, player]);
+
+  useEffect(() => {
+    if (cachedChoreographyUrl && subPlayer) {
+      subPlayer.replace(cachedChoreographyUrl);
+      subPlayer.muted = true;
+      subPlayer.play();
+    }
+  }, [cachedChoreographyUrl, subPlayer]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -423,16 +432,19 @@ export default function FeedbackScreen() {
 
       if (isFormation) {
         return selectedFormation ? (
-          <View style={{ flex: 1 }}>
+          <View style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
             <FormationPlayer
               formation={selectedFormation}
               currentTimeMs={formationTime}
               onDurationDetected={setFormationDuration}
               isPlaying={isFormationPlaying}
             />
-            <TouchableOpacity style={styles.formationPlayOverlay} onPress={handleTogglePlay}>
-              <Ionicons name={isFormationPlaying ? "pause" : "play"} size={40} color="rgba(255,255,255,0.5)" />
-            </TouchableOpacity>
+            {isMirrorMode && (
+              <View style={[styles.mirrorIndicator, { left: insets.left + 20, transform: [{ scaleX: -1 }] }]}>
+                <Ionicons name="swap-horizontal" size={10} color="#fff" />
+                <Text style={styles.mirrorIndicatorText}>MIRROR ON</Text>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.errorContainer}>
@@ -504,60 +516,59 @@ export default function FeedbackScreen() {
 
     const handleSeek = (event: any) => {
       resetControlsTimer();
-      if (videoDuration <= 0 || barWidth <= 0) return;
+      const totalDuration = isFormation ? formationDuration : videoDuration;
+      if (totalDuration <= 0 || barWidth <= 0) return;
       const { locationX } = event.nativeEvent;
       const ratio = Math.max(0, Math.min(1, locationX / barWidth));
-      seekTo(ratio * videoDuration * 1000);
+      seekTo(ratio * totalDuration * 1000);
     };
 
     const renderCustomControls = () => {
-      if (isFormation) return null;
-      const progress = videoDuration > 0 ? videoTime / 1000 / videoDuration : 0;
+      const totalDuration = isFormation ? formationDuration : videoDuration;
+      const progress = totalDuration > 0 ? currentPlaybackTime / 1000 / totalDuration : 0;
 
       return (
         <View style={[styles.customBottomControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
           <View style={{ position: "absolute", bottom: 60, left: insets.left + 15, alignItems: "center" }}>
-            {!isFormation && (
-              <View style={styles.speedBtnGroup}>
-                <TouchableOpacity
-                  style={styles.speedArrowBtn}
-                  onPress={() => {
-                    resetControlsTimer();
-                    setPlaybackRate((r) => Math.max(0.25, Math.round((r - 0.05) * 100) / 100));
-                  }}
-                >
-                  <Ionicons name="chevron-back" size={14} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.speedBtn}
-                  onPress={() => {
-                    resetControlsTimer();
-                    setShowSpeedPicker((v) => !v);
-                  }}
-                >
-                  <Text style={styles.speedBtnText}>
-                    {playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.speedArrowBtn}
-                  onPress={() => {
-                    resetControlsTimer();
-                    setPlaybackRate((r) => Math.min(2.0, Math.round((r + 0.05) * 100) / 100));
-                  }}
-                >
-                  <Ionicons name="chevron-forward" size={14} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
+            <View style={styles.speedBtnGroup}>
+              <TouchableOpacity
+                style={styles.speedArrowBtn}
+                onPress={() => {
+                  resetControlsTimer();
+                  setPlaybackRate((r) => Math.max(0.25, Math.round((r - 0.05) * 100) / 100));
+                }}
+              >
+                <Ionicons name="chevron-back" size={14} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.speedBtn}
+                onPress={() => {
+                  resetControlsTimer();
+                  setShowSpeedPicker((v) => !v);
+                }}
+              >
+                <Text style={styles.speedBtnText}>
+                  {playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.speedArrowBtn}
+                onPress={() => {
+                  resetControlsTimer();
+                  setPlaybackRate((r) => Math.min(2.0, Math.round((r + 0.05) * 100) / 100));
+                }}
+              >
+                <Ionicons name="chevron-forward" size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity onPress={handleTogglePlay} style={styles.mainPlayBtn}>
-            <Ionicons name={player.playing ? "pause" : "play"} size={28} color="#fff" />
+            <Ionicons name={(isFormation ? isFormationPlaying : player.playing) ? "pause" : "play"} size={28} color="#fff" />
           </TouchableOpacity>
 
           <View style={styles.progressSection}>
-            <Text style={styles.timeText}>{formatTime(videoTime)}</Text>
+            <Text style={styles.timeText}>{formatTime(currentPlaybackTime)}</Text>
             <TouchableOpacity
               activeOpacity={1}
               style={styles.progressBarBg}
@@ -566,7 +577,7 @@ export default function FeedbackScreen() {
             >
               <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
             </TouchableOpacity>
-            <Text style={styles.timeText}>{formatTime(videoDuration * 1000)}</Text>
+            <Text style={styles.timeText}>{formatTime(totalDuration * 1000)}</Text>
           </View>
         </View>
       );
@@ -643,38 +654,36 @@ export default function FeedbackScreen() {
                         </TouchableOpacity>
                       </>
                     )}
+                    <TouchableOpacity
+                      style={[
+                        styles.mirrorBtn,
+                        isMirrorMode && { backgroundColor: theme.primary + "44", borderColor: theme.primary },
+                      ]}
+                      onPress={() => {
+                        resetControlsTimer();
+                        setIsMirrorMode((v) => !v);
+                      }}
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : "#fff"} />
+                      <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : "#fff" }]}>
+                        {t("mirror")}
+                      </Text>
+                    </TouchableOpacity>
                     {!isFormation && (
-                      <>
-                        <TouchableOpacity
-                          style={[
-                            styles.mirrorBtn,
-                            isMirrorMode && { backgroundColor: theme.primary + "44", borderColor: theme.primary },
-                          ]}
-                          onPress={() => {
-                            resetControlsTimer();
-                            setIsMirrorMode((v) => !v);
-                          }}
-                        >
-                          <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : "#fff"} />
-                          <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : "#fff" }]}>
-                            {t("mirror")}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.saveBtn, { marginRight: 16 }]}
-                          onPress={() => {
-                            resetControlsTimer();
-                            handleDownload();
-                          }}
-                          disabled={isDownloading}
-                        >
-                          {isDownloading ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-                          )}
-                        </TouchableOpacity>
-                      </>
+                      <TouchableOpacity
+                        style={[styles.saveBtn, { marginRight: 16 }]}
+                        onPress={() => {
+                          resetControlsTimer();
+                          handleDownload();
+                        }}
+                        disabled={isDownloading}
+                      >
+                        {isDownloading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+                        )}
+                      </TouchableOpacity>
                     )}
                     <TouchableOpacity
                       onPress={() => {
@@ -686,7 +695,7 @@ export default function FeedbackScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  {showSpeedPicker && !isFormation && (
+                  {showSpeedPicker && (
                     <View style={[styles.speedPickerPanel, { left: insets.left + 15 }]}>
                       <ScrollView
                         horizontal
