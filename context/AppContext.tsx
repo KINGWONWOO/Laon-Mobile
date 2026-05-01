@@ -36,6 +36,7 @@ interface AppContextType {
   joinRoom: (roomId: string, passcode: string) => Promise<any>;
   updateRoom: (roomId: string, name: string, image?: string | null) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
+  submitFeedback: (type: 'bug' | 'feature' | 'other', content: string) => Promise<void>;
 
   notices: Notice[];
   addNotice: (rid: string, t: string, c: string, p?: boolean, imgs?: string[], useNoti?: boolean) => Promise<void>;
@@ -148,8 +149,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const reportContent = async (id: string, type: string) => {
-    console.log(`Reported ${type}: ${id}`);
-    Alert.alert('신고 접수', '부적절한 콘텐츠로 신고가 접수되었습니다. 관리자 검토 후 조치됩니다.');
+    try {
+      const { error } = await supabase.from('content_reports').insert({
+        reporter_id: currentUser?.id,
+        content_id: id,
+        content_type: type,
+        reason: 'Reported by user',
+      });
+      if (error) throw error;
+      Alert.alert(t('success'), t('reportSuccess'));
+    } catch (e) {
+      console.error('[Report] Failed:', e);
+      Alert.alert(t('error'), t('reportError'));
+    }
   };
 
   const setThemeType = async (type: ThemeType) => {
@@ -476,6 +488,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const joinRoom = async (rid: string, pc: string) => { if (!currentUserRef.current) return; const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id); if (room) await refreshAllData(); return room; };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };
   const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); };
+  const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };
   
   const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { if (!currentUserRef.current) return; await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 공지사항', t); await refreshAllData(); };
   const updateNotice = async (id: string, updates: Partial<Notice>) => { await contentService.updateNotice(id, { title: updates.title, content: updates.content, is_pinned: updates.isPinned, image_urls: updates.imageUrls }); await refreshAllData(); };
@@ -601,7 +614,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     sendVerificationCode: async (e: string) => authService.sendVerificationCode(e),
     checkEmailCode: async (e: string, c: string, t: string) => authService.checkEmailCode(e, c, t),
     verifyAndSignup: async (e: string, c: string, t: string, p: string, n: string, ph: string) => authService.verifyAndSignup(e, c, t, p, n, ph),
-    updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers,
+    updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers, submitFeedback,
     rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
     notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
     videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,

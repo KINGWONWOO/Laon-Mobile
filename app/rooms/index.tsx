@@ -28,6 +28,7 @@ export default function RoomsScreen() {
     checkProAccess,
     language,
     setLanguage,
+    submitFeedback,
     t,
   } = useAppContext();
   const router = useRouter();
@@ -116,19 +117,22 @@ export default function RoomsScreen() {
 
   const handleSubmitFeedback = async () => {
     if (!feedbackContent.trim()) return Alert.alert(t('notification'), t('feedbackRequired'));
+    if (!currentUser?.id) return Alert.alert(t('error'), t('loginRequired'));
+
+    setIsUpdating(true);
     try {
-      const { error } = await supabase.from('developer_feedback').insert({
-        user_id: currentUser?.id,
-        type: feedbackType,
-        content: feedbackContent.trim(),
-      });
-      if (error) throw error;
+      console.log('[Feedback] Submitting:', { type: feedbackType });
+      await submitFeedback(feedbackType, feedbackContent.trim());
+      
       setShowFeedbackModal(false);
       setFeedbackContent('');
       setFeedbackType('bug');
       Alert.alert(t('success'), t('feedbackSuccess'));
-    } catch {
-      Alert.alert(t('error'), t('feedbackError'));
+    } catch (e: any) {
+      console.error('[Feedback] Submit error:', e);
+      Alert.alert(t('error'), `${t('feedbackError')}\n${e.message || 'Unknown error'}`);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -260,10 +264,23 @@ export default function RoomsScreen() {
               ] as const).map(({ key, label }) => (
                 <TouchableOpacity
                   key={key}
-                  style={[styles.feedbackTypeBtn, { borderColor: feedbackType === key ? theme.primary : theme.border, backgroundColor: feedbackType === key ? theme.primary + '18' : 'transparent' }]}
+                  style={[
+                    styles.feedbackTypeBtn, 
+                    { 
+                      borderColor: feedbackType === key ? theme.primary : theme.border, 
+                      backgroundColor: feedbackType === key ? theme.primary + '18' : 'transparent',
+                      minWidth: '30%' 
+                    }
+                  ]}
                   onPress={() => setFeedbackType(key)}
                 >
-                  <Text style={[styles.feedbackTypeBtnText, { color: feedbackType === key ? theme.primary : theme.textSecondary }]}>{label}</Text>
+                  <Text 
+                    style={[styles.feedbackTypeBtnText, { color: feedbackType === key ? theme.primary : theme.textSecondary }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -413,9 +430,9 @@ const styles = StyleSheet.create({
   feedbackHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   feedbackTitle: { fontSize: 18, fontWeight: 'bold' },
   feedbackSubtitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 8 },
-  feedbackTypeRow: { flexDirection: 'row', gap: 8 },
-  feedbackTypeBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
-  feedbackTypeBtnText: { fontSize: 12, fontWeight: 'bold' },
+  feedbackTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  feedbackTypeBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', minWidth: '28%' },
+  feedbackTypeBtnText: { fontSize: 11, fontWeight: 'bold' },
   feedbackInput: { borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 14, height: 120, marginBottom: 16 },
   feedbackSubmitBtn: { padding: 16, borderRadius: 14, alignItems: 'center' },
   feedbackSubmitText: { fontWeight: 'bold', fontSize: 15 },
