@@ -477,6 +477,28 @@ export default function FeedbackScreen() {
     
     return (
       <View style={styles.customBottomControls}>
+        <View style={{ position: 'absolute', bottom: 60, left: 15, alignItems: 'center' }}>
+          {!isFormation && (
+            <View style={styles.speedBtnGroup}>
+              <TouchableOpacity
+                style={styles.speedArrowBtn}
+                onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100)); }}
+              >
+                <Ionicons name="chevron-back" size={14} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.speedBtn} onPress={() => { resetControlsTimer(); setShowSpeedPicker(v => !v); }}>
+                <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.speedArrowBtn}
+                onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100)); }}
+              >
+                <Ionicons name="chevron-forward" size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity onPress={handleTogglePlay} style={styles.mainPlayBtn}>
           <Ionicons name={player.playing ? "pause" : "play"} size={28} color="#fff" />
         </TouchableOpacity>
@@ -513,31 +535,11 @@ export default function FeedbackScreen() {
                   {renderSubContent()}
                   {renderCustomControls()}
                   <View style={styles.vControls}>
-                      <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
-                        <Ionicons name="chevron-back" size={28} color="#fff" />
-                      </TouchableOpacity>
-                      <View style={{flex: 1}} />
-                {!isFormation && (
-                  <View style={styles.speedBtnGroup}>
-                    <TouchableOpacity
-                      style={styles.speedArrowBtn}
-                      onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100)); }}
-                    >
-                      <Ionicons name="chevron-back" size={14} color="#fff" />
+                    <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
+                      <Ionicons name="chevron-back" size={28} color="#fff" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.speedBtn} onPress={() => { resetControlsTimer(); setShowSpeedPicker(v => !v); }}>
-                      <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.speedArrowBtn}
-                      onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100)); }}
-                    >
-                      <Ionicons name="chevron-forward" size={14} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {isFullScreen && (
-                  <>
+                    <View style={{flex: 1}} />
+                    {isFullScreen && (                  <>
                     <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setEnableFloatingComments(!enableFloatingComments); }}>
                       <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
                     </TouchableOpacity>
@@ -569,9 +571,8 @@ export default function FeedbackScreen() {
 
                 {showSpeedPicker && !isFormation && (
                 <View style={styles.speedPickerPanel}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
-                    {speedOptions.map(speed => (
-                      <TouchableOpacity
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
+                    {speedOptions.map(speed => (                      <TouchableOpacity
                         key={speed}
                         style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
                         onPress={() => { resetControlsTimer(); setPlaybackRate(speed); setShowSpeedPicker(false); }}
@@ -785,13 +786,13 @@ const styles = StyleSheet.create({
   landscapeVideo: { flex: 1 },
   vPlayer: { flex: 1 },
   vControls: { position: 'absolute', top: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
-  speedBtnGroup: { flexDirection: 'row', alignItems: 'center', marginRight: 16 },
+  speedBtnGroup: { flexDirection: 'row', alignItems: 'center' },
   speedArrowBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-  speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  speedBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, minWidth: 45, alignItems: 'center' },
   speedBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  speedPickerPanel: { position: 'absolute', top: 64, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.82)', zIndex: 200 },
-  speedPickerScroll: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
-  speedOption: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
+  speedPickerPanel: { position: 'absolute', bottom: 95, left: 15, backgroundColor: 'rgba(0,0,0,0.85)', borderRadius: 12, zIndex: 200, width: 70, maxHeight: 200, overflow: 'hidden' },
+  speedPickerScroll: { paddingVertical: 10, alignItems: 'center', gap: 8 },
+  speedOption: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)', width: 50, alignItems: 'center' },
   speedOptionText: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: 13 },
   sidebar: { flex: 1 },
   landscapeSidebar: { width: 300, borderLeftWidth: 1, flex: undefined },
