@@ -501,14 +501,18 @@ export default function FeedbackScreen() {
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
-            <TouchableWithoutFeedback onPress={toggleControls}>
-              <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
-                {renderMainContent()}
-                {showControls && (
-                  <Animated.View entering={FadeIn} exiting={FadeOut} style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
-                    {renderSubContent()}
-                    {renderCustomControls()}
-                    <View style={styles.vControls}>
+            <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
+              {renderMainContent()}
+              
+              <TouchableWithoutFeedback onPress={toggleControls}>
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+
+              {showControls && (
+                <Animated.View pointerEvents="box-none" entering={FadeIn} exiting={FadeOut} style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
+                  {renderSubContent()}
+                  {renderCustomControls()}
+                  <View style={styles.vControls}>
                       <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
                         <Ionicons name="chevron-back" size={28} color="#fff" />
                       </TouchableOpacity>
@@ -604,7 +608,6 @@ export default function FeedbackScreen() {
                 </View>
                 )}
                 </View>
-                </TouchableWithoutFeedback>
 
                 {(!isFullScreen || showSidebar) && (              <View style={[styles.sidebar, isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }], { backgroundColor: theme.background }]}>
                 <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
