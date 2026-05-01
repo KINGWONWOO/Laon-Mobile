@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, TouchableWithoutFeedback } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video'; 
 import * as ImagePicker from 'expo-image-picker';
@@ -65,6 +65,27 @@ export default function FeedbackScreen() {
   const speedOptions = Array.from({ length: 8 }, (_, i) => Math.round((0.25 + i * 0.25) * 100) / 100);
 
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
+
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetControlsTimer = () => {
+    setShowControls(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    if (selectedVideo) resetControlsTimer();
+    return () => { if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current); };
+  }, [selectedVideo?.id]);
+
+  const toggleControls = () => {
+    if (showControls) setShowControls(false);
+    else resetControlsTimer();
+  };
 
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
   const [formationTime, setFormationTime] = useState(0);
@@ -330,6 +351,7 @@ export default function FeedbackScreen() {
   };
 
   const handleTogglePlay = () => {
+    resetControlsTimer();
     if (isFormation) {
       setIsFormationPlaying(!isFormationPlaying);
       if (subPlayer) {
@@ -348,6 +370,7 @@ export default function FeedbackScreen() {
   };
 
   const handleSwap = () => {
+    resetControlsTimer();
     setIsSwapped(!isSwapped);
     if (player && subPlayer) {
       player.muted = !isSwapped;
@@ -441,6 +464,7 @@ export default function FeedbackScreen() {
     };
 
   const handleSeek = (event: any) => {
+    resetControlsTimer();
     if (videoDuration <= 0 || barWidth <= 0) return;
     const { locationX } = event.nativeEvent;
     const ratio = Math.max(0, Math.min(1, locationX / barWidth));
@@ -477,29 +501,32 @@ export default function FeedbackScreen() {
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
         <View style={[styles.fullView, { backgroundColor: theme.background, paddingTop: isFullScreen ? 0 : insets.top, paddingBottom: isFullScreen ? 0 : insets.bottom }]}>
           <View style={[styles.mainLayout, isFullScreen && styles.landscapeLayout]}>
-            <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
-              {renderMainContent()}
-              {renderSubContent()}
-              {renderCustomControls()}
-              <View style={styles.vControls}>
-                <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
-                  <Ionicons name="chevron-back" size={28} color="#fff" />
-                </TouchableOpacity>
-                <View style={{flex: 1}} />
+            <TouchableWithoutFeedback onPress={toggleControls}>
+              <View style={[styles.videoSection, isFullScreen ? styles.landscapeVideo : styles.portraitVideo, { backgroundColor: '#000' }]}>
+                {renderMainContent()}
+                {showControls && (
+                  <Animated.View entering={FadeIn} exiting={FadeOut} style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
+                    {renderSubContent()}
+                    {renderCustomControls()}
+                    <View style={styles.vControls}>
+                      <TouchableOpacity onPress={() => { if(isFullScreen) setIsFullScreen(false); else setSelectedVideo(null); }}>
+                        <Ionicons name="chevron-back" size={28} color="#fff" />
+                      </TouchableOpacity>
+                      <View style={{flex: 1}} />
                 {!isFormation && (
                   <View style={styles.speedBtnGroup}>
                     <TouchableOpacity
                       style={styles.speedArrowBtn}
-                      onPress={() => setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100))}
+                      onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.max(0.25, Math.round((r - 0.05) * 100) / 100)); }}
                     >
                       <Ionicons name="chevron-back" size={14} color="#fff" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.speedBtn} onPress={() => setShowSpeedPicker(v => !v)}>
+                    <TouchableOpacity style={styles.speedBtn} onPress={() => { resetControlsTimer(); setShowSpeedPicker(v => !v); }}>
                       <Text style={styles.speedBtnText}>{playbackRate % 1 === 0 ? playbackRate.toFixed(1) : playbackRate}×</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.speedArrowBtn}
-                      onPress={() => setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100))}
+                      onPress={() => { resetControlsTimer(); setPlaybackRate(r => Math.min(2.0, Math.round((r + 0.05) * 100) / 100)); }}
                     >
                       <Ionicons name="chevron-forward" size={14} color="#fff" />
                     </TouchableOpacity>
@@ -507,10 +534,10 @@ export default function FeedbackScreen() {
                 )}
                 {isFullScreen && (
                   <>
-                    <TouchableOpacity style={{marginRight: 16}} onPress={() => setEnableFloatingComments(!enableFloatingComments)}>
+                    <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setEnableFloatingComments(!enableFloatingComments); }}>
                       <Ionicons name={enableFloatingComments ? "chatbox-ellipses" : "chatbox-outline"} size={24} color={enableFloatingComments ? theme.primary : "#fff"} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={{marginRight: 16}} onPress={() => setShowSidebar(!showSidebar)}>
+                    <TouchableOpacity style={{marginRight: 16}} onPress={() => { resetControlsTimer(); setShowSidebar(!showSidebar); }}>
                       <Ionicons name="chatbubbles" size={24} color={showSidebar ? theme.primary : "#fff"} />
                     </TouchableOpacity>
                   </>
@@ -519,31 +546,31 @@ export default function FeedbackScreen() {
                   <>
                     <TouchableOpacity 
                       style={[styles.mirrorBtn, isMirrorMode && { backgroundColor: theme.primary + '44', borderColor: theme.primary }]} 
-                      onPress={() => setIsMirrorMode(v => !v)}
+                      onPress={() => { resetControlsTimer(); setIsMirrorMode(v => !v); }}
                     >
                       <Ionicons name="swap-horizontal-outline" size={20} color={isMirrorMode ? theme.primary : '#fff'} />
                       <Text style={[styles.mirrorBtnText, { color: isMirrorMode ? theme.primary : '#fff' }]}>{t('mirror')}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={handleDownload} disabled={isDownloading}>
+                    <TouchableOpacity style={[styles.saveBtn, { marginRight: 16 }]} onPress={() => { resetControlsTimer(); handleDownload(); }} disabled={isDownloading}>
                       {isDownloading
                         ? <ActivityIndicator size="small" color="#fff" />
                         : <Ionicons name="cloud-download-outline" size={22} color="#fff" />}
                     </TouchableOpacity>
                   </>
                 )}
-                <TouchableOpacity onPress={() => setIsFullScreen(!isFullScreen)}>
+                <TouchableOpacity onPress={() => { resetControlsTimer(); setIsFullScreen(!isFullScreen); }}>
                   <Ionicons name={isFullScreen ? "contract" : "expand"} size={24} color="#fff" />
                 </TouchableOpacity>
-              </View>
+                </View>
 
-              {showSpeedPicker && !isFormation && (
+                {showSpeedPicker && !isFormation && (
                 <View style={styles.speedPickerPanel}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speedPickerScroll}>
                     {speedOptions.map(speed => (
                       <TouchableOpacity
                         key={speed}
                         style={[styles.speedOption, speed === playbackRate && { backgroundColor: theme.primary }]}
-                        onPress={() => { setPlaybackRate(speed); setShowSpeedPicker(false); }}
+                        onPress={() => { resetControlsTimer(); setPlaybackRate(speed); setShowSpeedPicker(false); }}
                       >
                         <Text style={[styles.speedOptionText, speed === playbackRate && { color: '#fff' }]}>
                           {speed % 1 === 0 ? speed.toFixed(1) : speed}×
@@ -552,17 +579,18 @@ export default function FeedbackScreen() {
                     ))}
                   </ScrollView>
                 </View>
-              )}
+                )}
+                </Animated.View>
+                )}
 
-              {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
-              {activeFloatingBubbles.length > 0 && (
+                {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
+                {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
                     <Animated.View 
                       key={c.id} 
                       entering={FadeIn.duration(800)} 
                       exiting={FadeOut.duration(800)}
-                      // 고정 높이 컨테이너 덕분에 삭제 시에는 움직이지 않고, 추가 시에만 위로 밀어 올림
                       layout={LinearTransition.springify().damping(20).stiffness(90)}
                       style={[styles.bubble, { backgroundColor: theme.card + 'EE', borderColor: theme.primary, borderLeftWidth: 3 }, Shadows.medium]}
                     >
@@ -574,11 +602,11 @@ export default function FeedbackScreen() {
                     </Animated.View>
                   ))}
                 </View>
-              )}
-            </View>
+                )}
+                </View>
+                </TouchableWithoutFeedback>
 
-            {(!isFullScreen || showSidebar) && (
-              <View style={[styles.sidebar, isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }], { backgroundColor: theme.background }]}>
+                {(!isFullScreen || showSidebar) && (              <View style={[styles.sidebar, isFullScreen && [styles.landscapeSidebar, { borderLeftColor: theme.border }], { backgroundColor: theme.background }]}>
                 <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.sidebarTitle, { color: theme.text }]}>피드백 {videoObj.comments.length}</Text>
                   <TouchableOpacity onPress={() => setShowCommentInput(true)}><Ionicons name="add-circle" size={24} color={theme.primary} /></TouchableOpacity>
