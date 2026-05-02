@@ -727,8 +727,10 @@ export default function FormationEditorScreen() {
       // 원격 URL이면 로컬 캐시로 다운로드 (CORS/파일 접근 문제 우회)
       let localUri = uri;
       if (uri.startsWith('http://') || uri.startsWith('https://')) {
-        const fileName = `audio_${uri.split('/').pop()?.split('?')[0] || 'track.mp3'}`;
-        const cacheUri = `${FileSystem.cacheDirectory}${fileName}`;
+        // 특수문자·한글 등을 제거한 안전한 파일명 생성
+        const rawName = uri.split('/').pop()?.split('?')[0] || 'track';
+        const safeFileName = `audio_${rawName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const cacheUri = `${FileSystem.cacheDirectory}${safeFileName}`;
         const fileInfo = await FileSystem.getInfoAsync(cacheUri);
         if (!fileInfo.exists) {
           const { uri: downloaded } = await FileSystem.downloadAsync(uri, cacheUri);
