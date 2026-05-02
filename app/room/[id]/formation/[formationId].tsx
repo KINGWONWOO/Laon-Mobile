@@ -72,9 +72,9 @@ const WaveformBackground = React.memo(function WaveformBackground({ duration, pe
             styles.waveformBar, 
             { 
               backgroundColor: theme.text,
-              width: 2,
-              height: Math.max(2, peak * 48), // 최대 높이 48px, 상하 대칭
-              opacity: peak > 0.3 ? 0.4 : 0.18, // 32b2ca5 투명도 유지
+              width: 1.5,
+              height: Math.max(2, peak * 52),
+              opacity: 0.15 + peak * 0.55, // dB 크기에 비례한 투명도
               borderRadius: 1
             }
           ]} 
@@ -753,21 +753,33 @@ export default function FormationEditorScreen() {
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             audioCtx.decodeAudioData(bytes.buffer, (audioBuffer) => {
-              const rawData = audioBuffer.getChannelData(0);
-              const samplesPerSec = 10;
+              // 좌우 채널 평균으로 모노 합산
+              const ch0 = audioBuffer.getChannelData(0);
+              const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : ch0;
+              const samplesPerSec = 25; // 1초당 25개 막대 (이전 10개 → 2.5배 해상도)
               const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
-              const blockSize = Math.floor(rawData.length / totalSamples);
-              const peaks = [];
+              const blockSize = Math.floor(ch0.length / totalSamples);
+              const dbValues = [];
               for (let i = 0; i < totalSamples; i++) {
-                let sum = 0;
+                let sumSq = 0;
+                const start = blockSize * i;
                 for (let j = 0; j < blockSize; j++) {
-                  const val = rawData[blockSize * i + j];
-                  if (val !== undefined) sum += Math.abs(val);
+                  const mono = (ch0[start + j] + ch1[start + j]) * 0.5;
+                  sumSq += mono * mono;
                 }
-                peaks.push(sum / blockSize);
+                const rms = Math.sqrt(sumSq / blockSize);
+                // dBFS 변환: 무음 → -Infinity, 최대 → 0dB
+                const db = 20 * Math.log10(Math.max(rms, 1e-7));
+                dbValues.push(db);
               }
-              const maxPeak = Math.max(...peaks) || 1;
-              const normalized = peaks.map(p => Math.pow(p / maxPeak, 1.3));
+              // -60dB(노이즈 플로어) ~ 최대dB 범위를 0~1로 매핑
+              const noiseFloor = -60;
+              const maxDb = Math.max(...dbValues);
+              const range = maxDb - noiseFloor;
+              const normalized = dbValues.map(db => {
+                const clamped = Math.max(noiseFloor, db);
+                return range > 0 ? (clamped - noiseFloor) / range : 0;
+              });
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
             }, (err) => {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Decode failed: ' + err.message }));
