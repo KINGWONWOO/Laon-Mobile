@@ -807,6 +807,15 @@ export default function FormationEditorScreen() {
         localUri = `file://${uri}`;
       }
 
+      // [Memory Fix] 대용량 파일 분석 시 OOM 방지
+      const fInfo = await FileSystem.getInfoAsync(localUri, { size: true });
+      if (fInfo.exists && fInfo.size && fInfo.size > 50 * 1024 * 1024) {
+        console.warn('File too large (>50MB) for analysis, using flat line...');
+        setIsAnalyzing(false);
+        setWaveformPeaks([]);
+        return;
+      }
+
       // base64로 읽어서 WebView에 직접 전달 (XHR 없이)
       const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
 
@@ -865,11 +874,11 @@ export default function FormationEditorScreen() {
   };
 
   useEffect(() => {
-    if (audioUrl) {
-      const isVideoFile = /\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(audioUrl);
-      if (!isVideoFile) analyzeAudio(audioUrl);
+    const urlToAnalyze = useVideoAudio ? videoUrl : audioUrl;
+    if (urlToAnalyze) {
+      analyzeAudio(urlToAnalyze);
     }
-  }, [audioUrl]);
+  }, [audioUrl, videoUrl, useVideoAudio]);
 
   const onWebViewMessage = (e: any) => {
     try {
@@ -1012,7 +1021,7 @@ export default function FormationEditorScreen() {
   // Sync PiP video with audio player (useVideoAudio=false only)
   useEffect(() => {
     if (!videoPlayer || !videoUrl || useVideoAudio) return;
-    const targetTime = (currentTimeMs.value / 1000) + syncOffset;
+    const targetTime = status.currentTime + syncOffset;
     if (status.playing) {
       videoPlayer.currentTime = Math.max(0, targetTime);
       videoPlayer.play();
@@ -1083,7 +1092,11 @@ export default function FormationEditorScreen() {
         if (videoPlayer && videoUrl) videoPlayer.currentTime = timeSec;
       } else {
         player.seekTo(timeSec);
-        if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
+        if (videoPlayer && videoUrl) {
+          runOnJS((t: number) => {
+            videoPlayer.currentTime = Math.max(0, t + syncOffset);
+          })(timeSec);
+        }
       }
     }
   };
@@ -1203,6 +1216,14 @@ export default function FormationEditorScreen() {
       setIsChangingSong(false);
     }
   };
+
+  const handleSyncAdjust = useCallback((delta: number) => {
+    const next = parseFloat((syncOffset + delta).toFixed(1));
+    setSyncOffset(next);
+    if (videoPlayer && videoUrl && !useVideoAudio) {
+      videoPlayer.currentTime = Math.max(0, status.currentTime + next);
+    }
+  }, [syncOffset, videoPlayer, videoUrl, useVideoAudio, status.currentTime]);
 
   const handleAddVideo = async () => {
     try {
@@ -1518,13 +1539,13 @@ export default function FormationEditorScreen() {
                 <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
                 {videoUrl && !useVideoAudio && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 6, height: 36, borderWidth: 1, borderColor: theme.border }}>
-                    <TouchableOpacity onPress={() => setSyncOffset(prev => prev - 0.1)} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => handleSyncAdjust(-0.1)} style={{ padding: 4 }}>
                       <Ionicons name="remove-circle-outline" size={20} color={theme.textSecondary} />
                     </TouchableOpacity>
                     <View style={{ width: 55, alignItems: 'center' }}>
                       <Text style={{ color: theme.text, fontSize: 11, fontWeight: 'bold' }}>싱크 {syncOffset >= 0 ? '+' : ''}{syncOffset.toFixed(1)}s</Text>
                     </View>
-                    <TouchableOpacity onPress={() => setSyncOffset(prev => prev + 0.1)} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => handleSyncAdjust(0.1)} style={{ padding: 4 }}>
                       <Ionicons name="add-circle-outline" size={20} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
