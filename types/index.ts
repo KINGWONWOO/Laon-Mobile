@@ -178,7 +178,6 @@ export type FormationData = {
 
 export type VideoSettings = {
   videoUrl?: string;
-  useVideoAudio: boolean;
   pipPosition: { x: number, y: number };
 };
 

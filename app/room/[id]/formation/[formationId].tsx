@@ -27,38 +27,27 @@ const formatTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
-const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player, forceTimeMs }: { player: any, forceTimeMs?: number }) {
+const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player }: { player: any }) {
   const status = useAudioPlayerStatus(player);
   const { theme } = useAppContext();
-  const displayMs = forceTimeMs !== undefined ? forceTimeMs : status.currentTime * 1000;
+  const displayMs = status.currentTime * 1000;
   return <Text style={[styles.timeText, { color: theme.text }]}>{formatTime(displayMs)}</Text>;
 });
 
-const PlayButton = React.memo(function PlayButton({ player, videoPlayer, useVideoAudio, isVideoPlaying, theme, currentTimeMs, syncOffset }: { player: any, videoPlayer: any, useVideoAudio: boolean, isVideoPlaying: boolean, theme: any, currentTimeMs: any, syncOffset: number }) {
+const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, currentTimeMs, syncOffset }: { player: any, videoPlayer: any, theme: any, currentTimeMs: any, syncOffset: number }) {
   const status = useAudioPlayerStatus(player);
-  const isPlaying = useVideoAudio ? isVideoPlaying : status.playing;
+  const isPlaying = status.playing;
 
   const togglePlay = () => {
-    if (useVideoAudio) {
-      // videoPlayer is the sole audio source — don't touch player
-      if (!videoPlayer) return;
-      if (videoPlayer.playing) {
-        videoPlayer.pause();
-      } else {
-        videoPlayer.currentTime = currentTimeMs.value / 1000;
-        videoPlayer.play();
-      }
+    if (status.playing) {
+      player.pause();
+      if (videoPlayer) videoPlayer.pause();
     } else {
-      if (status.playing) {
-        player.pause();
-        if (videoPlayer) videoPlayer.pause();
-      } else {
-        const seekSec = currentTimeMs.value / 1000;
-        player.seekTo(seekSec);
-        if (videoPlayer) videoPlayer.currentTime = Math.max(0, seekSec + syncOffset);
-        player.play();
-        if (videoPlayer) videoPlayer.play();
-      }
+      const seekSec = currentTimeMs.value / 1000;
+      player.seekTo(seekSec);
+      if (videoPlayer) videoPlayer.currentTime = Math.max(0, seekSec + syncOffset);
+      player.play();
+      if (videoPlayer) videoPlayer.play();
     }
   };
 
@@ -621,8 +610,6 @@ export default function FormationEditorScreen() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
   const [audioUrl, setAudioUrl] = useState<string>(formation?.audioUrl || '');
   const [videoUrl, setVideoUrl] = useState<string>(formation?.videoSettings?.videoUrl || '');
-  const [useVideoAudio, setUseVideoAudio] = useState<boolean>(formation?.videoSettings?.useVideoAudio || false);
-  const [videoDuration, setVideoDuration] = useState<number>(0);
   const pipX = useSharedValue(formation?.videoSettings?.pipPosition?.x ?? width - 170);
   const pipY = useSharedValue(formation?.videoSettings?.pipPosition?.y ?? 60);
   const pipScale = useSharedValue(1);
@@ -661,8 +648,6 @@ export default function FormationEditorScreen() {
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [syncOffset, setSyncOffset] = useState(0);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [videoDisplayTimeMs, setVideoDisplayTimeMs] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const webViewReadyRef = useRef(false);
 
@@ -683,7 +668,7 @@ export default function FormationEditorScreen() {
 
   const videoPlayer = useVideoPlayer(videoUrl || null, (p) => {
     p.loop = false;
-    p.muted = !useVideoAudio;
+    p.muted = true;
   });
 
   const seekAll = useCallback((timeSec: number) => {
@@ -691,36 +676,9 @@ export default function FormationEditorScreen() {
     cancelAnimation(currentTimeMs);
     currentTimeMs.value = timeMs;
     
-    if (useVideoAudio) {
-      if (videoPlayer && videoUrl) videoPlayer.currentTime = timeSec;
-    } else {
-      player.seekTo(timeSec);
-      if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
-    }
-  }, [player, videoPlayer, videoUrl, useVideoAudio, syncOffset, currentTimeMs]);
-
-  useEffect(() => {
-    if (videoPlayer) {
-      videoPlayer.muted = !useVideoAudio;
-    }
-    if (player) {
-      player.muted = useVideoAudio;
-    }
-  }, [useVideoAudio, videoPlayer, player]);
-
-  // Poll videoPlayer.duration when using video audio (expo-audio reports 0 for video files)
-  useEffect(() => {
-    if (!useVideoAudio || !videoPlayer) { setVideoDuration(0); return; }
-    const tryGet = () => {
-      const d = videoPlayer.duration;
-      if (typeof d === 'number' && d > 0) { setVideoDuration(d); return true; }
-      return false;
-    };
-    if (tryGet()) return;
-    const interval = setInterval(() => { if (tryGet()) clearInterval(interval); }, 200);
-    return () => clearInterval(interval);
-  }, [useVideoAudio, videoPlayer]);
-
+    player.seekTo(timeSec);
+    if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
+  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs]);
 
   const dancerPositionsRef = useRef<Record<string, any>>({});
   const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
@@ -759,7 +717,7 @@ export default function FormationEditorScreen() {
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
-  const effectiveDuration = (useVideoAudio && videoDuration > 0) ? videoDuration : (status.duration || 0);
+  const effectiveDuration = status.duration || 0;
 
   const [, setChangeCount] = useState(0);
 
@@ -889,11 +847,11 @@ export default function FormationEditorScreen() {
   };
 
   useEffect(() => {
-    const urlToAnalyze = useVideoAudio ? videoUrl : audioUrl;
+    const urlToAnalyze = audioUrl;
     if (urlToAnalyze) {
       analyzeAudio(urlToAnalyze);
     }
-  }, [audioUrl, videoUrl, useVideoAudio]);
+  }, [audioUrl]);
 
   const onWebViewMessage = (e: any) => {
     try {
@@ -1015,14 +973,14 @@ export default function FormationEditorScreen() {
   // Drives currentTimeMs and synchronizes PiP videoPlayer
   useEffect(() => {
     // 1. Master Playing State
-    const isPlaying = useVideoAudio ? (videoPlayer.playing || false) : status.playing;
+    const isPlaying = status.playing;
     isPlayerPlayingSV.value = isPlaying;
 
     // 2. Timeline Animation Driver
-    const dur = (useVideoAudio && videoDuration > 0) ? videoDuration : (status.duration || 0);
+    const dur = status.duration || 0;
     if (isPlaying && dur > 0) {
       // Use the most reliable current time to start animation
-      const startSec = useVideoAudio ? videoPlayer.currentTime : status.currentTime;
+      const startSec = status.currentTime;
       const remaining = (dur - startSec) * 1000;
       currentTimeMs.value = startSec * 1000;
       currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
@@ -1030,14 +988,14 @@ export default function FormationEditorScreen() {
       cancelAnimation(currentTimeMs);
       // [Pause Fix] Only sync from status if it's reliable (>0). 
       // Avoid resetting to 0 if expo-audio reports 0 briefly upon pause.
-      const currentStatusTime = useVideoAudio ? videoPlayer.currentTime : status.currentTime;
+      const currentStatusTime = status.currentTime;
       if (typeof currentStatusTime === 'number' && currentStatusTime > 0) {
         currentTimeMs.value = currentStatusTime * 1000;
       }
     }
 
-    // 3. PiP Video Sync (Slave mode when useVideoAudio is false)
-    if (videoPlayer && videoUrl && !useVideoAudio) {
+    // 3. PiP Video Sync (Slave mode)
+    if (videoPlayer && videoUrl) {
       const targetTime = status.currentTime + syncOffset;
       // Use small epsilon to avoid unnecessary seeks
       if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
@@ -1046,21 +1004,7 @@ export default function FormationEditorScreen() {
       if (status.playing) videoPlayer.play();
       else videoPlayer.pause();
     }
-  }, [status.playing, status.duration, videoDuration, useVideoAudio, videoPlayer, videoUrl, syncOffset]);
-
-  // Separate listeners for UI updates (display time, etc)
-  useEffect(() => {
-    if (!videoPlayer) return;
-    const playSub = videoPlayer.addListener('playingChange', (p: any) => {
-      const playing = p?.isPlaying ?? false;
-      if (useVideoAudio) setIsVideoPlaying(playing);
-    });
-    const timeSub = videoPlayer.addListener('timeUpdate', (p: any) => {
-      const ct = p?.currentTime ?? videoPlayer.currentTime;
-      if (useVideoAudio && typeof ct === 'number') setVideoDisplayTimeMs(ct * 1000);
-    });
-    return () => { playSub.remove(); timeSub.remove(); };
-  }, [videoPlayer, useVideoAudio]);
+  }, [status.playing, status.duration, videoPlayer, videoUrl, syncOffset]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -1075,13 +1019,9 @@ export default function FormationEditorScreen() {
       const timeSec = newTimeMs / 1000;
       
       runOnJS((t: number) => {
-        if (useVideoAudio) {
-          if (videoPlayer && videoUrl) videoPlayer.currentTime = t;
-        } else {
-          player.seekTo(t);
-          if (videoPlayer && videoUrl) {
-            videoPlayer.currentTime = Math.max(0, t + syncOffset);
-          }
+        player.seekTo(t);
+        if (videoPlayer && videoUrl) {
+          videoPlayer.currentTime = Math.max(0, t + syncOffset);
         }
       })(timeSec);
     }
@@ -1089,12 +1029,11 @@ export default function FormationEditorScreen() {
 
   const onScrollEnd = (e: any) => {
     isUserScrollingSV.value = false;
-    const isPlaying = useVideoAudio ? (videoPlayer?.playing || false) : isPlayerPlayingSV.value;
+    const isPlaying = isPlayerPlayingSV.value;
     if (isPlaying) {
       const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
       const remaining = (effectiveDuration * 1000) - time;
       currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-      if (useVideoAudio && videoPlayer) videoPlayer.currentTime = time / 1000;
     }
   };
 
@@ -1206,10 +1145,10 @@ export default function FormationEditorScreen() {
   const handleSyncAdjust = useCallback((delta: number) => {
     const next = parseFloat((syncOffset + delta).toFixed(1));
     setSyncOffset(next);
-    if (videoPlayer && videoUrl && !useVideoAudio) {
+    if (videoPlayer && videoUrl) {
       videoPlayer.currentTime = Math.max(0, status.currentTime + next);
     }
-  }, [syncOffset, videoPlayer, videoUrl, useVideoAudio, status.currentTime]);
+  }, [syncOffset, videoPlayer, videoUrl, status.currentTime]);
 
   const handleAddVideo = async () => {
     try {
@@ -1223,30 +1162,8 @@ export default function FormationEditorScreen() {
 
       await FileSystem.copyAsync({ from: sourceUri, to: destUri });
 
-      Alert.alert(
-        '음원 설정',
-        '어떤 음원을 사용할까요?',
-        [
-          {
-            text: '영상 음원 사용',
-            onPress: () => {
-              pushHistory();
-              setVideoUrl(destUri);
-              setAudioUrl(destUri);
-              setUseVideoAudio(true);
-              setWaveformPeaks([]);
-            }
-          },
-          {
-            text: '기존 음원 유지',
-            onPress: () => {
-              pushHistory();
-              setVideoUrl(destUri);
-              setUseVideoAudio(false);
-            }
-          }
-        ]
-      );
+      pushHistory();
+      setVideoUrl(destUri);
     } catch (e: any) {
       Alert.alert('실패', e.message);
     }
@@ -1256,7 +1173,7 @@ export default function FormationEditorScreen() {
     try { 
       await updateFormation(formationId!, { 
         audioUrl, 
-        videoSettings: videoUrl ? { videoUrl, useVideoAudio, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
         settings, 
         data: { dancers, scenes, timeline } 
       }); 
@@ -1273,7 +1190,7 @@ export default function FormationEditorScreen() {
       const data = { 
         title: formation?.title, 
         audioUrl, 
-        // videoSettings removed as per requirement
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
         settings, 
         data: { dancers, scenes, timeline } 
       };
@@ -1330,7 +1247,7 @@ export default function FormationEditorScreen() {
       setIsExporting(true);
       await publishFormationAsFeedback(id!, formationId!, publishTitle, { 
         audioUrl,
-        // videoSettings removed as per requirement
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
         settings, 
         data: { dancers, scenes, timeline } 
       }, choreographyUrl);
@@ -1523,7 +1440,7 @@ export default function FormationEditorScreen() {
               <View style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                 <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
                 <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
-                {videoUrl && !useVideoAudio && (
+                {videoUrl && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 6, height: 36, borderWidth: 1, borderColor: theme.border }}>
                     <TouchableOpacity onPress={() => handleSyncAdjust(-0.1)} style={{ padding: 4 }}>
                       <Ionicons name="remove-circle-outline" size={20} color={theme.textSecondary} />
@@ -1542,8 +1459,6 @@ export default function FormationEditorScreen() {
                 <PlayButton
                   player={player}
                   videoPlayer={videoPlayer}
-                  useVideoAudio={useVideoAudio}
-                  isVideoPlaying={isVideoPlaying}
                   theme={theme}
                   currentTimeMs={currentTimeMs}
                   syncOffset={syncOffset}
@@ -1551,7 +1466,7 @@ export default function FormationEditorScreen() {
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-                <PlaybackTimeDisplay player={player} forceTimeMs={useVideoAudio ? videoDisplayTimeMs : undefined} />
+                <PlaybackTimeDisplay player={player} />
               </View>
             </View>
 

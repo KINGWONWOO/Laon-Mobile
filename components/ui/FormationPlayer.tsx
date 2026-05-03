@@ -85,7 +85,7 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const player = useAudioPlayer(formation?.audioUrl || '');
   const internalVideoPlayer = useVideoPlayer(videoSettings?.videoUrl || null, (p) => {
     p.loop = true;
-    p.muted = !videoSettings?.useVideoAudio;
+    p.muted = true;
   });
 
   const videoPlayer = externalVideoPlayer || internalVideoPlayer;
