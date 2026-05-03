@@ -104,10 +104,10 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   }, [isPlaying, player, videoPlayer]);
 
   useEffect(() => {
-    if (player && Math.abs(player.currentTime - (currentTimeMs / 1000)) > 0.3) {
+    if (player && Math.abs(player.currentTime - (currentTimeMs / 1000)) > 0.15) {
       player.seekTo(currentTimeMs / 1000);
     }
-    if (videoPlayer && videoPlayer.src && Math.abs(videoPlayer.currentTime - (currentTimeMs / 1000)) > 0.3) {
+    if (videoPlayer && videoPlayer.src && Math.abs(videoPlayer.currentTime - (currentTimeMs / 1000)) > 0.15) {
       videoPlayer.currentTime = currentTimeMs / 1000;
     }
   }, [currentTimeMs, player, videoPlayer]);

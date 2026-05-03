@@ -902,8 +902,15 @@ export default function FormationEditorScreen() {
     // 2. Timeline Animation Driver
     const dur = status.duration || 0;
     if (isPlaying && dur > 0) {
-      // Use the most reliable current time to start animation
-      const startSec = status.currentTime;
+      // Use the most reliable current time to start animation.
+      // If status.currentTime is 0 but we were already further ahead, 
+      // it's likely a transient 0 from expo-audio during the state change.
+      let startSec = status.currentTime;
+      const currentValSec = currentTimeMs.value / 1000;
+      if (startSec === 0 && currentValSec > 0.1) {
+        startSec = currentValSec;
+      }
+      
       const remaining = (dur - startSec) * 1000;
       currentTimeMs.value = startSec * 1000;
       currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
@@ -919,7 +926,8 @@ export default function FormationEditorScreen() {
 
     // 3. PiP Video Sync (Slave mode)
     if (videoPlayer && videoUrl) {
-      const targetTime = status.currentTime + syncOffset;
+      // Source of truth is currentTimeMs.value (JS-side snapshot)
+      const targetTime = (currentTimeMs.value / 1000) + syncOffset;
       // Use small epsilon to avoid unnecessary seeks
       if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
         videoPlayer.currentTime = Math.max(0, targetTime);
@@ -1069,9 +1077,9 @@ export default function FormationEditorScreen() {
     const next = parseFloat((syncOffset + delta).toFixed(1));
     setSyncOffset(next);
     if (videoPlayer && videoUrl) {
-      videoPlayer.currentTime = Math.max(0, status.currentTime + next);
+      videoPlayer.currentTime = Math.max(0, (currentTimeMs.value / 1000) + next);
     }
-  }, [syncOffset, videoPlayer, videoUrl, status.currentTime]);
+  }, [syncOffset, videoPlayer, videoUrl]);
 
   const handleAddVideo = async () => {
     try {
