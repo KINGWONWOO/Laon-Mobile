@@ -473,6 +473,7 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
 
 const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelected, onPress, scale, index, settings, stageWidth, stageHeight, cellSize, mode, onDragEnd, canDragInPlace }: any) {
   const { theme } = useAppContext();
+  if (!dancerPos) return null; // [Guard] Prevent crash if pos is missing
   const isDragging = useSharedValue(false);
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -722,10 +723,16 @@ export default function FormationEditorScreen() {
 
 
   const dancerPositionsRef = useRef<Record<string, any>>({});
-  
-  // Robust initialization of dancer positions
   const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
   
+  // [Fix] Initialize SharedValues immediately during render to avoid 'undefined' on first mount
+  if (activeScene && Object.keys(dancerPositionsRef.current).length === 0 && dancers.length > 0) {
+    dancers.forEach(d => {
+      const posInScene = activeScene.positions[d.id] || { x: 0.5, y: 0.5 };
+      dancerPositionsRef.current[d.id] = makeMutable(posInScene);
+    });
+  }
+
   useEffect(() => {
     if (!activeScene) return;
     
@@ -807,17 +814,25 @@ export default function FormationEditorScreen() {
         localUri = `file://${uri}`;
       }
 
-      // [Memory Fix] 대용량 파일 분석 시 OOM 방지
+      // [Memory Fix] 대용량 파일 분석 시 OOM 방지 (60MB로 한도 상향 및 예외 처리 강화)
       const fInfo = await FileSystem.getInfoAsync(localUri, { size: true });
-      if (fInfo.exists && fInfo.size && fInfo.size > 50 * 1024 * 1024) {
-        console.warn('File too large (>50MB) for analysis, using flat line...');
+      if (fInfo.exists && fInfo.size && fInfo.size > 60 * 1024 * 1024) {
+        console.warn('File too large (>60MB) for analysis, skipping waveform...');
         setIsAnalyzing(false);
         setWaveformPeaks([]);
         return;
       }
 
       // base64로 읽어서 WebView에 직접 전달 (XHR 없이)
-      const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+      let base64 = "";
+      try {
+        base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+      } catch (readErr) {
+        console.warn('Failed to read file for analysis:', readErr);
+        setIsAnalyzing(false);
+        setWaveformPeaks([]);
+        return;
+      }
 
       const analysisScript = `
         (async () => {
@@ -996,86 +1011,56 @@ export default function FormationEditorScreen() {
 
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
 
-  // Audio-player drives currentTimeMs when useVideoAudio is false
+  // [Unified Playback Engine]
+  // Drives currentTimeMs and synchronizes PiP videoPlayer
   useEffect(() => {
-    if (useVideoAudio) {
-      // Video is now the audio source — stop audio player, clear playing state
-      isPlayerPlayingSV.value = false;
-      cancelAnimation(currentTimeMs);
-      player.pause();
-      return;
-    }
-    isPlayerPlayingSV.value = status.playing;
-    const dur = status.duration || 0;
-    if (status.playing && dur > 0) {
-      const remaining = (dur - status.currentTime) * 1000;
-      currentTimeMs.value = status.currentTime * 1000;
+    // 1. Master Playing State
+    const isPlaying = useVideoAudio ? (videoPlayer.playing || false) : status.playing;
+    isPlayerPlayingSV.value = isPlaying;
+
+    // 2. Timeline Animation Driver
+    const dur = (useVideoAudio && videoDuration > 0) ? videoDuration : (status.duration || 0);
+    if (isPlaying && dur > 0) {
+      // Use the most reliable current time to start animation
+      const startSec = useVideoAudio ? videoPlayer.currentTime : status.currentTime;
+      const remaining = (dur - startSec) * 1000;
+      currentTimeMs.value = startSec * 1000;
       currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     } else {
       cancelAnimation(currentTimeMs);
-      if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useVideoAudio, status.playing, status.duration]);
-
-  // Sync PiP video with audio player (useVideoAudio=false only)
-  useEffect(() => {
-    if (!videoPlayer || !videoUrl || useVideoAudio) return;
-    const targetTime = status.currentTime + syncOffset;
-    if (status.playing) {
-      videoPlayer.currentTime = Math.max(0, targetTime);
-      videoPlayer.play();
-    } else {
-      videoPlayer.pause();
-      videoPlayer.currentTime = Math.max(0, targetTime);
-    }
-  }, [status.playing, syncOffset, videoPlayer, videoUrl, useVideoAudio]);
-
-  // videoPlayer drives currentTimeMs when useVideoAudio is true
-  useEffect(() => {
-    if (!useVideoAudio || !videoPlayer) return;
-
-    const startTimeline = () => {
-      // Prefer fresh videoPlayer.duration over stale closure value
-      const dur = videoPlayer.duration > 0 ? videoPlayer.duration : videoDuration;
-      if (dur <= 0) return;
-      // videoPlayer.currentTime may be 0 briefly after a seek — fall back to shared value
-      const currentSec = videoPlayer.currentTime > 0 ? videoPlayer.currentTime : (currentTimeMs.value / 1000);
-      const remaining = (dur - currentSec) * 1000;
-      currentTimeMs.value = currentSec * 1000;
-      currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-    };
-
-    const playSub = videoPlayer.addListener('playingChange', (payload: any) => {
-      const playing: boolean = payload?.isPlaying ?? false;
-      setIsVideoPlaying(playing);
-      isPlayerPlayingSV.value = playing;
-      if (playing) startTimeline();
-      else {
-        // Don't reset currentTimeMs here — expo-video fires playingChange(false)
-        // spuriously when currentTime is set during a seek, and currentTime may be 0 at that moment
-        cancelAnimation(currentTimeMs);
+      // [Pause Fix] Only sync from status if it's reliable (>0). 
+      // Avoid resetting to 0 if expo-audio reports 0 briefly upon pause.
+      const currentStatusTime = useVideoAudio ? videoPlayer.currentTime : status.currentTime;
+      if (typeof currentStatusTime === 'number' && currentStatusTime > 0) {
+        currentTimeMs.value = currentStatusTime * 1000;
       }
-    });
-
-    const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
-      const ct = payload?.currentTime ?? videoPlayer.currentTime;
-      if (typeof ct === 'number' && ct >= 0) setVideoDisplayTimeMs(ct * 1000);
-    });
-
-    const currentlyPlaying = videoPlayer.playing || false;
-    setIsVideoPlaying(currentlyPlaying);
-    setVideoDisplayTimeMs((videoPlayer.currentTime || 0) * 1000);
-    // If video is already playing when this effect runs (e.g. videoDuration just polled),
-    // restart withTiming so the timeline catches up.
-    if (currentlyPlaying) {
-      isPlayerPlayingSV.value = true;
-      startTimeline();
     }
 
+    // 3. PiP Video Sync (Slave mode when useVideoAudio is false)
+    if (videoPlayer && videoUrl && !useVideoAudio) {
+      const targetTime = status.currentTime + syncOffset;
+      // Use small epsilon to avoid unnecessary seeks
+      if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
+        videoPlayer.currentTime = Math.max(0, targetTime);
+      }
+      if (status.playing) videoPlayer.play();
+      else videoPlayer.pause();
+    }
+  }, [status.playing, status.duration, videoDuration, useVideoAudio, videoPlayer, videoUrl, syncOffset]);
+
+  // Separate listeners for UI updates (display time, etc)
+  useEffect(() => {
+    if (!videoPlayer) return;
+    const playSub = videoPlayer.addListener('playingChange', (p: any) => {
+      const playing = p?.isPlaying ?? false;
+      if (useVideoAudio) setIsVideoPlaying(playing);
+    });
+    const timeSub = videoPlayer.addListener('timeUpdate', (p: any) => {
+      const ct = p?.currentTime ?? videoPlayer.currentTime;
+      if (useVideoAudio && typeof ct === 'number') setVideoDisplayTimeMs(ct * 1000);
+    });
     return () => { playSub.remove(); timeSub.remove(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useVideoAudio, videoPlayer, videoDuration]);
+  }, [videoPlayer, useVideoAudio]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -1088,16 +1073,17 @@ export default function FormationEditorScreen() {
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
       const timeSec = newTimeMs / 1000;
-      if (useVideoAudio) {
-        if (videoPlayer && videoUrl) videoPlayer.currentTime = timeSec;
-      } else {
-        player.seekTo(timeSec);
-        if (videoPlayer && videoUrl) {
-          runOnJS((t: number) => {
+      
+      runOnJS((t: number) => {
+        if (useVideoAudio) {
+          if (videoPlayer && videoUrl) videoPlayer.currentTime = t;
+        } else {
+          player.seekTo(t);
+          if (videoPlayer && videoUrl) {
             videoPlayer.currentTime = Math.max(0, t + syncOffset);
-          })(timeSec);
+          }
         }
-      }
+      })(timeSec);
     }
   };
 
