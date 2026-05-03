@@ -12,6 +12,8 @@ interface FormationPlayerProps {
   currentTimeMs: number;
   onDurationDetected?: (duration: number) => void;
   isPlaying?: boolean;
+  hidePip?: boolean;
+  externalVideoPlayer?: any;
 }
 
 const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stageHeight, cellSize, index }: any) => {
@@ -67,7 +69,7 @@ const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stage
   );
 };
 
-export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected, isPlaying = false }: FormationPlayerProps) {
+export default function FormationPlayer({ formation, currentTimeMs, onDurationDetected, isPlaying = false, hidePip = false, externalVideoPlayer }: FormationPlayerProps) {
   const dancers = formation?.data?.dancers || [];
   const scenes = formation?.data?.scenes || [];
   const timeline = formation?.data?.timeline || [];
@@ -81,10 +83,12 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
 
   const player = useAudioPlayer(formation?.audioUrl || '');
-  const videoPlayer = useVideoPlayer(videoSettings?.videoUrl || null, (p) => {
+  const internalVideoPlayer = useVideoPlayer(videoSettings?.videoUrl || null, (p) => {
     p.loop = true;
     p.muted = !videoSettings?.useVideoAudio;
   });
+
+  const videoPlayer = externalVideoPlayer || internalVideoPlayer;
 
   useEffect(() => {
     if (player) {
@@ -121,7 +125,7 @@ export default function FormationPlayer({ formation, currentTimeMs, onDurationDe
 
   return (
     <View style={styles.container}>
-      {videoSettings?.videoUrl && (
+      {videoSettings?.videoUrl && !hidePip && (
         <View style={[styles.pipContainer, { left: videoSettings.pipPosition.x, top: videoSettings.pipPosition.y }]}>
           <VideoView 
             player={videoPlayer} 

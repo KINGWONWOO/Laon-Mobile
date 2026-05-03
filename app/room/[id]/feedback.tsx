@@ -438,6 +438,7 @@ export default function FeedbackScreen() {
               currentTimeMs={formationTime}
               onDurationDetected={setFormationDuration}
               isPlaying={isFormationPlaying}
+              hidePip={true}
             />
             {isMirrorMode && (
               <View style={[styles.mirrorIndicator, { left: insets.left + 20, transform: [{ scaleX: -1 }] }]}>
@@ -485,7 +486,7 @@ export default function FeedbackScreen() {
           {isSwapped ? (
             isFormation ? (
               <View style={{ flex: 1, backgroundColor: "#111" }}>
-                <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} />
+                <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} hidePip={true} />
               </View>
             ) : (
               <VideoView

@@ -27,39 +27,44 @@ const formatTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
-const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player }: { player: any }) {
+const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player, forceTimeMs }: { player: any, forceTimeMs?: number }) {
   const status = useAudioPlayerStatus(player);
   const { theme } = useAppContext();
-  return <Text style={[styles.timeText, { color: theme.text }]}>{formatTime(status.currentTime * 1000)}</Text>;
+  const displayMs = forceTimeMs !== undefined ? forceTimeMs : status.currentTime * 1000;
+  return <Text style={[styles.timeText, { color: theme.text }]}>{formatTime(displayMs)}</Text>;
 });
 
-const PlayButton = React.memo(function PlayButton({ player, theme, currentTimeMs, videoPlayer, useVideoAudio, isVideoPlaying, syncPipVideo }: { player: any, theme: any, currentTimeMs: any, videoPlayer?: any, useVideoAudio?: boolean, isVideoPlaying?: boolean, syncPipVideo?: boolean }) {
+const PlayButton = React.memo(function PlayButton({ player, videoPlayer, useVideoAudio, isVideoPlaying, theme, currentTimeMs, syncOffset }: { player: any, videoPlayer: any, useVideoAudio: boolean, isVideoPlaying: boolean, theme: any, currentTimeMs: any, syncOffset: number }) {
   const status = useAudioPlayerStatus(player);
-  const isPlaying = useVideoAudio ? (isVideoPlaying || false) : status.playing;
+  const isPlaying = useVideoAudio ? isVideoPlaying : status.playing;
+
+  const togglePlay = () => {
+    if (useVideoAudio) {
+      // videoPlayer is the sole audio source — don't touch player
+      if (!videoPlayer) return;
+      if (videoPlayer.playing) {
+        videoPlayer.pause();
+      } else {
+        videoPlayer.currentTime = currentTimeMs.value / 1000;
+        videoPlayer.play();
+      }
+    } else {
+      if (status.playing) {
+        player.pause();
+        if (videoPlayer) videoPlayer.pause();
+      } else {
+        const seekSec = currentTimeMs.value / 1000;
+        player.seekTo(seekSec);
+        if (videoPlayer) videoPlayer.currentTime = Math.max(0, seekSec + syncOffset);
+        player.play();
+        if (videoPlayer) videoPlayer.play();
+      }
+    }
+  };
+
   return (
     <TouchableOpacity
-      onPress={() => {
-        if (useVideoAudio && videoPlayer) {
-          if (isVideoPlaying) videoPlayer.pause();
-          else {
-            videoPlayer.currentTime = currentTimeMs.value / 1000;
-            videoPlayer.play();
-          }
-        } else {
-          if (status.playing) {
-            player.pause();
-            if (syncPipVideo && videoPlayer) videoPlayer.pause();
-          } else {
-            const seekSec = currentTimeMs.value / 1000;
-            player.seekTo(seekSec);
-            player.play();
-            if (syncPipVideo && videoPlayer) {
-              videoPlayer.currentTime = seekSec;
-              videoPlayer.play();
-            }
-          }
-        }
-      }}
+      onPress={togglePlay}
       style={[styles.playBtn, { backgroundColor: theme.primary }]}
     >
       <Ionicons name={isPlaying ? "pause" : "play"} size={32} color={theme.background} />
@@ -145,7 +150,7 @@ const TransitionX = React.memo(function TransitionX({ width, left }: { width: nu
   );
 });
 
-const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void }) {
+const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose, onRelativeSeek }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void, onRelativeSeek?: (delta: number) => void }) {
   const { theme } = useAppContext();
   const [showControls, setShowControls] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -157,17 +162,24 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   const startY = useSharedValue(0);
   const startScale = useSharedValue(1);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seekProtectUntilRef = useRef(0);
 
   useEffect(() => {
     if (!videoPlayer) return;
 
-    // Use payload.currentTime (from event) — reading videoPlayer.currentTime
-    // directly can return 0 during seek, causing the UI to flash to 0.
     const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
       const ct = payload?.currentTime ?? videoPlayer.currentTime;
       const dur = videoPlayer.duration;
+      if (ct === 0 && Date.now() < seekProtectUntilRef.current) {
+        if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
+        return;
+      }
       if (typeof ct === 'number' && ct >= 0) setVideoCurrentTime(ct);
       if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
+    });
+
+    const statusSub = videoPlayer.addListener('statusChange', (status: any) => {
+      if (videoPlayer.duration > 0) setVideoDurationPip(videoPlayer.duration);
     });
 
     const playSub = videoPlayer.addListener('playingChange', (payload: any) => {
@@ -180,6 +192,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
 
     return () => {
       timeSub.remove();
+      statusSub.remove();
       playSub.remove();
     };
   }, [videoPlayer]);
@@ -193,6 +206,8 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   }, []);
 
   const pan = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .activeOffsetY([-20, 20])
     .onStart(() => { 'worklet'; startX.value = x.value; startY.value = y.value; })
     .onUpdate((e) => { 'worklet'; x.value = startX.value + e.translationX; y.value = startY.value + e.translationY; });
 
@@ -200,7 +215,6 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
     .onStart(() => { 'worklet'; startScale.value = scale.value; })
     .onUpdate((e) => { 'worklet'; scale.value = Math.max(0.5, Math.min(3, startScale.value * e.scale)); });
 
-  // Only fires when controls are hidden — no conflict with buttons when controls are visible
   const tap = Gesture.Tap()
     .runOnJS(true)
     .maxDistance(10)
@@ -241,33 +255,59 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
           <VideoView player={videoPlayer} style={styles.pipVideo} allowsFullscreen={false} allowsPictureInPicture={false} nativeControls={false} contentFit="contain" />
         </View>
         {showControls && (
-          // box-none: this view itself doesn't intercept touches,
-          // so children (buttons, seek bar) receive touches directly.
-          // Tap on empty area falls through to the GestureDetector above,
-          // but tap gesture is disabled when controls are shown — no conflict.
           <View style={[StyleSheet.absoluteFillObject, styles.pipOverlay]} pointerEvents="box-none">
             <View style={styles.pipTopRow}>
-              <TouchableOpacity style={styles.pipBtn} onPress={onClose}>
+              <TouchableOpacity style={styles.pipBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={14} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pipBtn} onPress={() => { setIsMinimized(true); setShowControls(false); }}>
+              <TouchableOpacity style={styles.pipBtn} onPress={() => { setIsMinimized(true); setShowControls(false); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="remove" size={14} color="#FFF" />
               </TouchableOpacity>
             </View>
             <View style={styles.pipMidRow}>
-              {/* seekBy is expo-video's native relative-seek — no state tracking needed */}
-              <TouchableOpacity style={styles.pipBtn} onPress={() => { videoPlayer.seekBy(-5); showAndAutoHide(); }}>
+              <TouchableOpacity
+                style={styles.pipBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={() => {
+                  if (onRelativeSeek) onRelativeSeek(-5);
+                  else {
+                    const newTime = Math.max(0, videoCurrentTime - 5);
+                    seekProtectUntilRef.current = Date.now() + 1000;
+                    videoPlayer.currentTime = newTime;
+                    setVideoCurrentTime(newTime);
+                  }
+                  showAndAutoHide();
+                }}
+              >
                 <Ionicons name="play-back" size={16} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pipPlayBtn} onPress={togglePlay}>
+              <TouchableOpacity
+                style={styles.pipPlayBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={togglePlay}
+              >
                 <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={18} color="#FFF" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.pipBtn} onPress={() => { videoPlayer.seekBy(5); showAndAutoHide(); }}>
+              <TouchableOpacity
+                style={styles.pipBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={() => {
+                  if (onRelativeSeek) onRelativeSeek(5);
+                  else {
+                    const newTime = Math.min(videoDurationPip > 0 ? videoDurationPip : videoCurrentTime + 5, videoCurrentTime + 5);
+                    seekProtectUntilRef.current = Date.now() + 1000;
+                    videoPlayer.currentTime = newTime;
+                    setVideoCurrentTime(newTime);
+                  }
+                  showAndAutoHide();
+                }}
+              >
                 <Ionicons name="play-forward" size={16} color="#FFF" />
               </TouchableOpacity>
             </View>
             <Pressable
               style={styles.pipSeekRow}
+              hitSlop={{ top: 10, bottom: 10 }}
               onLayout={(e) => {
                 const w = e.nativeEvent.layout.width;
                 if (w > 0) setSeekTrackWidth(w);
@@ -276,6 +316,7 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 if (videoDurationPip > 0) {
                   const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekTrackWidth));
                   const targetTime = ratio * videoDurationPip;
+                  seekProtectUntilRef.current = Date.now() + 1000;
                   setVideoCurrentTime(targetTime);
                   videoPlayer.currentTime = targetTime;
                   showAndAutoHide();
@@ -618,8 +659,9 @@ export default function FormationEditorScreen() {
 
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isMainVideoPlaying, setIsMainVideoPlaying] = useState(false);
-  const [syncPipVideo, setSyncPipVideo] = useState(false);
+  const [syncOffset, setSyncOffset] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoDisplayTimeMs, setVideoDisplayTimeMs] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const webViewReadyRef = useRef(false);
 
@@ -643,11 +685,27 @@ export default function FormationEditorScreen() {
     p.muted = !useVideoAudio;
   });
 
+  const seekAll = useCallback((timeSec: number) => {
+    const timeMs = timeSec * 1000;
+    cancelAnimation(currentTimeMs);
+    currentTimeMs.value = timeMs;
+    
+    if (useVideoAudio) {
+      if (videoPlayer && videoUrl) videoPlayer.currentTime = timeSec;
+    } else {
+      player.seekTo(timeSec);
+      if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
+    }
+  }, [player, videoPlayer, videoUrl, useVideoAudio, syncOffset, currentTimeMs]);
+
   useEffect(() => {
     if (videoPlayer) {
       videoPlayer.muted = !useVideoAudio;
     }
-  }, [useVideoAudio, videoPlayer]);
+    if (player) {
+      player.muted = useVideoAudio;
+    }
+  }, [useVideoAudio, videoPlayer, player]);
 
   // Poll videoPlayer.duration when using video audio (expo-audio reports 0 for video files)
   useEffect(() => {
@@ -929,48 +987,84 @@ export default function FormationEditorScreen() {
 
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
 
+  // Audio-player drives currentTimeMs when useVideoAudio is false
   useEffect(() => {
-    if (useVideoAudio) return;
+    if (useVideoAudio) {
+      // Video is now the audio source — stop audio player, clear playing state
+      isPlayerPlayingSV.value = false;
+      cancelAnimation(currentTimeMs);
+      player.pause();
+      return;
+    }
     isPlayerPlayingSV.value = status.playing;
-    const effectiveDuration = status.duration > 0 ? status.duration : videoDuration;
-    if (status.playing && effectiveDuration > 0) {
-      const remaining = (effectiveDuration - status.currentTime) * 1000;
+    const dur = status.duration || 0;
+    if (status.playing && dur > 0) {
+      const remaining = (dur - status.currentTime) * 1000;
       currentTimeMs.value = status.currentTime * 1000;
-      currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-      // Sync video player when play starts
-      if (syncPipVideo && videoPlayer) {
-        videoPlayer.currentTime = status.currentTime;
-        videoPlayer.play();
-      }
+      currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     } else {
       cancelAnimation(currentTimeMs);
       if (status.currentTime !== undefined) { currentTimeMs.value = status.currentTime * 1000; }
-      // Sync video player when pause
-      if (syncPipVideo && videoPlayer) videoPlayer.pause();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status.playing, status.duration, videoDuration, useVideoAudio, syncPipVideo]);
+  }, [useVideoAudio, status.playing, status.duration]);
 
+  // Sync PiP video with audio player (useVideoAudio=false only)
+  useEffect(() => {
+    if (!videoPlayer || !videoUrl || useVideoAudio) return;
+    const targetTime = (currentTimeMs.value / 1000) + syncOffset;
+    if (status.playing) {
+      videoPlayer.currentTime = Math.max(0, targetTime);
+      videoPlayer.play();
+    } else {
+      videoPlayer.pause();
+      videoPlayer.currentTime = Math.max(0, targetTime);
+    }
+  }, [status.playing, syncOffset, videoPlayer, videoUrl, useVideoAudio]);
+
+  // videoPlayer drives currentTimeMs when useVideoAudio is true
   useEffect(() => {
     if (!useVideoAudio || !videoPlayer) return;
-    const playingSub = videoPlayer.addListener('playingChange', (payload: any) => {
-      const playing = payload.isPlaying ?? payload;
-      setIsMainVideoPlaying(playing);
+
+    const startTimeline = () => {
+      // Prefer fresh videoPlayer.duration over stale closure value
+      const dur = videoPlayer.duration > 0 ? videoPlayer.duration : videoDuration;
+      if (dur <= 0) return;
+      // videoPlayer.currentTime may be 0 briefly after a seek — fall back to shared value
+      const currentSec = videoPlayer.currentTime > 0 ? videoPlayer.currentTime : (currentTimeMs.value / 1000);
+      const remaining = (dur - currentSec) * 1000;
+      currentTimeMs.value = currentSec * 1000;
+      currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
+    };
+
+    const playSub = videoPlayer.addListener('playingChange', (payload: any) => {
+      const playing: boolean = payload?.isPlaying ?? false;
+      setIsVideoPlaying(playing);
       isPlayerPlayingSV.value = playing;
-      if (playing) {
-        const dur = videoDuration;
-        if (dur > 0) {
-          const ct = videoPlayer.currentTime;
-          const remaining = Math.max(0, (dur - ct) * 1000);
-          currentTimeMs.value = ct * 1000;
-          currentTimeMs.value = withTiming(dur * 1000, { duration: remaining, easing: Easing.linear });
-        }
-      } else {
+      if (playing) startTimeline();
+      else {
+        // Don't reset currentTimeMs here — expo-video fires playingChange(false)
+        // spuriously when currentTime is set during a seek, and currentTime may be 0 at that moment
         cancelAnimation(currentTimeMs);
-        currentTimeMs.value = videoPlayer.currentTime * 1000;
       }
     });
-    return () => playingSub.remove();
+
+    const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
+      const ct = payload?.currentTime ?? videoPlayer.currentTime;
+      if (typeof ct === 'number' && ct >= 0) setVideoDisplayTimeMs(ct * 1000);
+    });
+
+    const currentlyPlaying = videoPlayer.playing || false;
+    setIsVideoPlaying(currentlyPlaying);
+    setVideoDisplayTimeMs((videoPlayer.currentTime || 0) * 1000);
+    // If video is already playing when this effect runs (e.g. videoDuration just polled),
+    // restart withTiming so the timeline catches up.
+    if (currentlyPlaying) {
+      isPlayerPlayingSV.value = true;
+      startTimeline();
+    }
+
+    return () => { playSub.remove(); timeSub.remove(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useVideoAudio, videoPlayer, videoDuration]);
 
@@ -984,25 +1078,24 @@ export default function FormationEditorScreen() {
       const newTimeMs = (offset / PX_PER_SEC) * 1000;
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
-      runOnJS((t: number) => {
-        player.seekTo(t / 1000);
-        // Sync video when using video audio OR when sync is enabled
-        if ((useVideoAudio || syncPipVideo) && videoPlayer) videoPlayer.currentTime = t / 1000;
-      })(newTimeMs);
+      const timeSec = newTimeMs / 1000;
+      if (useVideoAudio) {
+        if (videoPlayer && videoUrl) videoPlayer.currentTime = timeSec;
+      } else {
+        player.seekTo(timeSec);
+        if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
+      }
     }
   };
 
   const onScrollEnd = (e: any) => {
     isUserScrollingSV.value = false;
-    if (isPlayerPlayingSV.value) {
+    const isPlaying = useVideoAudio ? (videoPlayer?.playing || false) : isPlayerPlayingSV.value;
+    if (isPlaying) {
       const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
       const remaining = (effectiveDuration * 1000) - time;
       currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-      // Resume synced video after user finishes scrubbing
-      if (!useVideoAudio && syncPipVideo && videoPlayer) {
-        videoPlayer.currentTime = time / 1000;
-        videoPlayer.play();
-      }
+      if (useVideoAudio && videoPlayer) videoPlayer.currentTime = time / 1000;
     }
   };
 
@@ -1307,7 +1400,14 @@ export default function FormationEditorScreen() {
 
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: theme.background }]}>
-      {videoUrl && <DraggableVideo videoPlayer={videoPlayer} x={pipX} y={pipY} scale={pipScale} onClose={() => setVideoUrl('')} />}
+      {videoUrl && (
+        <DraggableVideo
+          videoPlayer={videoPlayer}
+          x={pipX} y={pipY} scale={pipScale}
+          onClose={() => setVideoUrl('')}
+          onRelativeSeek={(delta) => seekAll((currentTimeMs.value / 1000) + delta)}
+        />
+      )}
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={[styles.modeToggle, { backgroundColor: theme.card }]}>
@@ -1412,27 +1512,42 @@ export default function FormationEditorScreen() {
               </Animated.ScrollView>
               <View style={[styles.needle, { left: CENTER_OFFSET }]} pointerEvents="none" />
             </View>
-            <View style={{ height: 50 }}>
-              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
+              <View style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                 <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
                 <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
                 {videoUrl && !useVideoAudio && (
-                  <TouchableOpacity
-                    onPress={() => setSyncPipVideo(v => !v)}
-                    style={[styles.toolBtnSmall, syncPipVideo && { backgroundColor: theme.primary + '22' }]}
-                  >
-                    <Ionicons name={syncPipVideo ? 'sync' : 'sync-outline'} size={24} color={syncPipVideo ? theme.primary : theme.textSecondary} />
-                    <Text style={[styles.toolBtnText, { color: syncPipVideo ? theme.primary : theme.textSecondary }]}>동기화</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 6, height: 36, borderWidth: 1, borderColor: theme.border }}>
+                    <TouchableOpacity onPress={() => setSyncOffset(prev => prev - 0.1)} style={{ padding: 4 }}>
+                      <Ionicons name="remove-circle-outline" size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <View style={{ width: 55, alignItems: 'center' }}>
+                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: 'bold' }}>싱크 {syncOffset >= 0 ? '+' : ''}{syncOffset.toFixed(1)}s</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setSyncOffset(prev => prev + 0.1)} style={{ padding: 4 }}>
+                      <Ionicons name="add-circle-outline" size={20} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
-              <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }} pointerEvents="box-none">
-                <PlayButton player={player} theme={theme} currentTimeMs={currentTimeMs} videoPlayer={videoPlayer} useVideoAudio={useVideoAudio} isVideoPlaying={isMainVideoPlaying} syncPipVideo={!useVideoAudio && syncPipVideo} />
+
+              <View style={{ width: 70, alignItems: 'center', justifyContent: 'center' }}>
+                <PlayButton
+                  player={player}
+                  videoPlayer={videoPlayer}
+                  useVideoAudio={useVideoAudio}
+                  isVideoPlaying={isVideoPlaying}
+                  theme={theme}
+                  currentTimeMs={currentTimeMs}
+                  syncOffset={syncOffset}
+                />
               </View>
-              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' }}>
-                <PlaybackTimeDisplay player={player} />
+
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                <PlaybackTimeDisplay player={player} forceTimeMs={useVideoAudio ? videoDisplayTimeMs : undefined} />
               </View>
             </View>
+
           </View>
         ) : (
           <View style={styles.createDock}>
