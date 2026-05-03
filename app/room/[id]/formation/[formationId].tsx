@@ -139,19 +139,16 @@ const TransitionX = React.memo(function TransitionX({ width, left }: { width: nu
   );
 });
 
-const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose, onRelativeSeek }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void, onRelativeSeek?: (delta: number) => void }) {
+const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void }) {
   const { theme } = useAppContext();
   const [showControls, setShowControls] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDurationPip, setVideoDurationPip] = useState(0);
-  const [seekTrackWidth, setSeekTrackWidth] = useState(140);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startScale = useSharedValue(1);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const seekProtectUntilRef = useRef(0);
 
   useEffect(() => {
     if (!videoPlayer) return;
@@ -159,10 +156,6 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
     const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
       const ct = payload?.currentTime ?? videoPlayer.currentTime;
       const dur = videoPlayer.duration;
-      if (ct === 0 && Date.now() < seekProtectUntilRef.current) {
-        if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
-        return;
-      }
       if (typeof ct === 'number' && ct >= 0) setVideoCurrentTime(ct);
       if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
     });
@@ -171,18 +164,12 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
       if (videoPlayer.duration > 0) setVideoDurationPip(videoPlayer.duration);
     });
 
-    const playSub = videoPlayer.addListener('playingChange', (payload: any) => {
-      setIsVideoPlaying(payload?.isPlaying ?? payload);
-    });
-
     setVideoCurrentTime(videoPlayer.currentTime || 0);
     setVideoDurationPip(videoPlayer.duration || 0);
-    setIsVideoPlaying(videoPlayer.playing || false);
 
     return () => {
       timeSub.remove();
       statusSub.remove();
-      playSub.remove();
     };
   }, [videoPlayer]);
 
@@ -213,13 +200,6 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }]
   }));
-
-  const togglePlay = useCallback(() => {
-    if (!videoPlayer) return;
-    if (videoPlayer.playing) videoPlayer.pause();
-    else videoPlayer.play();
-    showAndAutoHide();
-  }, [videoPlayer, showAndAutoHide]);
 
   if (!videoPlayer) return null;
 
@@ -253,69 +233,12 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
                 <Ionicons name="remove" size={14} color="#FFF" />
               </TouchableOpacity>
             </View>
-            <View style={styles.pipMidRow}>
-              <TouchableOpacity
-                style={styles.pipBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={() => {
-                  if (onRelativeSeek) onRelativeSeek(-5);
-                  else {
-                    const newTime = Math.max(0, videoCurrentTime - 5);
-                    seekProtectUntilRef.current = Date.now() + 1000;
-                    videoPlayer.currentTime = newTime;
-                    setVideoCurrentTime(newTime);
-                  }
-                  showAndAutoHide();
-                }}
-              >
-                <Ionicons name="play-back" size={16} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.pipPlayBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={togglePlay}
-              >
-                <Ionicons name={isVideoPlaying ? 'pause' : 'play'} size={18} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.pipBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={() => {
-                  if (onRelativeSeek) onRelativeSeek(5);
-                  else {
-                    const newTime = Math.min(videoDurationPip > 0 ? videoDurationPip : videoCurrentTime + 5, videoCurrentTime + 5);
-                    seekProtectUntilRef.current = Date.now() + 1000;
-                    videoPlayer.currentTime = newTime;
-                    setVideoCurrentTime(newTime);
-                  }
-                  showAndAutoHide();
-                }}
-              >
-                <Ionicons name="play-forward" size={16} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-            <Pressable
-              style={styles.pipSeekRow}
-              hitSlop={{ top: 10, bottom: 10 }}
-              onLayout={(e) => {
-                const w = e.nativeEvent.layout.width;
-                if (w > 0) setSeekTrackWidth(w);
-              }}
-              onPress={(e) => {
-                if (videoDurationPip > 0) {
-                  const ratio = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekTrackWidth));
-                  const targetTime = ratio * videoDurationPip;
-                  seekProtectUntilRef.current = Date.now() + 1000;
-                  setVideoCurrentTime(targetTime);
-                  videoPlayer.currentTime = targetTime;
-                  showAndAutoHide();
-                }
-              }}
-            >
+            <View style={styles.pipBottomSpacer} />
+            <View style={styles.pipSeekRow}>
               <View style={styles.pipSeekTrack}>
                 <View style={[styles.pipSeekFill, { width: `${progress * 100}%` as any }]} />
               </View>
-            </Pressable>
+            </View>
           </View>
         )}
       </Animated.View>
@@ -1329,7 +1252,6 @@ export default function FormationEditorScreen() {
           videoPlayer={videoPlayer}
           x={pipX} y={pipY} scale={pipScale}
           onClose={() => setVideoUrl('')}
-          onRelativeSeek={(delta) => seekAll((currentTimeMs.value / 1000) + delta)}
         />
       )}
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
@@ -1660,10 +1582,9 @@ const styles = StyleSheet.create({
   pipVideo: { flex: 1 },
   pipOverlay: { backgroundColor: 'rgba(0,0,0,0.55)' },
   pipTopRow: { position: 'absolute', top: 5, left: 5, right: 5, flexDirection: 'row', justifyContent: 'space-between' },
-  pipMidRow: { position: 'absolute', bottom: 5, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   pipBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-  pipPlayBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
-  pipSeekRow: { position: 'absolute', bottom: 35, left: 10, right: 10, height: 10, justifyContent: 'center' },
+  pipSeekRow: { position: 'absolute', bottom: 10, left: 10, right: 10, height: 6, justifyContent: 'center' },
+  pipBottomSpacer: { flex: 1 },
   pipSeekTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 1.5, overflow: 'hidden' },
   pipSeekFill: { height: '100%', backgroundColor: '#FFD700' },
 });
