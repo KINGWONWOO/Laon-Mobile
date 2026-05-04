@@ -43,9 +43,10 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
       player.pause();
       if (videoPlayer) videoPlayer.pause();
     } else {
-      const seekSec = currentTimeMs.value / 1000;
-      player.seekTo(seekSec);
-      if (videoPlayer) videoPlayer.currentTime = Math.max(0, seekSec + syncOffset);
+      // Don't seekTo before play — seekTo causes status.currentTime to briefly
+      // become 0, which triggers the useEffect with startSec=0, resetting everything.
+      // The audio is already at the correct position (seeked by handleTimelineScroll
+      // or naturally paused). Let useEffect handle video positioning on play.
       player.play();
       if (videoPlayer) videoPlayer.play();
     }
@@ -153,6 +154,13 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   useEffect(() => {
     if (!videoPlayer) return;
 
+    const syncCurrentTime = () => {
+      const ct = videoPlayer.currentTime;
+      const dur = videoPlayer.duration;
+      if (typeof ct === 'number' && ct >= 0) setVideoCurrentTime(ct);
+      if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
+    };
+
     const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
       const ct = payload?.currentTime ?? videoPlayer.currentTime;
       const dur = videoPlayer.duration;
@@ -160,16 +168,20 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
       if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
     });
 
-    const statusSub = videoPlayer.addListener('statusChange', (status: any) => {
-      if (videoPlayer.duration > 0) setVideoDurationPip(videoPlayer.duration);
+    const statusSub = videoPlayer.addListener('statusChange', () => {
+      syncCurrentTime();
     });
 
-    setVideoCurrentTime(videoPlayer.currentTime || 0);
-    setVideoDurationPip(videoPlayer.duration || 0);
+    const playingSub = videoPlayer.addListener('playingChange', () => {
+      syncCurrentTime();
+    });
+
+    syncCurrentTime();
 
     return () => {
       timeSub.remove();
       statusSub.remove();
+      playingSub.remove();
     };
   }, [videoPlayer]);
 
@@ -900,39 +912,41 @@ export default function FormationEditorScreen() {
     isPlayerPlayingSV.value = isPlaying;
 
     // 2. Timeline Animation Driver
+    // Track effectiveSec separately to avoid reading currentTimeMs.value
+    // after withTiming assignment (Reanimated async nature can return stale/0 value)
     const dur = status.duration || 0;
+    let effectiveSec = currentTimeMs.value / 1000;
+
     if (isPlaying && dur > 0) {
-      // Use the most reliable current time to start animation.
-      // If status.currentTime is 0 but we were already further ahead, 
-      // it's likely a transient 0 from expo-audio during the state change.
       let startSec = status.currentTime;
       const currentValSec = currentTimeMs.value / 1000;
-      if (startSec === 0 && currentValSec > 0.1) {
+      // Use currentTimeMs as fallback if status reports a suspiciously small value
+      // (can happen transiently on play/seek transitions in expo-audio)
+      if (startSec < 0.05 && currentValSec > 0.05) {
         startSec = currentValSec;
       }
-      
+
       const remaining = (dur - startSec) * 1000;
       currentTimeMs.value = startSec * 1000;
       currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
+      effectiveSec = startSec;
     } else {
       cancelAnimation(currentTimeMs);
-      // [Pause Fix] Only sync from status if it's reliable (>0). 
-      // Avoid resetting to 0 if expo-audio reports 0 briefly upon pause.
       const currentStatusTime = status.currentTime;
       if (typeof currentStatusTime === 'number' && currentStatusTime > 0) {
         currentTimeMs.value = currentStatusTime * 1000;
+        effectiveSec = currentStatusTime;
       }
+      // else: effectiveSec stays as pre-cancel currentTimeMs.value / 1000
     }
 
     // 3. PiP Video Sync (Slave mode)
     if (videoPlayer && videoUrl) {
-      // Source of truth is currentTimeMs.value (JS-side snapshot)
-      const targetTime = (currentTimeMs.value / 1000) + syncOffset;
-      // Use small epsilon to avoid unnecessary seeks
+      const targetTime = effectiveSec + syncOffset;
       if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
         videoPlayer.currentTime = Math.max(0, targetTime);
       }
-      if (status.playing) videoPlayer.play();
+      if (isPlaying) videoPlayer.play();
       else videoPlayer.pause();
     }
   }, [status.playing, status.duration, videoPlayer, videoUrl, syncOffset]);
@@ -1077,7 +1091,8 @@ export default function FormationEditorScreen() {
     const next = parseFloat((syncOffset + delta).toFixed(1));
     setSyncOffset(next);
     if (videoPlayer && videoUrl) {
-      videoPlayer.currentTime = Math.max(0, (currentTimeMs.value / 1000) + next);
+      // Shift video by delta instead of relying on currentTimeMs.value (may be stale)
+      videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime + delta);
     }
   }, [syncOffset, videoPlayer, videoUrl]);
 
