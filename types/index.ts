@@ -187,6 +187,7 @@ export type FormationSettings = {
   stageDirection: 'top' | 'bottom'; // "앞"이 위쪽인지 아래쪽인지
   snapToGrid: boolean;
   dancerNameSize: number;
+  sideWingWidth?: number; // 무대 양 옆 대기 공간 (격자 칸 수)
 };
 
 export type Formation = {

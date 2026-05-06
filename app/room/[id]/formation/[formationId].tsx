@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
@@ -448,9 +448,11 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
 
   const style = useAnimatedStyle(() => ({
     width: cellSize * 2.5,
+    height: cellSize * 2.5, // Increased height for better touch target
+    justifyContent: 'center', // Center content within the touch target
     transform: [
       { translateX: (pos.value.x * stageWidth) - (cellSize * 1.25) },
-      { translateY: (pos.value.y * stageHeight) - (cellSize * 0.35) },
+      { translateY: (pos.value.y * stageHeight) - (cellSize * 1.25) }, // Adjusted for larger height
       { scale: withSpring(isSelected || isDragging.value ? 1.1 : 1) }
     ],
     opacity: 1,
@@ -460,8 +462,17 @@ const DancerNode = React.memo(function DancerNode({ dancer, dancerPos, isSelecte
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View style={[styles.dancerNode, style]} pointerEvents="box-none">
-        <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}><Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text></View>
-        <Text style={[styles.dancerNameText, { color: isSelected ? theme.text : theme.textSecondary, fontSize: (settings.dancerNameSize || 8) }]} numberOfLines={1}>{dancer.name}</Text>
+        {/* Circle Icon (Centered in the parent which is the snap point) */}
+        <View style={[styles.dancerCircle, { backgroundColor: dancer.color, borderColor: isSelected ? theme.text : 'rgba(0,0,0,0.2)', width: cellSize * 0.7, height: cellSize * 0.7, borderRadius: (cellSize * 0.7) / 2, borderWidth: 1.5 }]}>
+          <Text style={[styles.dancerInitial, { fontSize: cellSize * 0.3 }]}>{index + 1}</Text>
+        </View>
+        
+        {/* Name Text (Positioned absolutely below the circle so it doesn't push the circle up) */}
+        <View style={{ position: 'absolute', top: '50%', marginTop: (cellSize * 0.35) + 4, width: '100%', alignItems: 'center' }}>
+          <Text style={[styles.dancerNameText, { color: isSelected ? theme.text : theme.textSecondary, fontSize: (settings.dancerNameSize || 8), marginTop: 0 }]} numberOfLines={1}>
+            {dancer.name}
+          </Text>
+        </View>
       </Animated.View>
     </GestureDetector>
   );
@@ -486,9 +497,19 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
   const { theme } = useAppContext();
   const gridColor = theme.border; 
   const centerColor = theme.primary;
+  const wingWidth = settings.sideWingWidth ?? 0;
+  const wingPercent = (wingWidth / settings.gridCols) * 100;
 
   return (
     <View style={styles.gridLayer}>
+      {/* Wing Areas (Configurable grid units on each side) */}
+      {wingWidth > 0 && (
+        <>
+          <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${wingPercent}%`, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }} />
+          <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${wingPercent}%`, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }} />
+        </>
+      )}
+
       {/* Horizontal Grid Lines */}
       {Array.from({ length: settings.gridRows + 1 }).map((_, i) => (
         <View key={`h-${i}`} style={[styles.gridH, { top: `${(i / settings.gridRows) * 100}%`, backgroundColor: gridColor, opacity: 0.4, height: 1 }]} />
@@ -549,7 +570,10 @@ export default function FormationEditorScreen() {
   const pipY = useSharedValue(formation?.videoSettings?.pipPosition?.y ?? 60);
   const pipScale = useSharedValue(1);
 
-  const [settings, setSettings] = useState<FormationSettings>(formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 });
+  const [settings, setSettings] = useState<FormationSettings>(() => {
+    const base = formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 };
+    return { ...base, sideWingWidth: base.sideWingWidth ?? 2 };
+  });
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
@@ -579,6 +603,7 @@ export default function FormationEditorScreen() {
 
   const [tempRows, setTempRows] = useState('');
   const [tempCols, setTempCols] = useState('');
+  const [tempWingWidth, setTempWingWidth] = useState('');
 
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -787,9 +812,13 @@ export default function FormationEditorScreen() {
   const onWebViewMessage = (e: any) => {
     try {
       const event = JSON.parse(e.nativeEvent.data);
-      if (event.type === 'ANALYSIS_COMPLETE') setWaveformPeaks(event.data);
-      else if (event.type === 'ERROR') console.warn('WebView Analysis Error:', event.message);
-      setIsAnalyzing(false);
+      if (event.type === 'ANALYSIS_COMPLETE') {
+        setWaveformPeaks(event.data);
+        setIsAnalyzing(false);
+      } else if (event.type === 'ERROR') {
+        console.warn('WebView Analysis Error:', event.message);
+        setIsAnalyzing(false);
+      }
     } catch (err) {
       setIsAnalyzing(false);
     }
@@ -1201,7 +1230,15 @@ export default function FormationEditorScreen() {
 
   const deleteActiveScene = () => { if (!activeSceneId || scenes.length <= 1) { Alert.alert('알림', '최소 하나의 대형은 유지되어야 합니다.'); return; } pushHistory(); const newScenes = scenes.filter(s => s.id !== activeSceneId), newTimeline = timeline.filter(e => e.sceneId !== activeSceneId); setScenes(newScenes); setTimeline(newTimeline); setActiveSceneId(newScenes[0].id); setShowDeleteModal(false); };
   const addDancer = () => { pushHistory(); const newDancer: Dancer = { id: Math.random().toString(36).substr(2, 9), name: `댄서 ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] }; setDancers([...dancers, newDancer]); };
-  const handleApplySettings = () => { const r = parseInt(tempRows), c = parseInt(tempCols); if (isNaN(r) || isNaN(c) || r <= 0 || c <= 0) { Alert.alert('입력 오류', '격자 행과 열은 1 이상의 숫자여야 합니다.'); return; } setSettings({ ...settings, gridRows: r, gridCols: c }); setShowStageSettings(false); };
+  const handleApplySettings = () => { 
+    const r = parseInt(tempRows), c = parseInt(tempCols), w = parseInt(tempWingWidth); 
+    if (isNaN(r) || isNaN(c) || isNaN(w) || r <= 0 || c <= 0 || w < 0) { 
+      Alert.alert('입력 오류', '격자 행과 열은 1 이상, 대기 공간은 0 이상의 숫자여야 합니다.'); 
+      return; 
+    } 
+    setSettings({ ...settings, gridRows: r, gridCols: c, sideWingWidth: w }); 
+    setShowStageSettings(false); 
+  };
   const applyMirror = (allScenes: boolean) => { pushHistory(); const flipPos = (pos: Position) => ({ x: (selectedMirrorType === 'horizontal' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.x)) : pos.x, y: (selectedMirrorType === 'vertical' || selectedMirrorType === 'both') ? Math.max(0.01, Math.min(0.99, 1 - pos.y)) : pos.y }); if (allScenes) { setScenes(prev => { const next = prev.map(s => { const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); return { ...s, positions: nPos }; }); const current = next.find(s => s.id === activeSceneId); if (current) Object.keys(current.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = current.positions[dId]; }); return next; }); } else if (activeSceneId) { setScenes(prev => prev.map(s => { if (s.id !== activeSceneId) return s; const nPos = { ...s.positions }; Object.keys(nPos).forEach(dId => { nPos[dId] = flipPos(nPos[dId]); }); Object.keys(nPos).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = nPos[dId]; }); return { ...s, positions: nPos }; })); } setShowMirrorModal(false); };
 
   const resetStage = () => { scale.value = withSpring(1); translateX.value = withSpring(0); translateY.value = withSpring(0); savedScale.value = 1; savedTranslateX.value = 0; savedTranslateY.value = 0; setZoomUI(100); };
@@ -1401,7 +1438,7 @@ export default function FormationEditorScreen() {
           <View style={styles.createDock}>
             <View style={styles.createToolbar}>
               <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setTempWingWidth(String(settings.sideWingWidth || 0)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity>
               <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity>
             </View>
             <View style={styles.sceneSection}>
@@ -1438,37 +1475,89 @@ export default function FormationEditorScreen() {
       </Modal>
 
       <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
-        <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}</TouchableOpacity></View></View></View>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}</TouchableOpacity></View></View></View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
         <View style={styles.modalBg}><View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text><TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ alignItems: 'center', marginVertical: 15 }}><Ionicons name="trash" size={32} color={theme.error} /><Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text></View><View style={{ gap: 8 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity></View></View></View></Modal>
 
       <Modal visible={showFilenameModal} transparent animationType="fade" onRequestClose={() => setShowFilenameModal(false)}>
-        <View style={styles.modalBg}>
-          <View style={[styles.menu, { backgroundColor: theme.card }]}>
-            <Text style={[styles.menuTitle, { color: theme.text }]}>파일 이름 설정</Text>
-            <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>저장할 JSON 파일의 이름을 입력하세요.</Text>
-            <TextInput 
-              style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
-              value={exportFileName} 
-              onChangeText={setExportFileName} 
-              placeholder="파일 이름" 
-              placeholderTextColor={theme.textSecondary} 
-              autoFocus 
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
-              <TouchableOpacity onPress={() => setShowFilenameModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleExportJSON}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>내보내기</Text></TouchableOpacity>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalBg}>
+            <View style={[styles.menu, { backgroundColor: theme.card }]}>
+              <Text style={[styles.menuTitle, { color: theme.text }]}>파일 이름 설정</Text>
+              <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>저장할 JSON 파일의 이름을 입력하세요.</Text>
+              <TextInput 
+                style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
+                value={exportFileName} 
+                onChangeText={setExportFileName} 
+                placeholder="파일 이름" 
+                placeholderTextColor={theme.textSecondary} 
+                autoFocus 
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
+                <TouchableOpacity onPress={() => setShowFilenameModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleExportJSON}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>내보내기</Text></TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>대형 선택</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}><Text style={{color:theme.text}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
-      <Modal visible={showSceneModal} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showDancerSheet} transparent animationType="slide"><Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}><View style={[styles.sheet, { backgroundColor: theme.card }]}><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={dancers.find(d => d.id === selectedDancerId)?.name} onChangeText={val => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d)); }} placeholderTextColor={theme.textSecondary} /><View style={styles.colorRow}>{COLORS.map(c => <TouchableOpacity key={c} style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: theme.text }]} onPress={() => { pushHistory(); setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d)); }} />)}</View><TouchableOpacity style={styles.deleteBtn} onPress={() => { pushHistory(); setDancers(dancers.filter(d => d.id !== selectedDancerId)); setSelectedDancerId(null); setShowDancerSheet(false); }}><Ionicons name="trash" size={20} color={theme.error} /><Text style={{ color: theme.error, marginLeft: 10 }}>댄서 삭제</Text></TouchableOpacity></View></Pressable></Modal>
-      <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
+
+      <Modal visible={showSceneModal} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={showDancerSheet} transparent animationType="slide">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalBg} onPress={() => setShowDancerSheet(false)}>
+            <View style={[styles.sheet, { backgroundColor: theme.card, paddingBottom: Math.max(insets.bottom, 25) + 10 }]}>
+              <TextInput 
+                style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
+                value={dancers.find(d => d.id === selectedDancerId)?.name} 
+                onChangeText={val => { 
+                  pushHistory(); 
+                  setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, name: val } : d)); 
+                }} 
+                placeholderTextColor={theme.textSecondary} 
+              />
+              <View style={styles.colorRow}>
+                {COLORS.map(c => (
+                  <TouchableOpacity 
+                    key={c} 
+                    style={[styles.colorChip, { backgroundColor: c }, dancers.find(d => d.id === selectedDancerId)?.color === c && { borderWidth: 3, borderColor: theme.text }]} 
+                    onPress={() => { 
+                      pushHistory(); 
+                      setDancers(dancers.map(d => d.id === selectedDancerId ? { ...d, color: c } : d)); 
+                    }} 
+                  />
+                ))}
+              </View>
+              <TouchableOpacity 
+                style={styles.deleteBtn} 
+                onPress={() => { 
+                  pushHistory(); 
+                  setDancers(dancers.filter(d => d.id !== selectedDancerId)); 
+                  setSelectedDancerId(null); 
+                  setShowDancerSheet(false); 
+                }}
+              >
+                <Ionicons name="trash" size={20} color={theme.error} />
+                <Text style={{ color: theme.error, marginLeft: 10 }}>댄서 삭제</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>대기 공간 (Wing)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempWingWidth} onChangeText={setTempWingWidth} placeholder="칸 수" /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 반전</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>반전 방식</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>좌우</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>상하</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>완전</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>적용 대상</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>현재 대형만</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>모든 대형 일괄 적용</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
       <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text>{GUIDE_STEPS[guideIndex].image && <Image source={GUIDE_STEPS[guideIndex].image} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
     </GestureHandlerRootView>
