@@ -78,29 +78,30 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
   );
 });
 
-// [UI: 32b2ca5 스타일 유지 + 로직: 실제 Peaks 데이터 사용]
-const WaveformBackground = React.memo(function WaveformBackground({ duration, peaks }: { duration: number, peaks: number[] }) {
+// [Tiling Optimized] 30초 단위의 고해상도 이미지 조각들을 이어 붙여 깨짐 방지 및 성능 극대화
+const WaveformBackground = React.memo(function WaveformBackground({ duration, tiles }: { duration: number, tiles: string[] }) {
   const { theme } = useAppContext();
   
   if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
   return (
-    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, justifyContent: 'space-around', alignItems: 'center', flexDirection: 'row' }]}>
-      {peaks.map((peak, i) => (
-        <View 
-          key={i} 
-          style={[
-            styles.waveformBar, 
-            { 
-              backgroundColor: theme.text,
-              width: 2,
-              height: Math.max(2, peak * 48),
-              opacity: peak > 0.3 ? 0.4 : 0.18,
-              borderRadius: 1
-            }
-          ]} 
-        />
-      ))}
+    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, height: 120, flexDirection: 'row', alignItems: 'center' }]}>
+      {tiles.length > 0 ? (
+        tiles.map((tile, i) => (
+          <Image 
+            key={i}
+            source={{ uri: tile }} 
+            style={{ 
+              width: Math.min(30 * PX_PER_SEC, (duration - (i * 30)) * PX_PER_SEC), 
+              height: 120,
+            }} 
+            resizeMode="stretch"
+            fadeDuration={0}
+          />
+        ))
+      ) : (
+        <View style={{ height: 1, width: '100%', backgroundColor: theme.text, opacity: 0.1 }} />
+      )}
     </View>
   );
 });
@@ -619,6 +620,7 @@ export default function FormationEditorScreen() {
   const [tempWingWidth, setTempWingWidth] = useState('');
 
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
+  const [waveformTiles, setWaveformTiles] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState(0);
@@ -848,7 +850,7 @@ export default function FormationEditorScreen() {
             audioCtx.decodeAudioData(bytes.buffer, (audioBuffer) => {
               const ch0 = audioBuffer.getChannelData(0);
               const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : ch0;
-              const samplesPerSec = 10; 
+              const samplesPerSec = 20; // 2배 더 정밀하게 데이터 추출
               const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
               const blockSize = Math.floor(ch0.length / totalSamples);
               const peaks = [];
@@ -863,7 +865,67 @@ export default function FormationEditorScreen() {
               }
               const maxPeak = Math.max(...peaks) || 1;
               const normalized = peaks.map(p => p / maxPeak);
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
+
+              // [Pro Tiling Optimization] 30초 단위로 캔버스를 쪼개서 고해상도 이미지 생성
+              try {
+                const tiles = [];
+                const segmentDuration = 30; // 30초 단위
+                const samplesPerSegment = samplesPerSec * segmentDuration; // 20 * 30 = 600개
+                const numSegments = Math.ceil(audioBuffer.duration / segmentDuration);
+                
+                // 테마 색상 파싱
+                const themeColor = "${theme.text}";
+                let r=255, g=255, b=255;
+                const hex = themeColor.replace('#', '');
+                if (hex.length === 3) { r = parseInt(hex[0]+hex[0],16); g = parseInt(hex[1]+hex[1],16); b = parseInt(hex[2]+hex[2],16); }
+                else { r = parseInt(hex.slice(0,2),16); g = parseInt(hex.slice(2,4),16); b = parseInt(hex.slice(4,6),16); }
+
+                for (let s = 0; s < numSegments; s++) {
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  
+                  const startIdx = s * samplesPerSegment;
+                  const endIdx = Math.min(startIdx + samplesPerSegment, normalized.length);
+                  const segmentPeaks = normalized.slice(startIdx, endIdx);
+                  
+                  const targetWidth = segmentPeaks.length * (60 / samplesPerSec); // 3px slot
+                  const targetHeight = 120;
+                  
+                  // 타일 방식은 캔버스가 작으므로 2배 해상도 적용해도 매우 안전함
+                  const dpr = 2.0; 
+                  canvas.width = targetWidth * dpr;
+                  canvas.height = targetHeight * dpr;
+                  ctx.scale(dpr, dpr);
+                  
+                  const barWidth = 1.2;
+                  const slotWidth = 3; 
+                  
+                  segmentPeaks.forEach((p, i) => {
+                    const h = Math.max(2, p * 48);
+                    const opacity = p > 0.3 ? 0.4 : 0.18;
+                    const x = i * slotWidth + (slotWidth - barWidth) / 2;
+                    const y = (targetHeight - h) / 2;
+                    
+                    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + opacity + ")";
+                    if (ctx.roundRect) {
+                      ctx.beginPath();
+                      ctx.roundRect(x, y, barWidth, h, 0.6);
+                      ctx.fill();
+                    } else {
+                      ctx.fillRect(x, y, barWidth, h);
+                    }
+                  });
+                  tiles.push(canvas.toDataURL('image/png'));
+                }
+
+                window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                  type: 'ANALYSIS_COMPLETE', 
+                  data: normalized,
+                  tiles: tiles
+                }));
+              } catch (err) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized, tiles: [] }));
+              }
             }, (err) => {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Decode failed' }));
             });
@@ -899,6 +961,7 @@ export default function FormationEditorScreen() {
       const event = JSON.parse(e.nativeEvent.data);
       if (event.type === 'ANALYSIS_COMPLETE') {
         setWaveformPeaks(event.data);
+        if (event.tiles) setWaveformTiles(event.tiles);
         setIsAnalyzing(false);
       } else if (event.type === 'COMPRESSION_COMPLETE') {
         if (compressionResolverRef.current) {
@@ -1609,10 +1672,23 @@ export default function FormationEditorScreen() {
         {mode === 'place' ? (
           <View style={styles.placeDock}>
             <View style={[styles.timelineWrapper, { backgroundColor: theme.card }]}>
-              <Animated.ScrollView ref={timelineScrollViewRef} horizontal showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={handleTimelineScroll} onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); }} onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} onMomentumScrollEnd={onScrollEnd} contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}>
+              <Animated.ScrollView 
+                ref={timelineScrollViewRef} 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                scrollEventThrottle={16} 
+                onScroll={handleTimelineScroll} 
+                onScrollBeginDrag={() => { isUserScrollingSV.value = true; cancelAnimation(currentTimeMs); }} 
+                onMomentumScrollBegin={() => { isUserScrollingSV.value = true; }} 
+                onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} 
+                onMomentumScrollEnd={onScrollEnd} 
+                contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}
+                // [Optimization] 화면 바깥의 뷰는 렌더링에서 제외하여 성능 향상
+                removeClippedSubviews={true}
+              >
                 <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
                   <View style={{ width: (effectiveDuration || 60) * PX_PER_SEC, height: 120 }}>
-                    <WaveformBackground duration={effectiveDuration || 60} peaks={waveformPeaks} />
+                    <WaveformBackground duration={effectiveDuration || 60} tiles={waveformTiles} />
                     <TimeMarkers duration={effectiveDuration || 60} />
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
