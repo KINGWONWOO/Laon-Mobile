@@ -27,26 +27,37 @@ const formatTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
-const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ player }: { player: any }) {
-  const status = useAudioPlayerStatus(player);
+const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ currentTimeMs }: { currentTimeMs: Animated.SharedValue<number> }) {
   const { theme } = useAppContext();
-  const displayMs = status.currentTime * 1000;
-  return <Text style={[styles.timeText, { color: theme.text }]}>{formatTime(displayMs)}</Text>;
+  const [timeStr, setTimeStr] = useState('0:00');
+
+  useAnimatedReaction(
+    () => Math.floor(currentTimeMs.value / 1000),
+    (s, prev) => {
+      if (s !== prev) {
+        runOnJS(setTimeStr)(`${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`);
+      }
+    }
+  );
+
+  return <Text style={[styles.timeText, { color: theme.text }]}>{timeStr}</Text>;
 });
 
-const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, currentTimeMs, syncOffset }: { player: any, videoPlayer: any, theme: any, currentTimeMs: any, syncOffset: number }) {
-  const status = useAudioPlayerStatus(player);
-  const isPlaying = status.playing;
+const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, isPlayingSV }: { player: any, videoPlayer: any, theme: any, isPlayingSV: Animated.SharedValue<boolean> }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useAnimatedReaction(
+    () => isPlayingSV.value,
+    (playing) => {
+      runOnJS(setIsPlaying)(playing);
+    }
+  );
 
   const togglePlay = () => {
-    if (status.playing) {
+    if (player.playing) {
       player.pause();
       if (videoPlayer) videoPlayer.pause();
     } else {
-      // Don't seekTo before play — seekTo causes status.currentTime to briefly
-      // become 0, which triggers the useEffect with startSec=0, resetting everything.
-      // The audio is already at the correct position (seeked by handleTimelineScroll
-      // or naturally paused). Let useEffect handle video positioning on play.
       player.play();
       if (videoPlayer) videoPlayer.play();
     }
@@ -308,7 +319,7 @@ const ResizeHandle = React.memo(function ResizeHandle({ direction, localX, local
   );
 });
 
-const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onDelete, dancers, scene, settings }: any) {
+const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onActionClick, dancers, scene, settings }: any) {
   const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
   const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
   const moveStartX = useSharedValue(0);
@@ -358,12 +369,12 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
     .runOnJS(true)
     .onEnd(() => {
       if (isSelected) {
-        Alert.alert('삭제', '제거할까요?', [{ text: '취소' }, { text: '삭제', onPress: () => onDelete(entry.id) }]);
+        onActionClick(entry.id);
       } else {
         onSelect(entry.id);
       }
     }),
-  [isSelected, entry.id, onDelete, onSelect]);
+  [isSelected, entry.id, onActionClick, onSelect]);
 
   return (
     <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
@@ -577,6 +588,9 @@ export default function FormationEditorScreen() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(formation?.data?.scenes?.[0]?.id || null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [selectedDancerId, setSelectedDancerId] = useState<string | null>(null);
+  const [showEntryActionModal, setShowEntryActionModal] = useState(false);
+  const [targetEntryId, setTargetEntryId] = useState<string | null>(null);
+
   const [showTimelineMenu, setShowTimelineMenu] = useState(false);
   const [showDancerSheet, setShowDancerSheet] = useState(false);
   const [showStageSettings, setShowStageSettings] = useState(false);
@@ -624,7 +638,8 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
 
   const player = useAudioPlayer(audioUrl);
-  const status = useAudioPlayerStatus(player);
+  // Removed useAudioPlayerStatus(player) from main component to prevent full re-renders!
+  const effectiveDuration = player.duration || 60; // Fallback to 60s if not loaded yet
 
   const videoPlayer = useVideoPlayer(videoUrl || null, (p) => {
     p.loop = false;
@@ -673,8 +688,6 @@ export default function FormationEditorScreen() {
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
-  const effectiveDuration = status.duration || 0;
-
   const [, setChangeCount] = useState(0);
 
   // Auto-save logic
@@ -930,51 +943,45 @@ export default function FormationEditorScreen() {
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
 
   // [Unified Playback Engine]
-  // Drives currentTimeMs and synchronizes PiP videoPlayer
+  // Drives currentTimeMs and synchronizes PiP videoPlayer without triggering React re-renders
   useEffect(() => {
-    // 1. Master Playing State
-    const isPlaying = status.playing;
-    isPlayerPlayingSV.value = isPlaying;
-
-    // 2. Timeline Animation Driver
-    // Track effectiveSec separately to avoid reading currentTimeMs.value
-    // after withTiming assignment (Reanimated async nature can return stale/0 value)
-    const dur = status.duration || 0;
-    let effectiveSec = currentTimeMs.value / 1000;
-
-    if (isPlaying && dur > 0) {
-      let startSec = status.currentTime;
-      const currentValSec = currentTimeMs.value / 1000;
-      // Use currentTimeMs as fallback if status reports a suspiciously small value
-      // (can happen transiently on play/seek transitions in expo-audio)
-      if (startSec < 0.05 && currentValSec > 0.05) {
-        startSec = currentValSec;
+    let animationFrameId: number;
+    let wasPlaying = false;
+    
+    const updatePlaybackState = () => {
+      const isPlaying = player.playing;
+      isPlayerPlayingSV.value = isPlaying;
+      
+      const currentAudioTime = player.currentTime;
+      let effectiveSec = currentAudioTime;
+      
+      // Update playhead only if user is not manually scrolling
+      if (!isUserScrollingSV.value) {
+        currentTimeMs.value = currentAudioTime * 1000;
       }
 
-      const remaining = (dur - startSec) * 1000;
-      currentTimeMs.value = startSec * 1000;
-      currentTimeMs.value = withTiming(dur * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-      effectiveSec = startSec;
-    } else {
-      cancelAnimation(currentTimeMs);
-      const currentStatusTime = status.currentTime;
-      if (typeof currentStatusTime === 'number' && currentStatusTime > 0) {
-        currentTimeMs.value = currentStatusTime * 1000;
-        effectiveSec = currentStatusTime;
+      // PiP Video Sync (Slave mode)
+      if (videoPlayer && videoUrl) {
+        const targetTime = effectiveSec + syncOffset;
+        if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
+          videoPlayer.currentTime = Math.max(0, targetTime);
+        }
+        
+        if (isPlaying && !wasPlaying) {
+          videoPlayer.play();
+        } else if (!isPlaying && wasPlaying) {
+          videoPlayer.pause();
+        }
       }
-      // else: effectiveSec stays as pre-cancel currentTimeMs.value / 1000
-    }
+      
+      wasPlaying = isPlaying;
+      animationFrameId = requestAnimationFrame(updatePlaybackState);
+    };
 
-    // 3. PiP Video Sync (Slave mode)
-    if (videoPlayer && videoUrl) {
-      const targetTime = effectiveSec + syncOffset;
-      if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
-        videoPlayer.currentTime = Math.max(0, targetTime);
-      }
-      if (isPlaying) videoPlayer.play();
-      else videoPlayer.pause();
-    }
-  }, [status.playing, status.duration, videoPlayer, videoUrl, syncOffset]);
+    animationFrameId = requestAnimationFrame(updatePlaybackState);
+    
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [player, videoPlayer, videoUrl, syncOffset]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
@@ -1038,8 +1045,88 @@ export default function FormationEditorScreen() {
     }
   }, [mode, sortedTimeline, scenes, dancers]);
 
-  const openTimelineMenuAt = (x: number) => { if (scenes.length === 0) { Alert.alert('알림', '먼저 대형 생성 탭에서 대형을 추가해주세요.'); return; } setTouchTimeMs(currentTimeMs.value); setShowTimelineMenu(true); };
-  const handleAddTimelineEntry = (sceneId: string) => { pushHistory(); const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; setTimeline([...timeline, newEntry]); setShowTimelineMenu(false); };
+  const openTimelineMenuAt = (x: number) => { 
+    setTouchTimeMs(currentTimeMs.value); 
+    setShowTimelineMenu(true); 
+  };
+  
+  const handleAddTimelineEntry = (sceneId: string) => { 
+    pushHistory(); 
+    const newEntry: TimelineEntry = { id: Math.random().toString(36).substr(2, 9), sceneId, timestampMillis: touchTimeMs, durationMillis: 3000 }; 
+    setTimeline([...timeline, newEntry]); 
+    setShowTimelineMenu(false); 
+  };
+
+  const handleAddNewSceneToTimeline = () => {
+    pushHistory();
+    const newSceneId = Math.random().toString(36).substr(2, 9);
+    const newScene: FormationScene = {
+      id: newSceneId,
+      name: `대형 ${scenes.length + 1}`,
+      positions: {}
+    };
+    const newEntry: TimelineEntry = { 
+      id: Math.random().toString(36).substr(2, 9), 
+      sceneId: newSceneId, 
+      timestampMillis: touchTimeMs, 
+      durationMillis: 3000 
+    };
+    setScenes([...scenes, newScene]);
+    setTimeline([...timeline, newEntry]);
+    setShowTimelineMenu(false);
+  };
+
+  const handleEntryActionClick = useCallback((entryId: string) => {
+    setTargetEntryId(entryId);
+    setShowEntryActionModal(true);
+  }, []);
+
+  const handleDuplicateTimelineEntry = () => {
+    if (!targetEntryId) return;
+    pushHistory();
+    const targetEntry = timeline.find(e => e.id === targetEntryId);
+    if (!targetEntry) return;
+
+    const originalScene = scenes.find(s => s.id === targetEntry.sceneId);
+    
+    // Create new scene copy
+    const newSceneId = Math.random().toString(36).substr(2, 9);
+    const newScene: FormationScene = {
+      id: newSceneId,
+      name: (originalScene ? originalScene.name : '대형') + ' 복사본',
+      positions: originalScene ? JSON.parse(JSON.stringify(originalScene.positions)) : {}
+    };
+
+    const insertTime = targetEntry.timestampMillis + targetEntry.durationMillis;
+    const duration = targetEntry.durationMillis;
+
+    // Shift subsequent entries
+    const newTimeline = timeline.map(e => {
+      if (e.timestampMillis >= insertTime) {
+        return { ...e, timestampMillis: e.timestampMillis + duration };
+      }
+      return e;
+    });
+
+    const newEntry: TimelineEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      sceneId: newSceneId,
+      timestampMillis: insertTime,
+      durationMillis: duration
+    };
+
+    setScenes([...scenes, newScene]);
+    setTimeline([...newTimeline, newEntry]);
+    setShowEntryActionModal(false);
+    setTargetEntryId(null);
+  };
+
+  const handleDeleteTimelineEntryAction = () => {
+    if (!targetEntryId) return;
+    handleDeleteEntry(targetEntryId);
+    setShowEntryActionModal(false);
+    setTargetEntryId(null);
+  };
   // Stable callbacks: use pushHistoryRef so these never change reference,
   // preventing TimelineBlock re-renders and gesture recreation after each commit.
   const handleCommitMove = useCallback((entryId: string, finalXPx: number) => {
@@ -1389,7 +1476,7 @@ export default function FormationEditorScreen() {
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (effectiveDuration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onDelete={handleDeleteEntry} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
+                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (effectiveDuration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onActionClick={handleEntryActionClick} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
                           {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
                         </React.Fragment>
                       ))}
@@ -1423,13 +1510,12 @@ export default function FormationEditorScreen() {
                   player={player}
                   videoPlayer={videoPlayer}
                   theme={theme}
-                  currentTimeMs={currentTimeMs}
-                  syncOffset={syncOffset}
+                  isPlayingSV={isPlayerPlayingSV}
                 />
               </View>
 
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-                <PlaybackTimeDisplay player={player} />
+                <PlaybackTimeDisplay currentTimeMs={currentTimeMs} />
               </View>
             </View>
 
@@ -1506,7 +1592,66 @@ export default function FormationEditorScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showTimelineMenu} transparent animationType="fade"><Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>대형 선택</Text><ScrollView horizontal showsHorizontalScrollIndicator={false}>{scenes.map(s => <TouchableOpacity key={s.id} onPress={() => handleAddTimelineEntry(s.id)} style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}><Text style={{color:theme.text}}>{s.name}</Text></TouchableOpacity>)}</ScrollView></View></Pressable></Modal>
+      <Modal visible={showTimelineMenu} transparent animationType="fade">
+        <Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}>
+          <View style={[styles.menu, { backgroundColor: theme.card }]}>
+            <Text style={[styles.menuTitle, { color: theme.text }]}>대형 추가</Text>
+            
+            {scenes.length > 0 ? (
+              <>
+                <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>기존 대형 선택:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {scenes.map(s => (
+                    <TouchableOpacity 
+                      key={s.id} 
+                      onPress={() => handleAddTimelineEntry(s.id)} 
+                      style={[styles.menuItem, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]}
+                    >
+                      <Text style={{ color: theme.text }}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <Text style={{ color: theme.textSecondary, textAlign: 'center', marginVertical: 10 }}>
+                먼저 '대형 생성' 탭에서 대형을 만들어주세요.
+              </Text>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={showEntryActionModal} transparent animationType="fade" onRequestClose={() => setShowEntryActionModal(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setShowEntryActionModal(false)}>
+          <View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 배치 작업</Text>
+              <TouchableOpacity onPress={() => setShowEntryActionModal(false)}>
+                <Ionicons name="close" size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={{ gap: 10, marginTop: 10 }}>
+              <TouchableOpacity 
+                style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} 
+                onPress={handleDuplicateTimelineEntry}
+              >
+                <Text style={[styles.mirrorApplyText, { color: theme.text }]}>대형 복사</Text>
+                <Ionicons name="copy-outline" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.mirrorApplyBtn, { backgroundColor: theme.error + '22', borderColor: theme.error, borderWidth: 1 }]} 
+                onPress={handleDeleteTimelineEntryAction}
+              >
+                <Text style={[styles.mirrorApplyText, { color: theme.error }]}>삭제</Text>
+                <Ionicons name="trash-outline" size={18} color={theme.error} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
 
       <Modal visible={showSceneModal} transparent animationType="fade">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
