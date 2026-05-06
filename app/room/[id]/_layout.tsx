@@ -1,7 +1,7 @@
 import { Tabs, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Alert, View, ActivityIndicator, TouchableOpacity, Text, Platform } from 'react-native';
 import { Room } from '../../../types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,20 @@ export default function RoomLayout() {
   const [room, setRoom] = useState<Room | null>(null);
   const [isCheckingJoin, setIsCheckingJoin] = useState(true);
   const [inviteRoomInfo, setInviteRoomInfo] = useState<Room | null>(null);
+
+  const screenOptions = useMemo(() => ({
+    headerShown: false,
+    tabBarStyle: { 
+      backgroundColor: theme.card, 
+      borderTopColor: theme.border, 
+      height: Platform.OS === 'ios' ? 88 : 65 + (insets.bottom > 0 ? insets.bottom : 10),
+      paddingBottom: Platform.OS === 'ios' ? 30 : 15 + (insets.bottom > 0 ? insets.bottom : 0),
+      paddingTop: 10,
+    },
+    tabBarActiveTintColor: theme.primary,
+    tabBarInactiveTintColor: theme.textSecondary,
+    tabBarLabelStyle: { fontSize: 11, fontWeight: '600' }
+  }), [theme, insets]);
 
   useEffect(() => {
     const checkInvitation = async () => {
@@ -86,19 +100,7 @@ export default function RoomLayout() {
   if (!room && !inviteRoomInfo) return null;
 
   return (
-    <Tabs screenOptions={{
-      headerShown: false,
-      tabBarStyle: { 
-        backgroundColor: theme.card, 
-        borderTopColor: theme.border, 
-        height: Platform.OS === 'ios' ? 88 : 65 + (insets.bottom > 0 ? insets.bottom : 10),
-        paddingBottom: Platform.OS === 'ios' ? 30 : 15 + (insets.bottom > 0 ? insets.bottom : 0),
-        paddingTop: 10,
-      },
-      tabBarActiveTintColor: theme.primary,
-      tabBarInactiveTintColor: theme.textSecondary,
-      tabBarLabelStyle: { fontSize: 11, fontWeight: '600' }
-    }}>
+    <Tabs screenOptions={screenOptions}>
       <Tabs.Screen 
         name="index" 
         options={{ 

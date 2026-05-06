@@ -615,32 +615,28 @@ export default function FormationEditorScreen() {
     if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
   }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs]);
 
-  const dancerPositionsRef = useRef<Record<string, any>>({});
   const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
   
-  // [Fix] Initialize SharedValues immediately during render to avoid 'undefined' on first mount
-  if (activeScene && Object.keys(dancerPositionsRef.current).length === 0 && dancers.length > 0) {
+  // Use useMemo to create stable SharedValues for each dancer
+  const dancerPositions = useMemo(() => {
+    const map: Record<string, any> = {};
     dancers.forEach(d => {
-      const posInScene = activeScene.positions[d.id] || { x: 0.5, y: 0.5 };
-      dancerPositionsRef.current[d.id] = makeMutable(posInScene);
+      const posInScene = activeScene?.positions[d.id] || { x: 0.5, y: 0.5 };
+      map[d.id] = makeMutable(posInScene);
     });
-  }
+    return map;
+  }, [dancers]);
 
   useEffect(() => {
     if (!activeScene) return;
     
     dancers.forEach(d => {
-      const posInScene = activeScene.positions[d.id] || { x: 0.5, y: 0.5 };
-      if (!dancerPositionsRef.current[d.id]) {
-        dancerPositionsRef.current[d.id] = makeMutable(posInScene);
-      } else {
-        // Sync mutable value when active scene changes
-        dancerPositionsRef.current[d.id].value = posInScene;
+      if (dancerPositions[d.id]) {
+        const posInScene = activeScene.positions[d.id] || { x: 0.5, y: 0.5 };
+        dancerPositions[d.id].value = posInScene;
       }
     });
-  }, [dancers, activeScene]);
-
-  const dancerPositions = dancerPositionsRef.current;
+  }, [dancers, activeScene, dancerPositions]);
 
   // 히스토리 관리 (모드별 분리)
   const [createPast, setCreatePast] = useState<HistoryState[]>([]);
@@ -1097,22 +1093,7 @@ export default function FormationEditorScreen() {
   }, [syncOffset, videoPlayer, videoUrl]);
 
   const handleAddVideo = async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
-      if (res.canceled) return;
-
-      const asset = res.assets[0];
-      const sourceUri = asset.uri;
-      const fileName = `video_${Date.now()}_${asset.name.replace(/\s+/g, '_')}`;
-      const destUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
-
-      pushHistory();
-      setVideoUrl(destUri);
-    } catch (e: any) {
-      Alert.alert('실패', e.message);
-    }
+    Alert.alert('알림', '영상 추가 기능은 현재 개발 중입니다. 조금만 기다려주세요!');
   };
 
   const handleSave = async () => { 
@@ -1419,7 +1400,6 @@ export default function FormationEditorScreen() {
         ) : (
           <View style={styles.createDock}>
             <View style={styles.createToolbar}>
-              <TouchableOpacity style={styles.toolBtn} onPress={handleAddVideo}><Ionicons name="videocam-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
               <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity>
               <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity>
               <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity>
