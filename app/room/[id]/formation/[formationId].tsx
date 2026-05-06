@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform, KeyboardAvoidingView, PixelRatio } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
@@ -54,12 +54,17 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
   );
 
   const togglePlay = () => {
-    if (player.playing) {
-      player.pause();
-      if (videoPlayer) videoPlayer.pause();
-    } else {
-      player.play();
-      if (videoPlayer) videoPlayer.play();
+    try {
+      if (!player) return;
+      if (player.playing) {
+        player.pause();
+        if (videoPlayer) videoPlayer.pause();
+      } else {
+        player.play();
+        if (videoPlayer) videoPlayer.play();
+      }
+    } catch (e) {
+      console.warn('PlayButton Error:', e);
     }
   };
 
@@ -77,17 +82,11 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
 const WaveformBackground = React.memo(function WaveformBackground({ duration, peaks }: { duration: number, peaks: number[] }) {
   const { theme } = useAppContext();
   
-  // 실제 분석된 데이터가 없으면 기본값(평탄한 선) 표시
-  const displayPeaks = useMemo(() => {
-    if (peaks.length > 0) return peaks;
-    return Array.from({ length: Math.floor(duration * 10) }).map(() => 0.05);
-  }, [peaks, duration]);
-
   if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
   return (
     <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, justifyContent: 'space-around', alignItems: 'center', flexDirection: 'row' }]}>
-      {displayPeaks.map((peak, i) => (
+      {peaks.map((peak, i) => (
         <View 
           key={i} 
           style={[
@@ -621,6 +620,11 @@ export default function FormationEditorScreen() {
 
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const compressionResolverRef = useRef<((uri: string) => void) | null>(null);
+  const compressionRejecterRef = useRef<((err: any) => void) | null>(null);
+  const lastSeekTimeRef = useRef(0);
   const [syncOffset, setSyncOffset] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const webViewReadyRef = useRef(false);
@@ -720,14 +724,89 @@ export default function FormationEditorScreen() {
     { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
   ];
 
+  const compressAudio = async (uri: string): Promise<string> => {
+    setIsCompressing(true);
+    setCompressionProgress(0);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const compressScript = `
+        (async () => {
+          try {
+            const b64 = "${base64}";
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+            
+            // 편집 성능을 극대화하기 위해 64kbps Mono로 압축
+            const mp3encoder = new lamejs.Mp3Encoder(1, audioBuffer.sampleRate, 64);
+            const mp3Data = [];
+            const ch0 = audioBuffer.getChannelData(0);
+            
+            const sampleBlockSize = 1152;
+            for (let i = 0; i < ch0.length; i += sampleBlockSize) {
+              const samples = new Int16Array(sampleBlockSize);
+              for (let j = 0; j < sampleBlockSize; j++) {
+                if (i + j < ch0.length) {
+                  samples[j] = Math.max(-1, Math.min(1, ch0[i + j])) * 32767;
+                }
+              }
+              const mp3buf = mp3encoder.encodeBuffer(samples);
+              if (mp3buf.length > 0) mp3Data.push(mp3buf);
+              
+              if (i % (sampleBlockSize * 150) === 0) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                  type: 'COMPRESSION_PROGRESS', 
+                  progress: i / ch0.length 
+                }));
+              }
+            }
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) mp3Data.push(mp3buf);
+            
+            const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'COMPRESSION_COMPLETE', data: reader.result }));
+            };
+          } catch (e) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
+          }
+        })();
+      `;
+
+      const compressedDataUrl: string = await new Promise((resolve, reject) => {
+        compressionResolverRef.current = resolve;
+        compressionRejecterRef.current = reject;
+        const inject = () => {
+          if (webViewReadyRef.current && webViewRef.current) {
+            webViewRef.current.injectJavaScript(compressScript);
+          } else {
+            setTimeout(inject, 500);
+          }
+        };
+        inject();
+      });
+
+      const base64Data = compressedDataUrl.split(',')[1];
+      const fileName = `compressed_${Date.now()}.mp3`;
+      const destUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(destUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+      return destUri;
+    } catch (e) {
+      setIsCompressing(false);
+      throw e;
+    }
+  };
+
   const analyzeAudio = async (uri: string) => {
     if (!uri) return;
     setIsAnalyzing(true);
     try {
-      // 원격 URL이면 로컬 캐시로 다운로드 (CORS/파일 접근 문제 우회)
       let localUri = uri;
       if (uri.startsWith('http://') || uri.startsWith('https://')) {
-        // URL을 숫자 해시로 변환해 파일명에 특수문자·한글이 포함되지 않도록 함
         const urlHash = uri.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) >>> 0, 0).toString(36);
         const cacheUri = `${FileSystem.cacheDirectory}audio_${urlHash}.tmp`;
         const fileInfo = await FileSystem.getInfoAsync(cacheUri);
@@ -741,21 +820,18 @@ export default function FormationEditorScreen() {
         localUri = `file://${uri}`;
       }
 
-      // [Memory Fix] 대용량 파일 분석 시 OOM 방지 (60MB로 한도 상향 및 예외 처리 강화)
       const fInfo = await FileSystem.getInfoAsync(localUri, { size: true });
-      if (fInfo.exists && fInfo.size && fInfo.size > 60 * 1024 * 1024) {
-        console.warn('File too large (>60MB) for analysis, skipping waveform...');
+      // 분석 전 파일이 너무 크면 스킵하여 메모리 보호
+      if (fInfo.exists && fInfo.size && fInfo.size > 20 * 1024 * 1024) {
         setIsAnalyzing(false);
         setWaveformPeaks([]);
         return;
       }
 
-      // base64로 읽어서 WebView에 직접 전달 (XHR 없이)
       let base64 = "";
       try {
         base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
       } catch (readErr) {
-        console.warn('Failed to read file for analysis:', readErr);
         setIsAnalyzing(false);
         setWaveformPeaks([]);
         return;
@@ -770,10 +846,9 @@ export default function FormationEditorScreen() {
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             audioCtx.decodeAudioData(bytes.buffer, (audioBuffer) => {
-              // DAW 표준 방식: 좌우 채널 각각 Peak Detection 후 합산
               const ch0 = audioBuffer.getChannelData(0);
               const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : ch0;
-              const samplesPerSec = 10; // 기존 간격 유지
+              const samplesPerSec = 10; 
               const totalSamples = Math.floor(audioBuffer.duration * samplesPerSec);
               const blockSize = Math.floor(ch0.length / totalSamples);
               const peaks = [];
@@ -781,18 +856,16 @@ export default function FormationEditorScreen() {
                 const start = blockSize * i;
                 let peakVal = 0;
                 for (let j = 0; j < blockSize; j++) {
-                  // 각 채널의 최대 절댓값(peak) → 트랜지언트 정확 포착
                   const mono = Math.max(Math.abs(ch0[start + j] || 0), Math.abs(ch1[start + j] || 0));
                   if (mono > peakVal) peakVal = mono;
                 }
                 peaks.push(peakVal);
               }
-              // 전체 피크 기준으로 정규화 (PCM float은 이미 0~1 범위이나 리미터 없는 경우 대비)
               const maxPeak = Math.max(...peaks) || 1;
               const normalized = peaks.map(p => p / maxPeak);
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ANALYSIS_COMPLETE', data: normalized }));
             }, (err) => {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Decode failed: ' + err.message }));
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: 'Decode failed' }));
             });
           } catch (e) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
@@ -809,7 +882,6 @@ export default function FormationEditorScreen() {
       };
       inject();
     } catch (e) {
-      console.error('Audio Analysis Error:', e);
       setIsAnalyzing(false);
       setWaveformPeaks([]);
     }
@@ -828,12 +900,26 @@ export default function FormationEditorScreen() {
       if (event.type === 'ANALYSIS_COMPLETE') {
         setWaveformPeaks(event.data);
         setIsAnalyzing(false);
+      } else if (event.type === 'COMPRESSION_COMPLETE') {
+        if (compressionResolverRef.current) {
+          compressionResolverRef.current(event.data);
+          compressionResolverRef.current = null;
+        }
+        setIsCompressing(false);
+      } else if (event.type === 'COMPRESSION_PROGRESS') {
+        setCompressionProgress(event.progress);
       } else if (event.type === 'ERROR') {
-        console.warn('WebView Analysis Error:', event.message);
+        console.warn('WebView Error:', event.message);
+        if (isCompressing && compressionRejecterRef.current) {
+          compressionRejecterRef.current(new Error(event.message));
+          compressionRejecterRef.current = null;
+        }
         setIsAnalyzing(false);
+        setIsCompressing(false);
       }
     } catch (err) {
       setIsAnalyzing(false);
+      setIsCompressing(false);
     }
   };
 
@@ -942,52 +1028,65 @@ export default function FormationEditorScreen() {
 
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
 
-  // [Unified Playback Engine]
-  // Drives currentTimeMs and synchronizes PiP videoPlayer without triggering React re-renders
+  // [Unified Playback Engine] 
+  // 시각적 부드러움을 위해 60fps로 재생바를 업데이트하되, 
+  // 비디오 동기화 등 무거운 로직은 쓰로틀링(Throttling)하여 성능 유지
   useEffect(() => {
     let animationFrameId: number;
     let wasPlaying = false;
+    let isActive = true;
+    let lastSyncTime = 0;
     
     const updatePlaybackState = () => {
-      const isPlaying = player.playing;
-      isPlayerPlayingSV.value = isPlaying;
-      
-      const currentAudioTime = player.currentTime;
-      let effectiveSec = currentAudioTime;
-      
-      // Update playhead only if user is not manually scrolling
-      if (!isUserScrollingSV.value) {
-        currentTimeMs.value = currentAudioTime * 1000;
-      }
+      if (!isActive) return;
+      try {
+        if (!player) {
+          animationFrameId = requestAnimationFrame(updatePlaybackState);
+          return;
+        }
 
-      // PiP Video Sync (Slave mode)
-      if (videoPlayer && videoUrl) {
-        const targetTime = effectiveSec + syncOffset;
-        if (Math.abs(videoPlayer.currentTime - targetTime) > 0.15) {
-          videoPlayer.currentTime = Math.max(0, targetTime);
-        }
+        const isPlaying = player.playing;
+        isPlayerPlayingSV.value = isPlaying;
         
-        if (isPlaying && !wasPlaying) {
-          videoPlayer.play();
-        } else if (!isPlaying && wasPlaying) {
-          videoPlayer.pause();
+        const currentAudioTime = player.currentTime;
+        
+        // 재생바는 매 프레임 업데이트 (부드러운 움직임)
+        if (!isUserScrollingSV.value) {
+          currentTimeMs.value = currentAudioTime * 1000;
         }
+
+        // 비디오 동기화 및 무거운 체크는 약 100ms마다 수행
+        const now = Date.now();
+        if (now - lastSyncTime > 100 || (isPlaying && !wasPlaying) || (!isPlaying && wasPlaying)) {
+          lastSyncTime = now;
+          if (videoPlayer && videoUrl) {
+            const targetTime = currentAudioTime + syncOffset;
+            if (Math.abs(videoPlayer.currentTime - targetTime) > 0.2) {
+              videoPlayer.currentTime = Math.max(0, targetTime);
+            }
+            if (isPlaying && !wasPlaying) videoPlayer.play();
+            else if (!isPlaying && wasPlaying) videoPlayer.pause();
+          }
+          wasPlaying = isPlaying;
+        }
+      } catch (e) {
+        // Silent catch for released player
       }
-      
-      wasPlaying = isPlaying;
       animationFrameId = requestAnimationFrame(updatePlaybackState);
     };
 
     animationFrameId = requestAnimationFrame(updatePlaybackState);
-    
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+      isActive = false;
+      cancelAnimationFrame(animationFrameId);
+    };
   }, [player, videoPlayer, videoUrl, syncOffset]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
   });
 
-  const handleTimelineScroll = (e: any) => {
+  const handleTimelineScroll = useCallback((e: any) => {
     if (isUserScrollingSV.value) {
       const offset = e.nativeEvent.contentOffset.x;
       const newTimeMs = (offset / PX_PER_SEC) * 1000;
@@ -995,14 +1094,18 @@ export default function FormationEditorScreen() {
       currentTimeMs.value = newTimeMs;
       const timeSec = newTimeMs / 1000;
       
-      runOnJS((t: number) => {
-        player.seekTo(t);
-        if (videoPlayer && videoUrl) {
-          videoPlayer.currentTime = Math.max(0, t + syncOffset);
-        }
-      })(timeSec);
+      const now = Date.now();
+      if (now - lastSeekTimeRef.current > 100) { // Throttle seekTo to 10fps during scroll
+        lastSeekTimeRef.current = now;
+        runOnJS((t: number) => {
+          try {
+            if (player) player.seekTo(t);
+            if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, t + syncOffset);
+          } catch (err) {}
+        })(timeSec);
+      }
     }
-  };
+  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs]);
 
   const onScrollEnd = (e: any) => {
     isUserScrollingSV.value = false;
@@ -1184,20 +1287,49 @@ export default function FormationEditorScreen() {
       setIsChangingSong(true);
       const asset = res.assets[0];
       const sourceUri = asset.uri;
+      
+      // [Compression] 2.5MB 이상인 경우 성능을 위해 Mono 64kbps로 압축
+      let finalUri = sourceUri;
+      const fInfo = await FileSystem.getInfoAsync(sourceUri, { size: true });
+      if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
+        try {
+          finalUri = await compressAudio(sourceUri);
+        } catch (compErr) {
+          console.warn('Compression failed, using original:', compErr);
+        }
+      }
+
       const fileName = `audio_${Date.now()}_${asset.name.replace(/\s+/g, '_')}`;
       const destUri = `${FileSystem.documentDirectory}${fileName}`;
 
-      await FileSystem.copyAsync({ from: sourceUri, to: destUri });
+      await FileSystem.copyAsync({ from: finalUri, to: destUri });
 
       pushHistory();
       setAudioUrl(destUri);
-      setWaveformPeaks([]); // 노래 변경 시 기존 데이터 초기화
+      setWaveformPeaks([]); 
     } catch (e: any) {
       Alert.alert('실패', e.message);
     } finally {
       setIsChangingSong(false);
+      setIsCompressing(false);
     }
   };
+
+  // [Performance] 앱 로드 시 현재 오디오가 너무 크면 자동으로 압축 진행 (이미 로컬 파일인 경우)
+  useEffect(() => {
+    const checkAndCompress = async () => {
+      if (!audioUrl || audioUrl.startsWith('http') || isCompressing) return;
+      try {
+        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true });
+        if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
+          const compressedUri = await compressAudio(audioUrl);
+          setAudioUrl(compressedUri);
+        }
+      } catch (e) {}
+    };
+    checkAndCompress();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSyncAdjust = useCallback((delta: number) => {
     const next = parseFloat((syncOffset + delta).toFixed(1));
@@ -1404,12 +1536,12 @@ export default function FormationEditorScreen() {
         theme={theme} 
       />
 
-      {/* Hidden WebView for Audio Analysis */}
+      {/* Hidden WebView for Audio Analysis & Compression */}
       <View style={{ height: 0, width: 0, opacity: 0, position: 'absolute' }}>
         <WebView 
           ref={webViewRef} 
           onMessage={onWebViewMessage} 
-          source={{ html: '<html><body></body></html>' }} 
+          source={{ html: '<html><head><script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script></head><body></body></html>' }} 
           originWhitelist={['*']}
           allowFileAccess={true}
           allowUniversalAccessFromFileURLs={true}
@@ -1430,6 +1562,15 @@ export default function FormationEditorScreen() {
         <View style={[styles.analysisLoader, { backgroundColor: theme.card + 'CC' }]}>
           <ActivityIndicator color={theme.primary} />
           <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>음악 데이터 정밀 분석 중...</Text>
+        </View>
+      )}
+
+      {/* Compression Loader UI */}
+      {isCompressing && (
+        <View style={[styles.analysisLoader, { backgroundColor: theme.card + 'CC' }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>음원 압축 중... ({Math.round(compressionProgress * 100)}%)</Text>
+          <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 5 }}>대용량 파일의 경우 성능을 위해 최적화가 필요합니다.</Text>
         </View>
       )}
 

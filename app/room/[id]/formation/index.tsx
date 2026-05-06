@@ -30,6 +30,10 @@ export default function FormationListScreen() {
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [extractedAudioBase64, setExtractedAudioBase64] = useState<string | null>(null);
   const [isExtractingAudio, setIsExtractingAudio] = useState(false);
+  const [isCompressingAudio, setIsCompressingAudio] = useState(false);
+  const [compressProgress, setCompressProgress] = useState(0);
+  const compressionResolverRef = useRef<((uri: string) => void) | null>(null);
+  const compressionRejecterRef = useRef<((err: any) => void) | null>(null);
   
   const webViewRef = useRef<WebView>(null);
 
@@ -115,6 +119,80 @@ export default function FormationListScreen() {
     }
   };
 
+  const compressAudio = async (uri: string): Promise<string> => {
+    setIsCompressingAudio(true);
+    setCompressProgress(0);
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const compressScript = `
+        (async () => {
+          try {
+            const b64 = "${base64}";
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+            
+            // 64kbps Mono로 최적화
+            const mp3encoder = new lamejs.Mp3Encoder(1, audioBuffer.sampleRate, 64);
+            const mp3Data = [];
+            const ch0 = audioBuffer.getChannelData(0);
+            
+            const sampleBlockSize = 1152;
+            for (let i = 0; i < ch0.length; i += sampleBlockSize) {
+              const samples = new Int16Array(sampleBlockSize);
+              for (let j = 0; j < sampleBlockSize; j++) {
+                if (i + j < ch0.length) {
+                  samples[j] = Math.max(-1, Math.min(1, ch0[i + j])) * 32767;
+                }
+              }
+              const mp3buf = mp3encoder.encodeBuffer(samples);
+              if (mp3buf.length > 0) mp3Data.push(mp3buf);
+              
+              if (i % (sampleBlockSize * 150) === 0) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                  type: 'COMPRESSION_PROGRESS', 
+                  progress: i / ch0.length 
+                }));
+              }
+            }
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) mp3Data.push(mp3buf);
+            
+            const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'COMPRESSION_RESULT', data: reader.result }));
+            };
+          } catch (e) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ERROR', message: e.message }));
+          }
+        })();
+      `;
+
+      const compressedDataUrl: string = await new Promise((resolve, reject) => {
+        compressionResolverRef.current = resolve;
+        compressionRejecterRef.current = reject;
+        if (webViewRef.current) {
+          webViewRef.current.injectJavaScript(compressScript);
+        } else {
+          reject(new Error('WebView not ready'));
+        }
+      });
+
+      const base64Data = compressedDataUrl.split(',')[1];
+      const fileName = `compressed_${Date.now()}.mp3`;
+      const destUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(destUri, base64Data, { encoding: FileSystem.EncodingType.Base64 });
+      return destUri;
+    } catch (e) {
+      setIsCompressingAudio(false);
+      throw e;
+    }
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) {
       Alert.alert('오류', '동선 제목을 입력해주세요.');
@@ -124,6 +202,18 @@ export default function FormationListScreen() {
     setIsSubmitting(true);
     try {
       let audioUrl = selectedAudio ? selectedAudio.uri : undefined;
+      
+      if (audioUrl) {
+        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true });
+        if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
+          try {
+            audioUrl = await compressAudio(audioUrl);
+          } catch (compErr) {
+            console.warn('Compression failed, using original:', compErr);
+          }
+        }
+      }
+
       const newId = await addFormation(id as string, title.trim(), audioUrl);
       setShowAddModal(false);
       setTitle('');
@@ -133,6 +223,7 @@ export default function FormationListScreen() {
       Alert.alert('오류', e.message);
     } finally {
       setIsSubmitting(false);
+      setIsCompressingAudio(false);
     }
   };
 
@@ -286,13 +377,28 @@ export default function FormationListScreen() {
       } else if (event.type === 'EXTRACTION_PROGRESS') {
         setExtractStatus('음원 추출 중...');
         setExtractProgress(event.progress);
+      } else if (event.type === 'COMPRESSION_RESULT') {
+        if (compressionResolverRef.current) {
+          compressionResolverRef.current(event.data);
+          compressionResolverRef.current = null;
+        }
+        setIsCompressingAudio(false);
+      } else if (event.type === 'COMPRESSION_PROGRESS') {
+        setCompressProgress(event.progress);
       } else if (event.type === 'ERROR') {
         setIsExtractingAudio(false);
+        setIsCompressingAudio(false);
         setExtractStatus('오류 발생');
-        Alert.alert('오류', '추출 중 문제가 발생했습니다: ' + event.message);
+        if (isCompressingAudio && compressionRejecterRef.current) {
+          compressionRejecterRef.current(new Error(event.message));
+          compressionRejecterRef.current = null;
+        } else {
+          Alert.alert('오류', '처리 중 문제가 발생했습니다: ' + event.message);
+        }
       }
     } catch (err) {
       setIsExtractingAudio(false);
+      setIsCompressingAudio(false);
     }
   };
 
@@ -396,12 +502,19 @@ export default function FormationListScreen() {
                 )}
               </TouchableOpacity>
 
+              {isCompressingAudio && (
+                <View style={{ marginBottom: 15, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={{ color: theme.text, fontSize: 12, marginTop: 5 }}>음원 압축 중... ({Math.round(compressProgress * 100)}%)</Text>
+                </View>
+              )}
+
               <TouchableOpacity 
                 style={[styles.submitBtn, { backgroundColor: theme.primary }]} 
                 onPress={handleCreate}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCompressingAudio}
               >
-                {isSubmitting ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>만들기</Text>}
+                {isSubmitting || isCompressingAudio ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>만들기</Text>}
               </TouchableOpacity>
             </View>
           </View>
