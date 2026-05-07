@@ -626,20 +626,30 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
 });
 
 const GUIDE_STEPS = [
-  { 
-    title: '1. 대형 생성', 
-    description: '댄서를 추가하고 드래그하여 원하는 위치에 배치하세요. 아래 씬 목록에서 대형을 전환하거나 관리할 수 있습니다. 각 대형의 이름을 설정하여 관리하기 편하게 만드세요.',
-    image: require('../../../../example/동선예시사진기본.jpg')
+  {
+    title: '1. 댄서 추가 및 편집',
+    description: "'댄서 추가' 버튼으로 인원을 추가하고 드래그하여 배치하세요. **배치된 댄서를 클릭하면 이름과 상징 색상을 변경**할 수 있습니다.",
+    image: require('../../../../guideimage/Guide1.png')
   },
-  { 
-    title: '2. 대형 배치', 
-    description: '음악의 특정 시점에 대형을 배치하세요. 타임라인을 터치하면 현재 시간에 대형을 추가할 수 있습니다. 배치된 블록의 길이를 조절하여 대형 유지 시간을 설정할 수 있습니다.',
-    image: require('../../../../example/동선예시사진플레이.jpg')
+  {
+    title: '2. 대형 추가 및 편집',
+    description: "'대형 추가' 버튼으로 새로운 대형을 생성하세요. **하단 목록에서 현재 선택된 대형을 다시 한 번 클릭하면 이름을 수정**할 수 있습니다.",
+    image: require('../../../../guideimage/Guide2.png')
   },
-  { 
-    title: '3. 애니메이션', 
-    description: '배치된 대형 사이의 빈 공간에는 자동으로 부드러운 이동 애니메이션이 적용됩니다. X 표시가 된 구간이 이동 구간입니다. 재생 버튼을 눌러 전체적인 흐름을 확인해 보세요!',
-    image: require('../../../../example/transitionexample.jpg')
+  {
+    title: '3. 대형 배치 시작',
+    description: "대형 생성이 끝나면 상단의 **'대형 배치' 탭을 클릭해 노래에 맞춰 대형들을 배치**하세요. 타임라인의 원하는 시점을 터치하면 현재 대형이 배치됩니다.",
+    image: require('../../../../guideimage/Guide3.png')
+  },
+  {
+    title: '4. 대형 배치에서의 편집',
+    description: "배치된 대형 블록을 클릭하면 **길이 조절 및 이동**이 가능하며, 한번 더 클릭하면 **복사 및 삭제**를 할 수 있습니다. 이 모드에서도 **댄서들의 위치를 자유롭게 변경**할 수 있습니다.",
+    image: require('../../../../guideimage/Guide4.png')
+  },
+  {
+    title: '5. 저장 및 내보내기',
+    description: "작업 중에는 **상단의 '저장' 버튼을 눌러 자주 저장**하는 것이 안전합니다. '내보내기' 버튼을 통해 파일로 저장하거나 동료들에게 피드백을 발행할 수 있습니다.",
+    image: require('../../../../guideimage/Guide5.png')
   }
 ];
 
@@ -2036,7 +2046,14 @@ export default function FormationEditorScreen() {
       </Modal>
       <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>대기 공간 (Wing)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempWingWidth} onChangeText={setTempWingWidth} placeholder="칸 수" /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 반전</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>반전 방식</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>좌우</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>상하</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>완전</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>적용 대상</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>현재 대형만</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>모든 대형 일괄 적용</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text>{GUIDE_STEPS[guideIndex].image && <Image source={GUIDE_STEPS[guideIndex].image} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>{GUIDE_STEPS[guideIndex].description}</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < 2) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === 2 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
+      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text>{GUIDE_STEPS[guideIndex].image && <Image source={GUIDE_STEPS[guideIndex].image} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>
+  {GUIDE_STEPS[guideIndex].description.split(/(\*\*.*?\*\*)/).map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <Text key={i} style={{color: theme.primary, fontWeight: 'bold'}}>{part.slice(2, -2)}</Text>;
+    }
+    return part;
+  })}
+</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < GUIDE_STEPS.length - 1) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === GUIDE_STEPS.length - 1 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
     </GestureHandlerRootView>
   );
 }
