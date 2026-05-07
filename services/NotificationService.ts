@@ -27,10 +27,10 @@ export async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    // 💡 Firebase initialization check and safer token fetching
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    
-    token = (await Notifications.getDevicePushTokenAsync()).data;
+    if (!projectId) throw new Error('EAS projectId not found in app config');
+
+    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     if (__DEV__) console.log('[Push] Device Token:', token);
 
     // Save to Supabase if user is logged in

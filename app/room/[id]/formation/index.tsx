@@ -51,8 +51,8 @@ export default function FormationListScreen() {
     }
   }, []);
 
-  const roomFormations = useMemo(() => 
-    formations.filter(f => f.roomId === id).sort((a, b) => b.createdAt - a.createdAt), 
+  const roomFormations = useMemo(() =>
+    formations.filter(f => f.roomId === id && !f.isPublished).sort((a, b) => b.createdAt - a.createdAt),
     [formations, id]
   );
 
@@ -102,13 +102,17 @@ export default function FormationListScreen() {
         }
 
         setIsSubmitting(true);
-        const newId = await addFormation(id as string, importedData.title || '가져온 동선', undefined);
-        
-        await updateFormation(newId, {
-          settings: importedData.settings,
-          data: importedData.data,
-          videoSettings: importedData.videoSettings
-        });
+        const newId = await addFormation(
+          id as string,
+          importedData.title || '가져온 동선',
+          importedData.audioUrl,
+          importedData.settings,
+          importedData.data
+        );
+
+        if (importedData.videoSettings) {
+          await updateFormation(newId, { videoSettings: importedData.videoSettings });
+        }
         
         Alert.alert('성공', '동선 파일을 성공적으로 가져왔습니다.');
       }

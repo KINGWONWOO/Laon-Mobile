@@ -34,7 +34,12 @@ export const contentService = {
       use_notification: useNoti,
     };
     if (choreographyUrl !== undefined) payload.choreography_video_url = choreographyUrl;
-    const { error } = await supabase.from('videos').insert([payload]);
+    let { error } = await supabase.from('videos').insert([payload]);
+    if (error && choreographyUrl !== undefined) {
+      // schema cache에 choreography_video_url이 없을 경우 fallback
+      delete payload.choreography_video_url;
+      ({ error } = await supabase.from('videos').insert([payload]));
+    }
     if (error) throw error;
   },
   updateVideo: async (id: string, title: string) => {
@@ -102,6 +107,12 @@ export const contentService = {
   respondToSchedule: async (sid: string, uid: string, oids: string[]) => {
     return await supabase.from('schedule_responses').upsert({ schedule_id: sid, user_id: uid, option_ids: oids }, { onConflict: 'schedule_id,user_id' });
   },
+  markVoteViewed: async (vid: string, uid: string) => {
+    return await supabase.rpc('mark_vote_viewed', { p_vote_id: vid, p_user_id: uid });
+  },
+  markScheduleViewed: async (sid: string, uid: string) => {
+    return await supabase.rpc('mark_schedule_viewed', { p_schedule_id: sid, p_user_id: uid });
+  },
   closeVote: async (id: string) => {
     return await supabase.from('votes').update({ deadline: new Date().toISOString() }).eq('id', id);
   },
@@ -121,9 +132,9 @@ export const contentService = {
     return await supabase.from('formations').delete().eq('id', id);
   },
   publishFormation: async (rid: string, uid: string, t: string, audio: string, settings: any, data: any, videoSettings?: any) => {
-    return await supabase.from('formations').insert([{
-      room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data, video_settings: videoSettings
-    }]).select().single();
+    const insertData: any = { room_id: rid, user_id: uid, title: t, audio_url: audio, settings, data, is_published: true };
+    if (videoSettings) insertData.video_settings = videoSettings;
+    return await supabase.from('formations').insert([insertData]).select().single();
   },
 
   // --- Developer Feedback ---

@@ -69,6 +69,7 @@ interface AppContextType {
   respondToSchedule: (sid: string, oids: string[]) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
   closeSchedule: (id: string) => Promise<void>;
+  markScheduleViewed: (sid: string) => Promise<void>;
 
   votes: Vote[];
   addVote: (rid: string, q: string, opts: string[], settings: any) => Promise<void>;
@@ -76,6 +77,7 @@ interface AppContextType {
   respondToVote: (vid: string, oids: string[]) => Promise<void>;
   deleteVote: (id: string) => Promise<void>;
   closeVote: (id: string) => Promise<void>;
+  markVoteViewed: (vid: string) => Promise<void>;
 
   formations: Formation[];
   addFormation: (rid: string, title: string, audioUrl?: string, settings?: any, data?: any) => Promise<string>;
@@ -100,6 +102,7 @@ interface AppContextType {
   purchasePro: (durationDays?: number) => Promise<void>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
+  sendDirectReminder: (userIds: string[], title: string, body: string) => Promise<void>;
 
   // Language
   language: Language;
@@ -329,6 +332,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const sendDirectReminder = async (userIds: string[], title: string, body: string) => {
+    if (!isPro) throw new Error('Pro 멤버십 전용 기능입니다.');
+    if (userIds.length > 0) await sendPushNotification(userIds, title, body);
+  };
+
   const { data: allUsers = [] } = useQuery({
     queryKey: ['profiles'],
     queryFn: async () => {
@@ -375,14 +383,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const { data: s } = await supabase.from('schedules').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o = [] } = await supabase.from('schedule_options').select('*').in('schedule_id', (s || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('schedule_responses').select('*').in('schedule_id', (s || []).map(x => x.id));
-    return (s || []).map(sch => ({ ...sch, schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({ ...opt, schedule_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
+    return (s || []).map(sch => ({ ...sch, all_responders: (r || []).filter(res => res.schedule_id === sch.id).map(res => res.user_id), schedule_options: (o || []).filter(opt => opt.schedule_id === sch.id).map(opt => ({ ...opt, schedule_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
   const votesQuery = useQuery({ queryKey: ['votes', roomIds], queryFn: async () => {
     const { data: v } = await supabase.from('votes').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const { data: o = [] } = await supabase.from('vote_options').select('*').in('vote_id', (v || []).map(x => x.id));
     const { data: r = [] } = await supabase.from('vote_responses').select('*').in('vote_id', (v || []).map(x => x.id));
-    return (v || []).map(vote => ({ ...vote, vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({ ...opt, vote_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
+    return (v || []).map(vote => ({ ...vote, all_responders: (r || []).filter(res => res.vote_id === vote.id).map(res => res.user_id), vote_options: (o || []).filter(opt => opt.vote_id === vote.id).map(opt => ({ ...opt, vote_responses: (r || []).filter(res => res.option_ids?.includes(opt.id)) })) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
 
   const noticesQuery = useQuery({ queryKey: ['notices', roomIds], queryFn: async () => {
@@ -395,7 +403,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const localRaw = await AsyncStorage.getItem('local_formations');
     const local = localRaw ? JSON.parse(localRaw) : [];
-    const mappedRemote = (remote || []).map(form => ({ id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url, videoSettings: form.video_settings, settings: form.settings, data: form.data, createdAt: new Date(form.created_at).getTime(), isLocal: false })) as Formation[];
+    const mappedRemote = (remote || []).map(form => ({ id: form.id, roomId: form.room_id, userId: form.user_id, title: form.title, audioUrl: form.audio_url, videoSettings: form.video_settings, settings: form.settings, data: form.data, createdAt: new Date(form.created_at).getTime(), isLocal: false, isPublished: form.is_published ?? false })) as Formation[];
     const filteredLocal = local.filter((f: any) => roomIds.includes(f.roomId)).map((f: any) => ({ ...f, isLocal: true }));
     return [...filteredLocal, ...mappedRemote] as Formation[];
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
@@ -419,11 +427,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const photosMapped: Photo[] = (photosQuery.data || []).map(p => ({ id: p.id, roomId: p.room_id, userId: p.user_id, photoUrl: p.file_path, description: p.description, useNotification: p.use_notification, createdAt: new Date(p.created_at).getTime(), comments: (p.gallery_comments || []).map((c: any) => ({ id: c.id, userId: c.user_id, text: c.text, parentId: c.parent_id, createdAt: new Date(c.created_at).getTime() })).filter((c: any) => !blockedUsers.includes(c.userId)) })).filter(p => !blockedUsers.includes(p.userId));
   const schedulesMapped: Schedule[] = (schedulesQuery.data || []).map(s => {
     const resp: Record<string, string[]> = {}; (s.schedule_options || []).forEach((o: any) => (o.schedule_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
-    return { id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})), responses: resp, viewedBy: s.viewed_by || [], useNotification: s.use_notification, reminderMinutes: s.reminder_before, deadline: s.deadline ? new Date(s.deadline).getTime() : undefined, createdAt: new Date(s.created_at).getTime() };
+    const viewedBy = Array.from(new Set([...(s.viewed_by || []), ...(s.all_responders || [])]));
+    return { id: s.id, roomId: s.room_id, userId: s.user_id, title: s.title, options: (s.schedule_options || []).map((o:any)=>({id:o.id, dateTime: o.date_time})), responses: resp, viewedBy, useNotification: s.use_notification, reminderMinutes: s.reminder_before, deadline: s.deadline ? new Date(s.deadline).getTime() : undefined, createdAt: new Date(s.created_at).getTime() };
   }).filter(s => !blockedUsers.includes(s.userId));
   const votesMapped: Vote[] = (votesQuery.data || []).map(v => {
     const resp: Record<string, string[]> = {}; (v.vote_options || []).forEach((o: any) => (o.vote_responses || []).forEach((r: any) => { if (!resp[r.user_id]) resp[r.user_id] = []; if (!resp[r.user_id].includes(o.id)) resp[r.user_id].push(o.id); }));
-    return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy: v.viewed_by || [], useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
+    const viewedBy = Array.from(new Set([...(v.viewed_by || []), ...(v.all_responders || [])]));
+    return { id: v.id, roomId: v.room_id, userId: v.user_id, question: v.question, isAnonymous: v.is_anonymous, allowMultiple: v.allow_multiple, options: (v.vote_options || []).map((o:any)=>({id:o.id, text: o.text})), responses: resp, viewedBy, useNotification: v.use_notification, reminderMinutes: v.reminder_before, deadline: v.deadline ? new Date(v.deadline).getTime() : undefined, createdAt: new Date(v.created_at).getTime(), comments: [] };
   }).filter(v => !blockedUsers.includes(v.userId));
 
   const logout = async () => { setCurrentUser(null); currentUserRef.current = null; await supabase.auth.signOut(); queryClient.clear(); };
@@ -540,7 +550,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (oids.includes(opt.id)) filtered.push({ user_id: userId, option_ids: oids, vote_id: vid });
         return { ...opt, vote_responses: filtered };
       });
-      return { ...v, vote_options: updatedOptions };
+      const existingResponders: string[] = v.all_responders || [];
+      const all_responders = existingResponders.includes(userId) ? existingResponders : [...existingResponders, userId];
+      return { ...v, vote_options: updatedOptions, all_responders };
     }));
     try {
       await contentService.respondToVote(vid, userId, oids);
@@ -551,6 +563,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   const deleteVote = async (id: string) => { await contentService.deleteVote(id); await refreshAllData(); };
+
+  const markVoteViewed = async (vid: string) => {
+    if (!currentUserRef.current) return;
+    const uid = currentUserRef.current.id;
+    queryClient.setQueryData(['votes', roomIds], (old: any[]) => (old || []).map(v => {
+      if (v.id !== vid) return v;
+      const current: string[] = v.viewed_by || [];
+      if (current.includes(uid)) return v;
+      return { ...v, viewed_by: [...current, uid] };
+    }));
+    contentService.markVoteViewed(vid, uid).catch(() => {});
+  };
+
+  const markScheduleViewed = async (sid: string) => {
+    if (!currentUserRef.current) return;
+    const uid = currentUserRef.current.id;
+    queryClient.setQueryData(['schedules', roomIds], (old: any[]) => (old || []).map(s => {
+      if (s.id !== sid) return s;
+      const current: string[] = s.viewed_by || [];
+      if (current.includes(uid)) return s;
+      return { ...s, viewed_by: [...current, uid] };
+    }));
+    contentService.markScheduleViewed(sid, uid).catch(() => {});
+  };
 
   const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { 
     if (!currentUserRef.current) return;
@@ -576,7 +612,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (oids.includes(opt.id)) filtered.push({ user_id: userId, option_ids: oids, schedule_id: sid });
         return { ...opt, schedule_responses: filtered };
       });
-      return { ...s, schedule_options: updatedOptions };
+      const existingResponders: string[] = s.all_responders || [];
+      const all_responders = existingResponders.includes(userId) ? existingResponders : [...existingResponders, userId];
+      return { ...s, schedule_options: updatedOptions, all_responders };
     }));
     try {
       await contentService.respondToSchedule(sid, userId, oids);
@@ -619,11 +657,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
     videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
     photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
-    schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule,
-    votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote,
+    schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed,
+    votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote, markVoteViewed,
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
     refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder,
+    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder, sendDirectReminder,
     language, setLanguage, t
   }), [
     currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,

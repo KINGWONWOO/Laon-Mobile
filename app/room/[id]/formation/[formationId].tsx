@@ -11,13 +11,12 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
-import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 import { OptionModal } from '../../../../components/ui/RoomComponents';
 import { storageService } from '../../../../services/storageService';
 
 const { width } = Dimensions.get('window');
-const PX_PER_SEC = 60; 
+const BASE_PX_PER_SEC = 60;
 const TIMELINE_CONTAINER_WIDTH = width - 30;
 const CENTER_OFFSET = TIMELINE_CONTAINER_WIDTH / 2;
 const COLORS = ['#FF3366', '#FF9F43', '#F7D794', '#4ECDC4', '#45B7D1', '#A06CD5', '#1B9CFC', '#E056FD', '#686DE0', '#30336B'];
@@ -79,47 +78,79 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
 });
 
 // [Tiling Optimized] 30초 단위의 고해상도 이미지 조각들을 이어 붙여 깨짐 방지 및 성능 극대화
-const WaveformBackground = React.memo(function WaveformBackground({ duration, tiles }: { duration: number, tiles: string[] }) {
+const WaveformBackground = React.memo(function WaveformBackground({ duration, tiles, pxPerSecSV }: { duration: number, tiles: string[], pxPerSecSV: Animated.SharedValue<number> }) {
   const { theme } = useAppContext();
   
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: duration * pxPerSecSV.value,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 120
+  }));
+
   if (duration <= 0) return <View style={styles.waveformEmpty}><ActivityIndicator color={theme.primary} /></View>;
 
   return (
-    <View style={[styles.waveformContainer, { width: duration * PX_PER_SEC, height: 120, flexDirection: 'row', alignItems: 'center' }]}>
+    <Animated.View style={[styles.waveformContainer, animatedStyle]}>
       {tiles.length > 0 ? (
         tiles.map((tile, i) => (
-          <Image 
-            key={i}
-            source={{ uri: tile }} 
-            style={{ 
-              width: Math.min(30 * PX_PER_SEC, (duration - (i * 30)) * PX_PER_SEC), 
-              height: 120,
-            }} 
-            resizeMode="stretch"
-            fadeDuration={0}
+          <WaveformTile 
+            key={i} 
+            uri={tile} 
+            index={i} 
+            totalDuration={duration} 
+            pxPerSecSV={pxPerSecSV} 
           />
         ))
       ) : (
         <View style={{ height: 1, width: '100%', backgroundColor: theme.text, opacity: 0.1 }} />
       )}
-    </View>
+    </Animated.View>
   );
 });
 
-const TimeMarkers = React.memo(function TimeMarkers({ duration }: { duration: number }) {
+const WaveformTile = React.memo(function WaveformTile({ uri, index, totalDuration, pxPerSecSV }: any) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const tileWidth = Math.min(30, totalDuration - (index * 30)) * pxPerSecSV.value;
+    return {
+      width: tileWidth,
+      height: 120,
+    };
+  });
+
+  return (
+    <AnimatedImage 
+      source={{ uri }} 
+      style={animatedStyle} 
+      resizeMode="stretch"
+    />
+  );
+});
+
+const AnimatedImage = Animated.createAnimatedComponent(Image);
+
+const TimeMarkers = React.memo(function TimeMarkers({ duration, pxPerSecSV }: { duration: number, pxPerSecSV: Animated.SharedValue<number> }) {
   const { theme } = useAppContext();
   const markers = useMemo(() => {
     const list = [];
     for (let i = 0; i <= duration; i += 5) {
-      list.push(
-        <View key={i} style={[styles.timeMarker, { left: i * PX_PER_SEC }]}>
-          <View style={[styles.timeMarkerLine, { backgroundColor: theme.border }]} /><Text style={[styles.timeMarkerText, { color: theme.textSecondary }]}>{Math.floor(i / 60)}:{(i % 60).toString().padStart(2, '0')}</Text>
-        </View>
-      );
+      list.push(<TimeMarker key={i} time={i} pxPerSecSV={pxPerSecSV} theme={theme} />);
     }
     return list;
-  }, [duration, theme]);
+  }, [duration, theme, pxPerSecSV]);
   return <View style={styles.timeMarkersLayer}>{markers}</View>;
+});
+
+const TimeMarker = React.memo(function TimeMarker({ time, pxPerSecSV, theme }: any) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    left: time * pxPerSecSV.value
+  }));
+  return (
+    <Animated.View style={[styles.timeMarker, animatedStyle]}>
+      <View style={[styles.timeMarkerLine, { backgroundColor: theme.border }]} />
+      <Text style={[styles.timeMarkerText, { color: theme.textSecondary }]}>{Math.floor(time / 60)}:{(time % 60).toString().padStart(2, '0')}</Text>
+    </Animated.View>
+  );
 });
 
 const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, dancers, settings }: { scene: FormationScene, dancers: Dancer[], settings: FormationSettings }) {
@@ -136,20 +167,69 @@ const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, d
   );
 });
 
-const TransitionX = React.memo(function TransitionX({ width, left }: { width: number, left: number }) {
+const TransitionX = React.memo(function TransitionX({ durationMs, startMs, pxPerSecSV }: { durationMs: number, startMs: number, pxPerSecSV: Animated.SharedValue<number> }) {
   const { theme } = useAppContext();
-  const safeWidth = Math.max(0, width);
-  if (safeWidth <= 5) return null;
   const height = 85; 
-  const angle = Math.atan2(height, safeWidth) * (180 / Math.PI);
-  const length = Math.sqrt(safeWidth * safeWidth + height * height);
+  
+  const animatedStyle = useAnimatedStyle(() => {
+    const width = (durationMs / 1000) * pxPerSecSV.value;
+    const left = (startMs / 1000) * pxPerSecSV.value;
+    const angle = Math.atan2(height, width) * (180 / Math.PI);
+    const length = Math.sqrt(width * width + height * height);
+    
+    return {
+      left,
+      width: Math.max(0, width),
+      opacity: width <= 5 ? 0 : 1,
+      // Pass length and angle to children if they were animated, 
+      // but here we can just return the transform.
+      // Actually children lines need length and angle.
+    };
+  });
+
+  // Since angle and length depend on width, and width is animated, 
+  // the children also need to be animated.
   return (
-    <View style={[styles.transitionXContainer, { left, width: safeWidth, height, top: 10 }]} pointerEvents="none">
-      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
-      <View style={[styles.xLine, { width: length, top: height/2, left: (safeWidth-length)/2, transform: [{ rotate: `-${angle}deg` }], backgroundColor: theme.textSecondary + '33' }]} />
-    </View>
+    <Animated.View style={[styles.transitionXContainer, animatedStyle, { height, top: 10 }]} pointerEvents="none">
+      <TransitionXLines height={height} durationMs={durationMs} pxPerSecSV={pxPerSecSV} theme={theme} />
+    </Animated.View>
   );
 });
+
+const TransitionXLines = ({ height, durationMs, pxPerSecSV, theme }: any) => {
+  const line1Style = useAnimatedStyle(() => {
+    const width = (durationMs / 1000) * pxPerSecSV.value;
+    const angle = Math.atan2(height, width) * (180 / Math.PI);
+    const length = Math.sqrt(width * width + height * height);
+    return {
+      width: length,
+      top: height / 2,
+      left: (width - length) / 2,
+      transform: [{ rotate: `${angle}deg` }],
+      backgroundColor: theme.textSecondary + '33'
+    };
+  });
+
+  const line2Style = useAnimatedStyle(() => {
+    const width = (durationMs / 1000) * pxPerSecSV.value;
+    const angle = Math.atan2(height, width) * (180 / Math.PI);
+    const length = Math.sqrt(width * width + height * height);
+    return {
+      width: length,
+      top: height / 2,
+      left: (width - length) / 2,
+      transform: [{ rotate: `-${angle}deg` }],
+      backgroundColor: theme.textSecondary + '33'
+    };
+  });
+
+  return (
+    <>
+      <Animated.View style={[styles.xLine, line1Style]} />
+      <Animated.View style={[styles.xLine, line2Style]} />
+    </>
+  );
+};
 
 const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void }) {
   const { theme } = useAppContext();
@@ -269,41 +349,40 @@ const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, s
   );
 });
 
-const ResizeHandle = React.memo(function ResizeHandle({ direction, localX, localWidth, minX, maxX, onCommit, isVisible, movePanRef }: any) {
+const ResizeHandle = React.memo(function ResizeHandle({ direction, localTs, localDur, minTs, maxTs, pxPerSecSV, onCommit, isVisible, movePanRef }: any) {
   const { theme } = useAppContext();
-  // Independent start values — NOT shared with localWidth to avoid compounding bug
-  const startX = useSharedValue(0);
-  const startWidth = useSharedValue(0);
+  const startTs = useSharedValue(0);
+  const startDur = useSharedValue(0);
 
   const pan = useMemo(() => {
     const g = Gesture.Pan()
       .onStart(() => {
         'worklet';
-        startX.value = localX.value;
-        startWidth.value = localWidth.value;
+        startTs.value = localTs.value;
+        startDur.value = localDur.value;
       })
       .onUpdate((e) => {
         'worklet';
+        const deltaTs = (e.translationX / pxPerSecSV.value) * 1000;
         if (direction === 'left') {
-          const newX = Math.max(minX, Math.min(startX.value + e.translationX, startX.value + startWidth.value - 10));
-          localX.value = newX;
-          localWidth.value = startWidth.value - (newX - startX.value);
+          const newTs = Math.max(minTs, Math.min(startTs.value + deltaTs, startTs.value + startDur.value - 200));
+          localTs.value = newTs;
+          localDur.value = startDur.value - (newTs - startTs.value);
         } else {
-          localWidth.value = Math.max(10, Math.min(startWidth.value + e.translationX, maxX - localX.value));
+          localDur.value = Math.max(200, Math.min(startDur.value + deltaTs, maxTs - localTs.value));
         }
       })
       .onEnd(() => {
         'worklet';
-        // Pass final visual position — NOT raw translationX which ignores clamping
         if (direction === 'left') {
-          runOnJS(onCommit)(localX.value);
+          runOnJS(onCommit)(localTs.value);
         } else {
-          runOnJS(onCommit)(localWidth.value);
+          runOnJS(onCommit)(localDur.value);
         }
       });
     if (movePanRef) g.blocksExternalGesture(movePanRef);
     return g;
-  }, [direction, localX, localWidth, startX, startWidth, minX, maxX, onCommit, movePanRef]);
+  }, [direction, localTs, localDur, startTs, startDur, minTs, maxTs, pxPerSecSV, onCommit, movePanRef]);
 
   return (
     <GestureDetector gesture={pan}>
@@ -319,51 +398,58 @@ const ResizeHandle = React.memo(function ResizeHandle({ direction, localX, local
   );
 });
 
-const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minX, maxX, onSelect, onCommitMove, onCommitResize, onActionClick, dancers, scene, settings }: any) {
-  const localX = useSharedValue((entry.timestampMillis / 1000) * PX_PER_SEC);
-  const localWidth = useSharedValue((entry.durationMillis / 1000) * PX_PER_SEC);
-  const moveStartX = useSharedValue(0);
+const TimelineContainer = ({ duration, pxPerSecSV, children }: any) => {
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: duration * pxPerSecSV.value,
+    height: 120
+  }));
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+};
+
+const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sceneName, theme, minTs, maxTs, pxPerSecSV, onSelect, onCommitMove, onCommitResize, onActionClick, dancers, scene, settings }: any) {
+  const localTs = useSharedValue(entry.timestampMillis);
+  const localDur = useSharedValue(entry.durationMillis);
+  const moveStartTs = useSharedValue(0);
   const isSelectedSV = useSharedValue(isSelected);
   const movePanRef = useRef<any>(null);
 
   useEffect(() => {
-    localX.value = (entry.timestampMillis / 1000) * PX_PER_SEC;
-    localWidth.value = (entry.durationMillis / 1000) * PX_PER_SEC;
-  }, [entry.timestampMillis, entry.durationMillis, localWidth, localX]);
+    localTs.value = entry.timestampMillis;
+    localDur.value = entry.durationMillis;
+  }, [entry.timestampMillis, entry.durationMillis, localDur, localTs]);
 
   useEffect(() => {
     isSelectedSV.value = isSelected;
   }, [isSelected, isSelectedSV]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    left: localX.value,
-    width: localWidth.value,
+    left: (localTs.value / 1000) * pxPerSecSV.value,
+    width: (localDur.value / 1000) * pxPerSecSV.value,
     backgroundColor: isSelectedSV.value ? (theme.primary + 'AA') : (theme.card + 'CC'),
     borderColor: isSelectedSV.value ? theme.primary : theme.border,
     zIndex: isSelectedSV.value ? 100 : 50
   }));
 
-  // Commit receives final pixel position, not raw translationX
-  const onCommitLeft = useCallback((finalXPx: number) => onCommitResize(entry.id, finalXPx, 'left'), [entry.id, onCommitResize]);
-  const onCommitRight = useCallback((finalWidthPx: number) => onCommitResize(entry.id, finalWidthPx, 'right'), [entry.id, onCommitResize]);
+  const onCommitLeft = useCallback((finalTs: number) => onCommitResize(entry.id, finalTs, 'left'), [entry.id, onCommitResize]);
+  const onCommitRight = useCallback((finalDur: number) => onCommitResize(entry.id, finalDur, 'right'), [entry.id, onCommitResize]);
 
   const pan = useMemo(() => Gesture.Pan()
     .withRef(movePanRef)
     .enabled(isSelected)
     .onStart(() => {
       'worklet';
-      moveStartX.value = localX.value;
+      moveStartTs.value = localTs.value;
     })
     .onUpdate((g) => {
       'worklet';
-      localX.value = Math.max(minX, Math.min(moveStartX.value + g.translationX, maxX - localWidth.value));
+      const deltaTs = (g.translationX / pxPerSecSV.value) * 1000;
+      localTs.value = Math.max(minTs, Math.min(moveStartTs.value + deltaTs, maxTs - localDur.value));
     })
     .onEnd(() => {
       'worklet';
-      // Pass final clamped position, not raw translationX
-      runOnJS(onCommitMove)(entry.id, localX.value);
+      runOnJS(onCommitMove)(entry.id, localTs.value);
     }),
-  [isSelected, entry.id, minX, maxX, localX, localWidth, moveStartX, onCommitMove]);
+  [isSelected, entry.id, minTs, maxTs, localTs, localDur, moveStartTs, pxPerSecSV, onCommitMove]);
 
   const tap = useMemo(() => Gesture.Tap()
     .runOnJS(true)
@@ -387,16 +473,18 @@ const TimelineBlock = React.memo(function TimelineBlock({ entry, isSelected, sce
         <Text style={[styles.blockText, { color: isSelected ? theme.background : theme.text }]} numberOfLines={1}>{sceneName}</Text>
         <ResizeHandle
           direction="left"
-          localX={localX} localWidth={localWidth}
-          minX={minX} maxX={maxX}
+          localTs={localTs} localDur={localDur}
+          minTs={minTs} maxTs={maxTs}
+          pxPerSecSV={pxPerSecSV}
           onCommit={onCommitLeft}
           isVisible={isSelected}
           movePanRef={movePanRef}
         />
         <ResizeHandle
           direction="right"
-          localX={localX} localWidth={localWidth}
-          minX={minX} maxX={maxX}
+          localTs={localTs} localDur={localDur}
+          minTs={minTs} maxTs={maxTs}
+          pxPerSecSV={pxPerSecSV}
           onCommit={onCommitRight}
           isVisible={isSelected}
           movePanRef={movePanRef}
@@ -614,6 +702,7 @@ export default function FormationEditorScreen() {
   const [touchTimeMs, setTouchTimeMs] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [zoomUI, setZoomUI] = useState(100);
+  const [timelineZoomUI, setTimelineZoomUI] = useState(100);
 
   const [tempRows, setTempRows] = useState('');
   const [tempCols, setTempCols] = useState('');
@@ -630,6 +719,24 @@ export default function FormationEditorScreen() {
   const [syncOffset, setSyncOffset] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const webViewReadyRef = useRef(false);
+
+  // [Horizontal Zoom] 
+  const timelineZoom = useSharedValue(1);
+  const savedTimelineZoom = useSharedValue(1);
+  const pxPerSecSV = useDerivedValue(() => BASE_PX_PER_SEC * timelineZoom.value);
+
+  const timelinePinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      'worklet';
+      savedTimelineZoom.value = timelineZoom.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      // 0.5배에서 5배까지 확대 가능
+      const newZoom = Math.max(0.5, Math.min(5, savedTimelineZoom.value * e.scale));
+      timelineZoom.value = newZoom;
+      runOnJS(setTimelineZoomUI)(Math.round(newZoom * 100));
+    });
 
   // SharedValues 및 Refs 선언
   const scale = useSharedValue(1);
@@ -1145,14 +1252,14 @@ export default function FormationEditorScreen() {
     };
   }, [player, videoPlayer, videoUrl, syncOffset]);
 
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value }), (data) => {
-    if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * PX_PER_SEC, 0, false); }
+  useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value, pps: pxPerSecSV.value }), (data) => {
+    if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * data.pps, 0, false); }
   });
 
   const handleTimelineScroll = useCallback((e: any) => {
     if (isUserScrollingSV.value) {
       const offset = e.nativeEvent.contentOffset.x;
-      const newTimeMs = (offset / PX_PER_SEC) * 1000;
+      const newTimeMs = (offset / pxPerSecSV.value) * 1000;
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
       const timeSec = newTimeMs / 1000;
@@ -1168,13 +1275,13 @@ export default function FormationEditorScreen() {
         })(timeSec);
       }
     }
-  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs]);
+  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs, pxPerSecSV]);
 
   const onScrollEnd = (e: any) => {
     isUserScrollingSV.value = false;
     const isPlaying = isPlayerPlayingSV.value;
     if (isPlaying) {
-      const time = (e.nativeEvent.contentOffset.x / PX_PER_SEC) * 1000;
+      const time = (e.nativeEvent.contentOffset.x / pxPerSecSV.value) * 1000;
       const remaining = (effectiveDuration * 1000) - time;
       currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
     }
@@ -1212,7 +1319,8 @@ export default function FormationEditorScreen() {
   }, [mode, sortedTimeline, scenes, dancers]);
 
   const openTimelineMenuAt = (x: number) => { 
-    setTouchTimeMs(currentTimeMs.value); 
+    const ts = (x / pxPerSecSV.value) * 1000;
+    setTouchTimeMs(ts); 
     setShowTimelineMenu(true); 
   };
   
@@ -1295,9 +1403,8 @@ export default function FormationEditorScreen() {
   };
   // Stable callbacks: use pushHistoryRef so these never change reference,
   // preventing TimelineBlock re-renders and gesture recreation after each commit.
-  const handleCommitMove = useCallback((entryId: string, finalXPx: number) => {
+  const handleCommitMove = useCallback((entryId: string, finalTs: number) => {
     pushHistoryRef.current();
-    const newTs = (finalXPx / PX_PER_SEC) * 1000;
     setTimeline(prev => {
       const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
       const sIdx = sorted.findIndex(x => x.id === entryId);
@@ -1306,13 +1413,13 @@ export default function FormationEditorScreen() {
       const prevBlock = sorted[sIdx - 1], nextBlock = sorted[sIdx + 1];
       const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
       const maxTs = nextBlock ? nextBlock.timestampMillis - target.durationMillis : Infinity;
-      const clampedTs = Math.max(0, Math.max(minTs, Math.min(newTs, maxTs)));
+      const clampedTs = Math.max(0, Math.max(minTs, Math.min(finalTs, maxTs)));
       return prev.map(e => e.id === entryId ? { ...e, timestampMillis: clampedTs } : e);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCommitResize = useCallback((entryId: string, finalPx: number, dir: 'left' | 'right') => {
+  const handleCommitResize = useCallback((entryId: string, finalValue: number, dir: 'left' | 'right') => {
     pushHistoryRef.current();
     setTimeline(prev => {
       const sorted = [...prev].sort((a, b) => a.timestampMillis - b.timestampMillis);
@@ -1321,15 +1428,13 @@ export default function FormationEditorScreen() {
       const target = sorted[sIdx];
       const prevBlock = sorted[sIdx - 1], nextBlock = sorted[sIdx + 1];
       if (dir === 'left') {
-        const newStartTs = (finalPx / PX_PER_SEC) * 1000;
         const rightEdgeTs = target.timestampMillis + target.durationMillis;
         const minTs = prevBlock ? prevBlock.timestampMillis + prevBlock.durationMillis : 0;
-        const clampedStart = Math.max(minTs, Math.min(newStartTs, rightEdgeTs - 500));
+        const clampedStart = Math.max(minTs, Math.min(finalValue, rightEdgeTs - 200));
         return prev.map(e => e.id === entryId ? { ...e, timestampMillis: clampedStart, durationMillis: rightEdgeTs - clampedStart } : e);
       } else {
-        const newDurMs = (finalPx / PX_PER_SEC) * 1000;
         const maxTs = nextBlock ? nextBlock.timestampMillis : Infinity;
-        const clampedDur = Math.max(500, Math.min(newDurMs, maxTs - target.timestampMillis));
+        const clampedDur = Math.max(200, Math.min(finalValue, maxTs - target.timestampMillis));
         return prev.map(e => e.id === entryId ? { ...e, durationMillis: clampedDur } : e);
       }
     });
@@ -1425,21 +1530,20 @@ export default function FormationEditorScreen() {
   const handleExportJSON = async () => {
     try {
       const finalName = (exportFileName || '동선').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
-      const data = { 
-        title: formation?.title, 
-        audioUrl, 
+      const data = {
+        title: formation?.title,
+        audioUrl,
         videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
-        settings, 
-        data: { dancers, scenes, timeline } 
+        settings,
+        data: { dancers, scenes, timeline }
       };
       const filePath = `${FileSystem.documentDirectory}${finalName}.json`;
       await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
-      if (!(await Sharing.isAvailableAsync())) { Alert.alert('오류', '이 기기에서는 공유 기능을 사용할 수 없습니다.'); return; }
-      await Sharing.shareAsync(filePath, { mimeType: 'application/json', dialogTitle: '동선 파일 내보내기', UTI: 'public.json' });
       setShowFilenameModal(false);
       setShowExportModal(false);
+      Alert.alert('저장 완료', `${finalName}.json 파일이 저장되었습니다.`);
     } catch (e: any) {
-      Alert.alert('오류', `파일 추출 실패: ${e.message}`);
+      Alert.alert('오류', `파일 저장 실패: ${e.message}`);
     }
   };
 
@@ -1455,31 +1559,8 @@ export default function FormationEditorScreen() {
   const handlePublish = async () => {
     if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
     
-    const uploadChoreography = await new Promise<boolean>((resolve) => {
-      Alert.alert(
-        '안무 영상 추가',
-        '피드백 영상과 함께 볼 추가 안무 영상을 업로드하시겠습니까?',
-        [
-          { text: '아니오', onPress: () => resolve(false) },
-          { text: '네 (영상 선택)', onPress: () => resolve(true) }
-        ]
-      );
-    });
-
-    let choreographyUrl = undefined;
-    if (uploadChoreography) {
-      const result = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setIsExporting(true);
-        try {
-          const videoUri = result.assets[0].uri;
-          const fileName = `choreography_${Date.now()}.mp4`;
-          choreographyUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
-        } catch (e) {
-          Alert.alert('오류', '안무 영상 업로드에 실패했습니다. 동선만 업로드합니다.');
-        }
-      }
-    }
+    // TODO: 안무 영상 추가 기능 구현 전까지 비활성화
+    const choreographyUrl = undefined;
 
     try {
       setIsExporting(true);
@@ -1683,24 +1764,58 @@ export default function FormationEditorScreen() {
                 onScrollEndDrag={(e) => { if (!e.nativeEvent.velocity || e.nativeEvent.velocity.x === 0) onScrollEnd(e); }} 
                 onMomentumScrollEnd={onScrollEnd} 
                 contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}
-                // [Optimization] 화면 바깥의 뷰는 렌더링에서 제외하여 성능 향상
                 removeClippedSubviews={true}
               >
-                <GestureDetector gesture={Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x))}>
-                  <View style={{ width: (effectiveDuration || 60) * PX_PER_SEC, height: 120 }}>
-                    <WaveformBackground duration={effectiveDuration || 60} tiles={waveformTiles} />
-                    <TimeMarkers duration={effectiveDuration || 60} />
+                <GestureDetector gesture={Gesture.Simultaneous(timelinePinchGesture, Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x)))}>
+                  <TimelineContainer duration={effectiveDuration || 60} pxPerSecSV={pxPerSecSV}>
+                    <WaveformBackground duration={effectiveDuration || 60} tiles={waveformTiles} pxPerSecSV={pxPerSecSV} />
+                    <TimeMarkers duration={effectiveDuration || 60} pxPerSecSV={pxPerSecSV} />
                     <View style={styles.timelineTrack}>
                       {sortedTimeline.map((e, idx, arr) => (
                         <React.Fragment key={e.id}>
-                          <TimelineBlock entry={e} isSelected={selectedEntryId === e.id} sceneName={sceneNamesMap[e.sceneId]} theme={theme} minX={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) / 1000 * PX_PER_SEC : 0} maxX={arr[idx+1] ? arr[idx+1].timestampMillis / 1000 * PX_PER_SEC : (effectiveDuration || 60) * PX_PER_SEC} onSelect={setSelectedEntryId} onCommitMove={handleCommitMove} onCommitResize={handleCommitResize} onActionClick={handleEntryActionClick} dancers={dancers} scene={scenes.find(s => s.id === e.sceneId)} settings={settings} />
-                          {idx < arr.length - 1 && <TransitionX left={((e.timestampMillis+e.durationMillis)/1000)*PX_PER_SEC} width={(arr[idx+1].timestampMillis - (e.timestampMillis+e.durationMillis))/1000*PX_PER_SEC} />}
+                          <TimelineBlock 
+                            entry={e} 
+                            isSelected={selectedEntryId === e.id} 
+                            sceneName={sceneNamesMap[e.sceneId]} 
+                            theme={theme} 
+                            minTs={arr[idx-1] ? (arr[idx-1].timestampMillis + arr[idx-1].durationMillis) : 0} 
+                            maxTs={arr[idx+1] ? arr[idx+1].timestampMillis : (effectiveDuration || 60) * 1000} 
+                            pxPerSecSV={pxPerSecSV}
+                            onSelect={setSelectedEntryId} 
+                            onCommitMove={handleCommitMove} 
+                            onCommitResize={handleCommitResize} 
+                            onActionClick={handleEntryActionClick} 
+                            dancers={dancers} 
+                            scene={scenes.find(s => s.id === e.sceneId)} 
+                            settings={settings} 
+                          />
+                          {idx < arr.length - 1 && (
+                            <TransitionX 
+                              startMs={e.timestampMillis + e.durationMillis}
+                              durationMs={arr[idx+1].timestampMillis - (e.timestampMillis + e.durationMillis)}
+                              pxPerSecSV={pxPerSecSV}
+                            />
+                          )}
                         </React.Fragment>
                       ))}
                     </View>
-                  </View>
+                  </TimelineContainer>
                 </GestureDetector>
               </Animated.ScrollView>
+              
+              {/* Timeline Zoom Controls */}
+              <View style={[styles.timelineZoomControls, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <TouchableOpacity style={styles.zoomBtn} onPress={() => { timelineZoom.value = withTiming(1); setTimelineZoomUI(100); }}>
+                  <Text style={[styles.zoomText, { color: theme.text }]}>{timelineZoomUI}%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nz = Math.min(5, (Math.floor(timelineZoom.value * 4) + 1) / 4); timelineZoom.value = withTiming(nz); setTimelineZoomUI(Math.round(nz * 100)); }}>
+                  <Ionicons name="add" size={16} color={theme.text} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.zoomBtn} onPress={() => { const nz = Math.max(0.5, (Math.ceil(timelineZoom.value * 4) - 1) / 4); timelineZoom.value = withTiming(nz); setTimelineZoomUI(Math.round(nz * 100)); }}>
+                  <Ionicons name="remove" size={16} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+
               <View style={[styles.needle, { left: CENTER_OFFSET }]} pointerEvents="none" />
             </View>
             <View style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
@@ -1987,6 +2102,7 @@ const styles = StyleSheet.create({
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   doneBtn: { padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   zoomControls: { position: 'absolute', right: 15, zIndex: 100, flexDirection: 'row', borderRadius: 20, padding: 4, borderWidth: 1 },
+  timelineZoomControls: { position: 'absolute', top: 4, right: 8, zIndex: 100, flexDirection: 'row', borderRadius: 15, padding: 2, borderWidth: 1 },
   historyControls: { position: 'absolute', left: 15, zIndex: 100, flexDirection: 'row', borderRadius: 20, padding: 4, borderWidth: 1 },
   zoomBtn: { paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', justifyContent: 'center' },
   zoomText: { fontSize: 11, fontWeight: 'bold' },

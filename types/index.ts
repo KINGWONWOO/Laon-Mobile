@@ -195,9 +195,11 @@ export type Formation = {
   roomId: string;
   userId: string;
   title: string;
-  audioUrl?: string; // supabase storage URL or external
+  audioUrl?: string;
   videoSettings?: VideoSettings;
   settings: FormationSettings;
   data: FormationData;
   createdAt: number;
+  isPublished?: boolean;
+  isLocal?: boolean;
 };

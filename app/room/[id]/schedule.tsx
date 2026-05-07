@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Image, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -7,10 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, theme, currentUser, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, isPro, blockUser, reportContent } = useAppContext();
+  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed, theme, currentUser, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, sendDirectReminder, isPro, blockUser, reportContent, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
@@ -20,7 +22,61 @@ export default function ScheduleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
-  
+  const [isSendingUnreadReminder, setIsSendingUnreadReminder] = useState(false);
+
+  // Zoom controls — 100% = fit-all scale
+  // fitScaleSV is a shared value so worklets (pinch) can read it reliably
+  const fitScaleSV = useSharedValue(1);
+  const scale1 = useSharedValue(1);
+  const saved1 = useSharedValue(1);
+  const scale2 = useSharedValue(1);
+  const saved2 = useSharedValue(1);
+  const [displayPct1, setDisplayPct1] = useState(100);
+  const [displayPct2, setDisplayPct2] = useState(100);
+
+  const adjustScale = (which: 1 | 2, deltaPct: number) => {
+    const sRef = which === 1 ? scale1 : scale2;
+    const svRef = which === 1 ? saved1 : saved2;
+    const setDisplay = which === 1 ? setDisplayPct1 : setDisplayPct2;
+    const currentPct = which === 1 ? displayPct1 : displayPct2;
+    const newPct = Math.min(Math.max(currentPct + deltaPct, 30), 300);
+    const newScale = (newPct / 100) * fitScaleSV.value;
+    sRef.value = withTiming(newScale, { duration: 180 });
+    svRef.value = newScale;
+    setDisplay(newPct);
+  };
+
+  const pinch1 = Gesture.Pinch()
+    .onUpdate(e => { scale1.value = Math.min(Math.max(saved1.value * e.scale, fitScaleSV.value * 0.3), fitScaleSV.value * 3); })
+    .onEnd(() => { saved1.value = scale1.value; runOnJS(setDisplayPct1)(Math.round((scale1.value / fitScaleSV.value) * 100)); });
+  const pinch2 = Gesture.Pinch()
+    .onUpdate(e => { scale2.value = Math.min(Math.max(saved2.value * e.scale, fitScaleSV.value * 0.3), fitScaleSV.value * 3); })
+    .onEnd(() => { saved2.value = scale2.value; runOnJS(setDisplayPct2)(Math.round((scale2.value / fitScaleSV.value) * 100)); });
+  // transformOrigin keeps the left edge fixed on scale — no translateX needed (avoids breaking touch targets)
+  const animStyle1 = useAnimatedStyle(() => ({ transform: [{ scale: scale1.value }] }));
+  const animStyle2 = useAnimatedStyle(() => ({ transform: [{ scale: scale2.value }] }));
+
+  // Auto-fit: 100% = entire grid visible on screen
+  useEffect(() => {
+    if (!activeSchedule || !selectedScheduleId) return;
+    const uniqueDatesCount = Array.from(new Set(activeSchedule.options.map((o: any) => String(o.dateTime).split(' ')[0]))).length;
+    // cell width 50 + 2px margin each side, time label column 52
+    const contentWidth = 52 + uniqueDatesCount * 52;
+    const availableWidth = Dimensions.get('window').width - 48;
+    const fitScale = Math.min(1, Math.max(0.2, availableWidth / contentWidth));
+    fitScaleSV.value = fitScale;
+    scale1.value = fitScale;
+    saved1.value = fitScale;
+    scale2.value = fitScale;
+    saved2.value = fitScale;
+    setDisplayPct1(100);
+    setDisplayPct2(100);
+  }, [selectedScheduleId]);
+
+  useEffect(() => {
+    if (selectedScheduleId) markScheduleViewed(selectedScheduleId);
+  }, [selectedScheduleId]);
+
   const [showVoterModal, setShowVoterModal] = useState(false);
   const [voterModalTitle, setVoterModalTitle] = useState('');
   const [votersToDisplay, setVotersToDisplay] = useState<string[]>([]);
@@ -313,8 +369,24 @@ export default function ScheduleScreen() {
     const nonParticipants = (currentRoom?.members || []).filter(mId => !participants.includes(mId));
     const isOwner = schedule.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id;
 
-    const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => String(o.dateTime).split(' ')[0]))).sort();
-    const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt((String(o.dateTime) || ' 00').split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b);
+    const allMembers = currentRoom?.members || [];
+    const viewedMembers = schedule.viewedBy || [];
+    const readAndParticipated = participants;
+    const readNotParticipated = allMembers.filter(id => viewedMembers.includes(id) && !participants.includes(id));
+    const unreadMembers = allMembers.filter(id => !viewedMembers.includes(id) && !participants.includes(id));
+
+    const handleSendUnreadReminder = async () => {
+      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: '취소', style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+      setIsSendingUnreadReminder(true);
+      try {
+        await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${schedule.title}" 일정 조율을 아직 확인하지 않으셨어요!`);
+        Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), '알림을 보냈습니다.');
+      } catch (e: any) { Alert.alert('오류', e.message); }
+      finally { setIsSendingUnreadReminder(false); }
+    };
+
+    const uniqueDates = Array.from(new Set(schedule.options.map((o: any) => String(o.dateTime).split(' ')[0]))).sort() as string[];
+    const hours = Array.from(new Set(schedule.options.map((o: any) => parseInt((String(o.dateTime) || ' 00').split(' ')[1].split(':')[0])))).sort((a: any, b: any) => a - b) as number[];
 
     const ranked = schedule.options.map((opt: any) => ({
       ...opt,
@@ -324,6 +396,7 @@ export default function ScheduleScreen() {
 
     return (
       <Modal visible={!!selectedScheduleId} animationType="slide" transparent={false} onRequestClose={() => setSelectedScheduleId(null)}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
           <View style={styles.detailHeader}>
             <TouchableOpacity onPress={() => setSelectedScheduleId(null)} style={styles.closeBtn}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
@@ -348,104 +421,122 @@ export default function ScheduleScreen() {
             
             <Text style={[styles.detailTitle, { color: theme.text }]}>{schedule.title}</Text>
             
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>내 시간 선택</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('timePreference')}</Text>
+              <View style={[styles.zoomBar, { borderColor: theme.border }]}>
+                <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(1, -10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>−</Text></TouchableOpacity>
+                <Text style={[styles.zoomPct, { color: theme.primary, borderLeftWidth: 1, borderRightWidth: 1, borderColor: theme.border }]}>{displayPct1}%</Text>
+                <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(1, 10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>+</Text></TouchableOpacity>
+              </View>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
-              <View>
-                <View style={styles.matrixRow}>
-                  <View style={styles.timeLabelCell} />
-                  {uniqueDates.map(date => {
-                    const d = new Date(date as string);
-                    return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
-                  })}
-                </View>
-                {hours.map(hour => (
-                  <View key={hour as number} style={styles.matrixRow}>
-                    <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+              <GestureDetector gesture={pinch1}>
+                <Animated.View style={[animStyle1, { transformOrigin: [0, '50%', 0] }]}>
+                  <View style={styles.matrixRow}>
+                    <View style={styles.timeLabelCell} />
                     {uniqueDates.map(date => {
-                      const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
-                      const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
-                      if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
-                      const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
-                      return (
-                        <TouchableOpacity key={date as string} disabled={isClosed} activeOpacity={0.7} style={[styles.gridCell, isSelected && { backgroundColor: theme.primary + '20', borderColor: theme.primary }]} onPress={() => {
-                          const currentRes = schedule.responses[currentUser?.id || ''] || [];
-                          respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
-                        }}>
-                          {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
-                        </TouchableOpacity>
-                      );
+                      const d = new Date(date as string);
+                      return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                     })}
                   </View>
-                ))}
-              </View>
+                  {hours.map(hour => (
+                    <View key={hour} style={styles.matrixRow}>
+                      <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+                      {uniqueDates.map(date => {
+                        const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                        const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                        if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+                        const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
+                        return (
+                          <TouchableOpacity key={date as string} disabled={isClosed} activeOpacity={0.7} style={[styles.gridCell, isSelected && { backgroundColor: theme.primary + '20', borderColor: theme.primary }]} onPress={() => {
+                            const currentRes = schedule.responses[currentUser?.id || ''] || [];
+                            respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
+                          }}>
+                            {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </Animated.View>
+              </GestureDetector>
             </ScrollView>
 
-            <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 20 }]}>전체 투표 현황</Text>
+            <View style={[styles.sectionHeaderRow, { marginTop: 20 }]}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('participationStatus')}</Text>
+              <View style={[styles.zoomBar, { borderColor: theme.border }]}>
+                <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(2, -10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>−</Text></TouchableOpacity>
+                <Text style={[styles.zoomPct, { color: theme.primary, borderLeftWidth: 1, borderRightWidth: 1, borderColor: theme.border }]}>{displayPct2}%</Text>
+                <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(2, 10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>+</Text></TouchableOpacity>
+              </View>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
-              <View>
-                <View style={styles.matrixRow}>
-                  <View style={styles.timeLabelCell} />
-                  {uniqueDates.map(date => {
-                    const d = new Date(date as string);
-                    return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
-                  })}
-                </View>
-                {hours.map(hour => (
-                  <View key={hour as number} style={styles.matrixRow}>
-                    <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+              <GestureDetector gesture={pinch2}>
+                <Animated.View style={[animStyle2, { transformOrigin: [0, '50%', 0] }]}>
+                  <View style={styles.matrixRow}>
+                    <View style={styles.timeLabelCell} />
                     {uniqueDates.map(date => {
-                      const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
-                      const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
-                      if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
-                      const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
-                      return (
-                        <TouchableOpacity key={date as string} activeOpacity={0.9} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: 'transparent' }]} onPress={() => {
-                          if (votersForThisOpt.length > 0) {
-                            setVotersToDisplay(votersForThisOpt);
-                            setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
-                            setShowVoterModal(true);
-                          }
-                        }}>
-                          {votersForThisOpt.length > 0 && <Text style={{fontSize: 9, fontWeight: 'bold', color: theme.background}}>{votersForThisOpt.length}</Text>}
-                        </TouchableOpacity>
-                      );
+                      const d = new Date(date as string);
+                      return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                     })}
                   </View>
-                ))}
-              </View>
+                  {hours.map(hour => (
+                    <View key={hour} style={styles.matrixRow}>
+                      <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+                      {uniqueDates.map(date => {
+                        const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                        const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                        if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+                        const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
+                        return (
+                          <TouchableOpacity key={date as string} activeOpacity={0.9} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: 'transparent' }]} onPress={() => {
+                            if (votersForThisOpt.length > 0) {
+                              setVotersToDisplay(votersForThisOpt);
+                              setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
+                              setShowVoterModal(true);
+                            }
+                          }}>
+                            {votersForThisOpt.length > 0 && <Text style={{fontSize: 9, fontWeight: 'bold', color: theme.background}}>{votersForThisOpt.length}</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </Animated.View>
+              </GestureDetector>
             </ScrollView>
 
+            <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 20 }]}>{t('participationStatus')}</Text>
             <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
-              <View style={styles.voterRow}>
-                <View style={[styles.voterLabelPill, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 11}}>참여 {participants.length}</Text></View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
-                  {participants.map(vId => (
-                    <View key={vId} style={[styles.namePill, {backgroundColor: theme.primary + '10'}]}><Text style={{fontSize: 10, fontWeight: '800', color: theme.primary}}>{getUserById(vId)?.name || '?'}</Text></View>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={[styles.voterRow, { marginTop: 12 }]}>
-                <View style={[styles.voterLabelPill, {backgroundColor: theme.textSecondary + '15'}]}><Text style={{color: theme.textSecondary, fontWeight:'800', fontSize: 11}}>미참여 {nonParticipants.length}</Text></View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.avatarScroll}>
-                  {nonParticipants.map(vId => (
-                    <View key={vId} style={[styles.namePill, {backgroundColor: theme.textSecondary + '10'}]}><Text style={{fontSize: 10, fontWeight: '800', color: theme.textSecondary}}>{getUserById(vId)?.name || '?'}</Text></View>
-                  ))}
-                </ScrollView>
-              </View>
-              
-              {!isClosed && isOwner && nonParticipants.length > 0 && (
-                <TouchableOpacity 
-                  style={[styles.manualReminderBtn, {backgroundColor: theme.primary + '15'}]}
-                  onPress={handleSendReminder}
-                  disabled={isSendingReminder}
-                >
-                  {isSendingReminder ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
-                  ) : (
-                    <>
-                      <Ionicons name="notifications" size={16} color={theme.primary} />
-                      <Text style={{color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 13}}>미응답자에게 재촉 알림 보내기 (PRO)</Text>
-                    </>
+              {([
+                { key: 'readParticipated', members: readAndParticipated, color: theme.primary, bg: theme.primary + '15', nameBg: theme.primary + '10' },
+                { key: 'readNotParticipated', members: readNotParticipated, color: '#FFA500', bg: '#FFA50025', nameBg: '#FFA50015' },
+                { key: 'unread', members: unreadMembers, color: theme.textSecondary, bg: theme.textSecondary + '15', nameBg: theme.textSecondary + '10' },
+              ] as const).map(({ key, members, color, bg, nameBg }, idx) => (
+                <View key={key} style={idx > 0 ? { marginTop: 16 } : undefined}>
+                  <View style={[styles.voterLabelPill, { backgroundColor: bg, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                    <Text style={{ color, fontWeight: '800', fontSize: 11 }} numberOfLines={1}>{t(key)} · {members.length}</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {members.length > 0
+                      ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUserById(vId)?.name || '?'}</Text>)
+                      : <Text style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 4, opacity: 0.5 }}>-</Text>
+                    }
+                  </ScrollView>
+                </View>
+              ))}
+
+              {!isClosed && isOwner && readNotParticipated.length > 0 && (
+                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.primary + '15', marginTop: 16 }]} onPress={handleSendReminder} disabled={isSendingReminder}>
+                  {isSendingReminder ? <ActivityIndicator size="small" color={theme.primary} /> : (
+                    <><Ionicons name="notifications" size={15} color={theme.primary} /><Text style={{ color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('notParticipants')} 알림 (PRO)</Text></>
+                  )}
+                </TouchableOpacity>
+              )}
+              {!isClosed && isOwner && unreadMembers.length > 0 && (
+                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.textSecondary + '10', marginTop: 8 }]} onPress={handleSendUnreadReminder} disabled={isSendingUnreadReminder}>
+                  {isSendingUnreadReminder ? <ActivityIndicator size="small" color={theme.textSecondary} /> : (
+                    <><Ionicons name="eye-off-outline" size={15} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('sendUnreadReminder')}</Text></>
                   )}
                 </TouchableOpacity>
               )}
@@ -510,12 +601,13 @@ export default function ScheduleScreen() {
 
           <OptionModal visible={showScheduleOptions} onClose={() => setShowScheduleOptions(false)} options={scheduleOptions} title="조율 설정" theme={theme} />
         </View>
+        </GestureHandlerRootView>
       </Modal>
     );
   };
 
   const CompactPicker = ({ date, onDateChange, show, setShow }: any) => {
-    const days = Array.from({length: 14}).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+    const days = Array.from({length: 30}).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
     const hours = Array.from({length: 24}).map((_, i) => i);
     const minutes = [0, 10, 20, 30, 40, 50, 59];
     return (
@@ -547,7 +639,7 @@ export default function ScheduleScreen() {
   };
 
   const reminderOptions = [
-    { label: '10분 전', value: 10 },
+    { label: '없음', value: 0 },
     { label: '30분 전', value: 30 },
     { label: '1시간 전', value: 60 },
     { label: '3시간 전', value: 180 },
@@ -586,7 +678,7 @@ export default function ScheduleScreen() {
               <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>날짜 선택 (다중)</Text>
               <View style={[styles.dateSelectionContainer, { backgroundColor: theme.background }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {Array.from({length: 14}).map((_, i) => {
+                  {Array.from({length: 30}).map((_, i) => {
                     const d = new Date(); d.setDate(d.getDate() + i);
                     const isSel = !!selectedDates.find(sd => sd.toDateString() === d.toDateString());
                     return (
@@ -639,7 +731,7 @@ export default function ScheduleScreen() {
                 </View>
               </View>
               
-              <View style={[styles.settingItem, {marginTop: 10}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={[styles.settingItem, {marginTop: 10}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
               {hasDeadline && (
                 <View style={{marginTop: 10, marginBottom: 20}}>
                   <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
@@ -704,7 +796,7 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   deadlineInfo: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
   detailTitle: { fontSize: 26, fontWeight: '900', marginBottom: 25, letterSpacing: -1, lineHeight: 34 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 15, letterSpacing: -0.5 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   matrixContainer: { marginBottom: 10, marginTop: 5 },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
   timeLabelCell: { width: 50, alignItems: 'center', justifyContent: 'center', height: 40 },
@@ -715,6 +807,11 @@ const styles = StyleSheet.create({
   gridCell: { width: 50, height: 40, borderWidth: 1, borderRadius: 10, margin: 1, alignItems: 'center', justifyContent: 'center' },
   gridCellEmpty: { width: 50, height: 40 },
   voterSummaryCard: { padding: 20, borderRadius: 32, marginBottom: 24, marginTop: 10 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  zoomBar: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, overflow: 'hidden' },
+  zoomBtnInner: { paddingHorizontal: 10, paddingVertical: 5 },
+  zoomBtnText: { fontSize: 16, fontWeight: '700', lineHeight: 20 },
+  zoomPct: { fontSize: 11, fontWeight: '800', minWidth: 38, textAlign: 'center', paddingVertical: 5 },
   voterRow: { flexDirection: 'row', alignItems: 'center' },
   voterLabelPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginRight: 12 },
   avatarScroll: { flex: 1 },

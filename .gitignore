@@ -33,6 +33,8 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.dev.vars
+secu.txt
 google-services.json
 GoogleService-Info.plist
 

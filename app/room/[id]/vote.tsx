@@ -13,7 +13,7 @@ const { width } = Dimensions.get('window');
 
 export default function VoteScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, currentUser, theme, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, blockUser, reportContent, isPro } = useAppContext();
+  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, markVoteViewed, currentUser, theme, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, sendDirectReminder, blockUser, reportContent, isPro, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -41,6 +41,7 @@ export default function VoteScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [isSendingUnreadReminder, setIsSendingUnreadReminder] = useState(false);
 
   // Option Modal states
   const [showVoteOptions, setShowVoteOptions] = useState(false);
@@ -58,6 +59,10 @@ export default function VoteScreen() {
     const found = roomVotes.find(v => v.id === selectedVoteId);
     if (found) setCachedVote(found);
   }, [roomVotes, selectedVoteId]);
+
+  useEffect(() => {
+    if (selectedVoteId) markVoteViewed(selectedVoteId);
+  }, [selectedVoteId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -172,6 +177,23 @@ export default function VoteScreen() {
     const isOwner = vote.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id;
     const myResponses = vote.responses[currentUser?.id || ''] || [];
 
+    const allMembers = currentRoom?.members || [];
+    const responders = Object.keys(vote.responses);
+    const viewedMembers = vote.viewedBy || [];
+    const readAndParticipated = responders;
+    const readNotParticipated = allMembers.filter(id => viewedMembers.includes(id) && !responders.includes(id));
+    const unreadMembers = allMembers.filter(id => !viewedMembers.includes(id) && !responders.includes(id));
+
+    const handleSendUnreadReminder = async () => {
+      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: '취소', style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+      setIsSendingUnreadReminder(true);
+      try {
+        await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${vote.question}" 투표를 아직 확인하지 않으셨어요!`);
+        Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), '알림을 보냈습니다.');
+      } catch (e: any) { Alert.alert('오류', e.message); }
+      finally { setIsSendingUnreadReminder(false); }
+    };
+
     return (
       <Modal visible={!!selectedVoteId} animationType="slide" transparent={false} onRequestClose={() => setSelectedVoteId(null)}>
         <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
@@ -255,6 +277,42 @@ export default function VoteScreen() {
               })}
             </View>
 
+            <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 24, marginBottom: 12 }]}>{t('participationStatus')}</Text>
+            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
+              {([
+                { key: 'readParticipated', members: readAndParticipated, color: theme.primary, bg: theme.primary + '15', nameBg: theme.primary + '10' },
+                { key: 'readNotParticipated', members: readNotParticipated, color: '#FFA500', bg: '#FFA50025', nameBg: '#FFA50015' },
+                { key: 'unread', members: unreadMembers, color: theme.textSecondary, bg: theme.textSecondary + '15', nameBg: theme.textSecondary + '10' },
+              ] as const).map(({ key, members, color, bg, nameBg }, idx) => (
+                <View key={key} style={idx > 0 ? { marginTop: 16 } : undefined}>
+                  <View style={[styles.voterLabelPill, { backgroundColor: bg, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                    <Text style={{ color, fontWeight: '800', fontSize: 11 }} numberOfLines={1}>{t(key)} · {members.length}</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {members.length > 0
+                      ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUserById(vId)?.name || '?'}</Text>)
+                      : <Text style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 4, opacity: 0.5 }}>-</Text>
+                    }
+                  </ScrollView>
+                </View>
+              ))}
+
+              {!isClosed && isOwner && readNotParticipated.length > 0 && (
+                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.primary + '15', marginTop: 16 }]} onPress={handleSendReminder} disabled={isSendingReminder}>
+                  {isSendingReminder ? <ActivityIndicator size="small" color={theme.primary} /> : (
+                    <><Ionicons name="notifications" size={15} color={theme.primary} /><Text style={{ color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('notParticipants')} 알림 (PRO)</Text></>
+                  )}
+                </TouchableOpacity>
+              )}
+              {!isClosed && isOwner && unreadMembers.length > 0 && (
+                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.textSecondary + '10', marginTop: 8 }]} onPress={handleSendUnreadReminder} disabled={isSendingUnreadReminder}>
+                  {isSendingUnreadReminder ? <ActivityIndicator size="small" color={theme.textSecondary} /> : (
+                    <><Ionicons name="eye-off-outline" size={15} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('sendUnreadReminder')}</Text></>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
             {isClosed && (
               <View style={[styles.resultBanner, {backgroundColor: theme.primary + '15', borderColor: theme.primary}]}>
                 <Ionicons name="trophy" size={24} color={theme.primary} />
@@ -267,6 +325,40 @@ export default function VoteScreen() {
       </Modal>
     );
   };
+
+  const CompactPicker = ({ date, onDateChange, show, setShow }: any) => {
+    const days = Array.from({length: 30}).map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+    const hours = Array.from({length: 24}).map((_, i) => i);
+    const minutes = [0, 10, 20, 30, 40, 50, 59];
+    return (
+      <View style={[styles.compactPicker, {backgroundColor: theme.background}]}>
+        <View style={styles.pickerHeader}>
+          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>날짜</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>시간</Text></TouchableOpacity>
+        </View>
+        {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => {
+          const isSelected = date.toDateString() === d.toDateString();
+          return (
+            <TouchableOpacity key={i} style={[styles.smallDateBtn, { backgroundColor: isSelected ? theme.primary : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') }]} onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}>
+              <Text style={{fontSize: 10, color: isSelected ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+              <Text style={{fontSize: 16, fontWeight: '900', color: isSelected ? '#fff' : theme.text}}>{d.getDate()}</Text>
+            </TouchableOpacity>
+          );
+        })}</ScrollView>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
+      </View>
+    );
+  };
+
+  const reminderOptions = [
+    { label: '없음', value: 0 },
+    { label: '30분 전', value: 30 },
+    { label: '1시간 전', value: 60 },
+    { label: '3시간 전', value: 180 },
+    { label: '6시간 전', value: 360 },
+    { label: '12시간 전', value: 720 },
+    { label: '1일 전', value: 1440 },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
@@ -297,8 +389,35 @@ export default function VoteScreen() {
               <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
               <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
               <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>푸시 알림 전송</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
-              
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+
+              {hasDeadline && (
+                <View style={{marginTop: 10, marginBottom: 20}}>
+                  <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
+                    <Ionicons name="calendar" size={18} color={theme.primary} />
+                    <Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{deadline.toLocaleString()}</Text>
+                  </TouchableOpacity>
+                  {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
+                </View>
+              )}
+
+              {hasDeadline && (
+                <>
+                  <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>마감 전 알림 설정</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
+                    {reminderOptions.map((opt) => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.reminderOpt, {backgroundColor: theme.background, borderColor: reminderMinutes === opt.value ? theme.primary : theme.border}, reminderMinutes === opt.value && {borderWidth: 2}]}
+                        onPress={() => setReminderMinutes(opt.value)}
+                      >
+                        <Text style={{color: reminderMinutes === opt.value ? theme.primary : theme.textSecondary, fontWeight: '700'}}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
               <TouchableOpacity onPress={showEditModal ? handleUpdateVote : handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? '변경사항 저장' : '투표 시작하기'}</Text>}</TouchableOpacity>
             </ScrollView>
           </View></View>
@@ -362,5 +481,19 @@ const styles = StyleSheet.create({
   voterModalContent: { padding: 24, borderRadius: 32, width: '100%' },
   voterList: { marginTop: 16 },
   voterListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.05)' },
-  voterAvatar: { width: 40, height: 40, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 16 }
+  voterAvatar: { width: 40, height: 40, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  voterSummaryCard: { padding: 20, borderRadius: 32, marginBottom: 24 },
+  voterRow: { flexDirection: 'row', alignItems: 'center' },
+  voterLabelPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginRight: 12 },
+  avatarScroll: { flex: 1 },
+  namePill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginRight: 6 },
+  manualReminderBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, marginTop: 16, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
+  compactRow: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 20 },
+  compactPicker: { borderRadius: 24, marginTop: 12, overflow: 'hidden', paddingBottom: 10 },
+  pickerHeader: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.02)' },
+  pickerTab: { flex: 1, padding: 15, alignItems: 'center' },
+  smallDateBtn: { width: 50, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 16, marginRight: 10 },
+  smallTimeBtn: { padding: 18, alignItems: 'center' },
+  reminderOpt: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, marginRight: 8, borderWidth: 1 },
 });

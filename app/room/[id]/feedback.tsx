@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, TouchableWithoutFeedback } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,9 +14,12 @@ import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import { createTranslator } from '../../../constants/translations';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition, useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -90,8 +93,21 @@ export default function FeedbackScreen() {
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
   const [formationTime, setFormationTime] = useState(0);
   const [formationDuration, setFormationDuration] = useState(60);
-  const formationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [formationSeekMs, setFormationSeekMs] = useState<number | null>(null);
+  const formationTimeRef = useRef(0);
   const [videoTime, setVideoTime] = useState(0);
+
+  // 서브 영상 위치·크기 (핀치/드래그)
+  const SUB_INIT_W = 130;
+  const SUB_INIT_H = Math.round(SUB_INIT_W * (9 / 16));
+  const subPosX = useSharedValue(SCREEN_WIDTH - SUB_INIT_W - 16);
+  const subPosY = useSharedValue(70);
+  const savedPosX = useSharedValue(SCREEN_WIDTH - SUB_INIT_W - 16);
+  const savedPosY = useSharedValue(70);
+  const subW = useSharedValue(SUB_INIT_W);
+  const subH = useSharedValue(SUB_INIT_H);
+  const savedSubW = useSharedValue(SUB_INIT_W);
+  const [subContainerW, setSubContainerW] = useState(SUB_INIT_W);
 
   const [videoDuration, setVideoDuration] = useState(0);
 
@@ -102,19 +118,23 @@ export default function FeedbackScreen() {
     return formations.find(f => f.id === fId);
   }, [selectedVideo, formations]);
 
+  // formationTime ref로 최신값 유지 (interval 클로저에서 사용)
+  const handleFormationTimeUpdate = useCallback((ms: number) => {
+    formationTimeRef.current = ms;
+    setFormationTime(ms);
+  }, []);
+
+  // 안무 영상과 동선 오디오 간 드리프트 보정 (2초마다)
   useEffect(() => {
-    if (isFormation && isFormationPlaying) {
-      formationTimerRef.current = setInterval(() => {
-        setFormationTime(prev => {
-          if (prev >= formationDuration * 1000) return 0;
-          return prev + 50 * playbackRate;
-        });
-      }, 50);
-    } else {
-      if (formationTimerRef.current) clearInterval(formationTimerRef.current);
-    }
-    return () => { if (formationTimerRef.current) clearInterval(formationTimerRef.current); };
-  }, [isFormation, isFormationPlaying, formationDuration, playbackRate]);
+    if (!isFormation || !isFormationPlaying || !subPlayer || !cachedChoreographyUrl) return;
+    const interval = setInterval(() => {
+      const drift = Math.abs(subPlayer.currentTime * 1000 - formationTimeRef.current);
+      if (drift > 800) {
+        subPlayer.currentTime = formationTimeRef.current / 1000;
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl]);
 
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
@@ -140,7 +160,8 @@ export default function FeedbackScreen() {
     if (cachedChoreographyUrl && subPlayer) {
       subPlayer.replace(cachedChoreographyUrl);
       subPlayer.muted = true;
-      subPlayer.play();
+      subPlayer.pause();
+      subPlayer.currentTime = 0;
     }
   }, [cachedChoreographyUrl, subPlayer]);
 
@@ -350,8 +371,14 @@ export default function FeedbackScreen() {
   };
 
   const seekTo = (ms: number) => {
-    if (isFormation) setFormationTime(ms);
-    else if (player) player.currentTime = ms / 1000;
+    if (isFormation) {
+      setFormationTime(ms);
+      setFormationSeekMs(ms);
+      if (subPlayer && cachedChoreographyUrl) subPlayer.currentTime = ms / 1000;
+    } else {
+      if (player) player.currentTime = ms / 1000;
+      if (subPlayer) subPlayer.currentTime = ms / 1000;
+    }
   };
 
   const formatTime = (ms: number) => {
@@ -404,6 +431,50 @@ export default function FeedbackScreen() {
 
   const [barWidth, setBarWidth] = useState(0);
 
+  // 서브 영상 애니메이션·제스처 — 컴포넌트 최상위에 정의해야 Rules of Hooks를 지킴
+  const subAnimStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: subPosX.value,
+    top: subPosY.value,
+    width: subW.value,
+    height: subH.value,
+    zIndex: 120,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: '#000',
+  }));
+
+  const panGesture = Gesture.Pan()
+    .minDistance(6)
+    .onStart(() => {
+      savedPosX.value = subPosX.value;
+      savedPosY.value = subPosY.value;
+    })
+    .onUpdate((e) => {
+      subPosX.value = Math.max(0, Math.min(SCREEN_WIDTH - subW.value, savedPosX.value + e.translationX));
+      subPosY.value = Math.max(0, savedPosY.value + e.translationY);
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => { savedSubW.value = subW.value; })
+    .onUpdate((e) => {
+      const newW = Math.max(90, Math.min(300, savedSubW.value * e.scale));
+      subW.value = newW;
+      subH.value = newW * (9 / 16);
+      runOnJS(setSubContainerW)(Math.round(newW));
+    });
+
+  const tapGesture = Gesture.Tap()
+    .maxDuration(300)
+    .onEnd(() => { runOnJS(handleSwap)(); });
+
+  const subGesture = Gesture.Simultaneous(
+    Gesture.Race(tapGesture, panGesture),
+    pinchGesture
+  );
+
   if (selectedVideo) {
     const videoObj = videos.find((v) => v.id === selectedVideo.id) || selectedVideo;
     const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
@@ -436,8 +507,11 @@ export default function FeedbackScreen() {
             <FormationPlayer
               formation={selectedFormation}
               currentTimeMs={formationTime}
+              seekToMs={formationSeekMs}
+              onTimeUpdate={handleFormationTimeUpdate}
               onDurationDetected={setFormationDuration}
               isPlaying={isFormationPlaying}
+              playbackRate={playbackRate}
               hidePip={true}
             />
             {isMirrorMode && (
@@ -478,40 +552,45 @@ export default function FeedbackScreen() {
 
     const renderSubContent = () => {
       if (!hasChoreography) return null;
+
       return (
-        <TouchableOpacity
-          style={[styles.subVideoContainer, { right: insets.right + 20 }, Shadows.medium]}
-          onPress={handleSwap}
-        >
-          {isSwapped ? (
-            isFormation ? (
-              <View style={{ flex: 1, backgroundColor: "#111" }}>
-                <FormationPlayer formation={selectedFormation!} currentTimeMs={formationTime} isPlaying={isFormationPlaying} hidePip={true} />
-              </View>
+        <GestureDetector gesture={subGesture}>
+          <Animated.View style={[subAnimStyle, Shadows.medium]}>
+            {isSwapped ? (
+              isFormation ? (
+                <FormationPlayer
+                  formation={selectedFormation!}
+                  currentTimeMs={formationTime}
+                  isPlaying={isFormationPlaying}
+                  hidePip={true}
+                  noAudio={true}
+                  containerWidth={subContainerW}
+                />
+              ) : (
+                <VideoView
+                  style={{ flex: 1 }}
+                  player={player}
+                  contentFit="contain"
+                  fullscreenOptions={{ allowsFullscreen: false }}
+                  nativeControls={false}
+                  surfaceType="textureView"
+                />
+              )
             ) : (
               <VideoView
-                style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
-                player={player}
+                style={{ flex: 1 }}
+                player={subPlayer}
                 contentFit="contain"
                 fullscreenOptions={{ allowsFullscreen: false }}
                 nativeControls={false}
                 surfaceType="textureView"
               />
-            )
-          ) : (
-            <VideoView
-              style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
-              player={subPlayer}
-              contentFit="contain"
-              fullscreenOptions={{ allowsFullscreen: false }}
-              nativeControls={false}
-              surfaceType="textureView"
-            />
-          )}
-          <View style={styles.swapIconOverlay}>
-            <Ionicons name="swap-horizontal" size={16} color="#fff" />
-          </View>
-        </TouchableOpacity>
+            )}
+            <View style={styles.swapIconOverlay}>
+              <Ionicons name="swap-horizontal" size={14} color="#fff" />
+            </View>
+          </Animated.View>
+        </GestureDetector>
       );
     };
 
@@ -586,6 +665,7 @@ export default function FeedbackScreen() {
 
     return (
       <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
         <View
           style={[
             styles.fullView,
@@ -610,6 +690,9 @@ export default function FeedbackScreen() {
                 <View style={StyleSheet.absoluteFill} />
               </TouchableWithoutFeedback>
 
+              {/* 서브 영상은 UI 표시 여부와 무관하게 항상 표시 */}
+              {renderSubContent()}
+
               {showControls && (
                 <Animated.View
                   pointerEvents="box-none"
@@ -617,7 +700,6 @@ export default function FeedbackScreen() {
                   exiting={FadeOut}
                   style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
                 >
-                  {renderSubContent()}
                   {renderCustomControls()}
                   <View style={[styles.vControls, { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
                     <TouchableOpacity
@@ -899,6 +981,7 @@ export default function FeedbackScreen() {
             </View>
           </Modal>
         </View>
+        </GestureHandlerRootView>
       </Modal>
     );
   }

@@ -10,8 +10,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider, useAppContext } from '../context/AppContext';
 import { initSentry, withSentry } from '../services/logger';
+import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync } from '../services/NotificationService';
 import { initAds } from '../services/adService';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 initAds();
 initSentry();
