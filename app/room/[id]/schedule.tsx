@@ -39,11 +39,16 @@ export default function ScheduleScreen() {
     const svRef = which === 1 ? saved1 : saved2;
     const setDisplay = which === 1 ? setDisplayPct1 : setDisplayPct2;
     const currentPct = which === 1 ? displayPct1 : displayPct2;
-    const newPct = Math.min(Math.max(currentPct + deltaPct, 30), 300);
-    const newScale = (newPct / 100) * fitScaleSV.value;
+    // Snap to the nearest 10% boundary in the direction of travel
+    // e.g. at 174% pressing + → 180%, pressing − → 170%
+    const newPct = deltaPct > 0
+      ? Math.floor(currentPct / 10) * 10 + 10
+      : Math.ceil(currentPct / 10) * 10 - 10;
+    const clampedPct = Math.min(Math.max(newPct, 30), 300);
+    const newScale = (clampedPct / 100) * fitScaleSV.value;
     sRef.value = withTiming(newScale, { duration: 180 });
     svRef.value = newScale;
-    setDisplay(newPct);
+    setDisplay(clampedPct);
   };
 
   const pinch1 = Gesture.Pinch()
@@ -429,38 +434,48 @@ export default function ScheduleScreen() {
                 <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(1, 10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>+</Text></TouchableOpacity>
               </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
-              <GestureDetector gesture={pinch1}>
-                <Animated.View style={[animStyle1, { transformOrigin: [0, '50%', 0] }]}>
-                  <View style={styles.matrixRow}>
-                    <View style={styles.timeLabelCell} />
-                    {uniqueDates.map(date => {
-                      const d = new Date(date as string);
-                      return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
-                    })}
+            {/* Grid 1: sticky time column + scrollable dates/cells */}
+            <View style={styles.gridWrapper}>
+              <Animated.View style={[animStyle1, { transformOrigin: [0, '50%', 0] }]}>
+                {/* Spacer matching date header row: dateHeaderCell(h:40) + marginBottom(10) = 50 */}
+                <View style={{ height: 50 }} />
+                {hours.map(hour => (
+                  <View key={hour} style={styles.timeLabelCell}>
+                    <Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text>
                   </View>
-                  {hours.map(hour => (
-                    <View key={hour} style={styles.matrixRow}>
-                      <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+                ))}
+              </Animated.View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                <GestureDetector gesture={pinch1}>
+                  <Animated.View style={[animStyle1, { transformOrigin: [0, '50%', 0] }]}>
+                    <View style={{ flexDirection: 'row' }}>
                       {uniqueDates.map(date => {
-                        const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
-                        const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
-                        if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
-                        const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
-                        return (
-                          <TouchableOpacity key={date as string} disabled={isClosed} activeOpacity={0.7} style={[styles.gridCell, isSelected && { backgroundColor: theme.primary + '20', borderColor: theme.primary }]} onPress={() => {
-                            const currentRes = schedule.responses[currentUser?.id || ''] || [];
-                            respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
-                          }}>
-                            {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
-                          </TouchableOpacity>
-                        );
+                        const d = new Date(date as string);
+                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                       })}
                     </View>
-                  ))}
-                </Animated.View>
-              </GestureDetector>
-            </ScrollView>
+                    {hours.map(hour => (
+                      <View key={hour} style={{ flexDirection: 'row' }}>
+                        {uniqueDates.map(date => {
+                          const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                          const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                          if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+                          const isSelected = (schedule.responses[currentUser?.id || ''] || []).includes(opt.id);
+                          return (
+                            <TouchableOpacity key={date as string} disabled={isClosed} activeOpacity={0.7} style={[styles.gridCell, isSelected && { backgroundColor: theme.primary + '20', borderColor: theme.primary }]} onPress={() => {
+                              const currentRes = schedule.responses[currentUser?.id || ''] || [];
+                              respondToSchedule(schedule.id, isSelected ? currentRes.filter((r:string) => r !== opt.id) : [...currentRes, opt.id]);
+                            }}>
+                              {isSelected && <Ionicons name="checkmark" size={12} color={theme.primary} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </Animated.View>
+                </GestureDetector>
+              </ScrollView>
+            </View>
 
             <View style={[styles.sectionHeaderRow, { marginTop: 20 }]}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('participationStatus')}</Text>
@@ -470,41 +485,50 @@ export default function ScheduleScreen() {
                 <TouchableOpacity style={styles.zoomBtnInner} onPress={() => adjustScale(2, 10)}><Text style={[styles.zoomBtnText, { color: theme.text }]}>+</Text></TouchableOpacity>
               </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.matrixContainer}>
-              <GestureDetector gesture={pinch2}>
-                <Animated.View style={[animStyle2, { transformOrigin: [0, '50%', 0] }]}>
-                  <View style={styles.matrixRow}>
-                    <View style={styles.timeLabelCell} />
-                    {uniqueDates.map(date => {
-                      const d = new Date(date as string);
-                      return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
-                    })}
+            {/* Grid 2: sticky time column + scrollable heatmap */}
+            <View style={styles.gridWrapper}>
+              <Animated.View style={[animStyle2, { transformOrigin: [0, '50%', 0] }]}>
+                <View style={{ height: 50 }} />
+                {hours.map(hour => (
+                  <View key={hour} style={styles.timeLabelCell}>
+                    <Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text>
                   </View>
-                  {hours.map(hour => (
-                    <View key={hour} style={styles.matrixRow}>
-                      <View style={styles.timeLabelCell}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>{hour}:00</Text></View>
+                ))}
+              </Animated.View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                <GestureDetector gesture={pinch2}>
+                  <Animated.View style={[animStyle2, { transformOrigin: [0, '50%', 0] }]}>
+                    <View style={{ flexDirection: 'row' }}>
                       {uniqueDates.map(date => {
-                        const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
-                        const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
-                        if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
-                        const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
-                        return (
-                          <TouchableOpacity key={date as string} activeOpacity={0.9} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: 'transparent' }]} onPress={() => {
-                            if (votersForThisOpt.length > 0) {
-                              setVotersToDisplay(votersForThisOpt);
-                              setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
-                              setShowVoterModal(true);
-                            }
-                          }}>
-                            {votersForThisOpt.length > 0 && <Text style={{fontSize: 9, fontWeight: 'bold', color: theme.background}}>{votersForThisOpt.length}</Text>}
-                          </TouchableOpacity>
-                        );
+                        const d = new Date(date as string);
+                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                       })}
                     </View>
-                  ))}
-                </Animated.View>
-              </GestureDetector>
-            </ScrollView>
+                    {hours.map(hour => (
+                      <View key={hour} style={{ flexDirection: 'row' }}>
+                        {uniqueDates.map(date => {
+                          const dateTimeStr = `${date} ${hour.toString().padStart(2, '0')}:00`;
+                          const opt = schedule.options.find((o: any) => o.dateTime === dateTimeStr);
+                          if (!opt) return <View key={date as string} style={styles.gridCellEmpty} />;
+                          const votersForThisOpt = Object.entries(schedule.responses).filter(([_, ids]: any) => ids.includes(opt.id)).map(([uId]) => uId);
+                          return (
+                            <TouchableOpacity key={date as string} activeOpacity={0.9} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: theme.border + '50' }]} onPress={() => {
+                              if (votersForThisOpt.length > 0) {
+                                setVotersToDisplay(votersForThisOpt);
+                                setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
+                                setShowVoterModal(true);
+                              }
+                            }}>
+                              {votersForThisOpt.length > 0 && <Text style={{fontSize: 9, fontWeight: 'bold', color: theme.background}}>{votersForThisOpt.length}</Text>}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </Animated.View>
+                </GestureDetector>
+              </ScrollView>
+            </View>
 
             <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 20 }]}>{t('participationStatus')}</Text>
             <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
@@ -799,9 +823,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   matrixContainer: { marginBottom: 10, marginTop: 5 },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
+  gridWrapper: { flexDirection: 'row', marginBottom: 10, marginTop: 5 },
   timeLabelCell: { width: 50, alignItems: 'center', justifyContent: 'center', height: 40 },
   timeLabelText: { fontSize: 11, fontWeight: '600' },
-  dateHeaderCell: { width: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  dateHeaderCell: { width: 50, height: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   dateHeaderText: { fontSize: 11, fontWeight: '600' },
   dateHeaderDay: { fontSize: 16, fontWeight: 'bold' },
   gridCell: { width: 50, height: 40, borderWidth: 1, borderRadius: 10, margin: 1, alignItems: 'center', justifyContent: 'center' },
