@@ -317,14 +317,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (vote) {
         targetTitle = vote.question;
         const responders = Object.keys(vote.responses || {});
-        nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
+        nonResponders = (room.members || []).filter((mid: string) => !responders.includes(mid) && mid !== currentUser?.id);
       }
     } else {
       const sch = schedulesMapped.find(s => s.id === targetId);
       if (sch) {
         targetTitle = sch.title;
         const responders = Object.keys(sch.responses || {});
-        nonResponders = (room.members || []).filter(mid => !responders.includes(mid) && mid !== currentUser?.id);
+        nonResponders = (room.members || []).filter((mid: string) => !responders.includes(mid) && mid !== currentUser?.id);
       }
     }
     if (nonResponders.length > 0) {

@@ -24,9 +24,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, userLanguage } = useAppContext();
+  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, language } = useAppContext();
 
-  const t = useMemo(() => createTranslator(userLanguage || 'ko'), [userLanguage]);
+  const t = useMemo(() => createTranslator(language || 'ko'), [language]);
 
   const insets = useSafeAreaInsets();
 
@@ -70,7 +70,7 @@ export default function FeedbackScreen() {
   const [filterType, setFilterType] = useState<'all' | 'choreography' | 'formation'>('all');
 
   const [showControls, setShowControls] = useState(true);
-  const controlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetControlsTimer = () => {
     setShowControls(true);
@@ -124,18 +124,6 @@ export default function FeedbackScreen() {
     setFormationTime(ms);
   }, []);
 
-  // 안무 영상과 동선 오디오 간 드리프트 보정 (2초마다)
-  useEffect(() => {
-    if (!isFormation || !isFormationPlaying || !subPlayer || !cachedChoreographyUrl) return;
-    const interval = setInterval(() => {
-      const drift = Math.abs(subPlayer.currentTime * 1000 - formationTimeRef.current);
-      if (drift > 800) {
-        subPlayer.currentTime = formationTimeRef.current / 1000;
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl]);
-
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
     p.preservesPitch = true;
@@ -148,6 +136,18 @@ export default function FeedbackScreen() {
     p.preservesPitch = true;
     if (cachedChoreographyUrl) p.play();
   });
+
+  // 안무 영상과 동선 오디오 간 드리프트 보정 (2초마다)
+  useEffect(() => {
+    if (!isFormation || !isFormationPlaying || !subPlayer || !cachedChoreographyUrl) return;
+    const interval = setInterval(() => {
+      const drift = Math.abs(subPlayer.currentTime * 1000 - formationTimeRef.current);
+      if (drift > 800) {
+        subPlayer.currentTime = formationTimeRef.current / 1000;
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl]);
   useEffect(() => {
     if (cachedVideoUrl && player) {
       player.replace(cachedVideoUrl);
@@ -166,7 +166,7 @@ export default function FeedbackScreen() {
   }, [cachedChoreographyUrl, subPlayer]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (selectedVideo && !isFormation && player) {
       interval = setInterval(() => {
         try {
@@ -297,7 +297,7 @@ export default function FeedbackScreen() {
         '영상 업로드 제한',
         `Free 플랜은 방당 최대 ${access.limit}개까지 영상을 업로드할 수 있습니다.\nPro 멤버십으로 100개까지 업로드해보세요!`,
         [
-          { text: '취소', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           { text: '멤버십 보기', onPress: () => router.push('/subscription') }
         ]
       );
@@ -305,7 +305,7 @@ export default function FeedbackScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      if (!videoTitle.trim()) return Alert.alert('오류', '영상 제목을 입력해주세요.');
+      if (!videoTitle.trim()) return Alert.alert(t('errorTitle'), '영상 제목을 입력해주세요.');
       setIsLoading(true);
       try {
         const videoUri = result.assets[0].uri;
@@ -329,7 +329,7 @@ export default function FeedbackScreen() {
       const refreshed = videos.find(v => v.id === selectedVideo.id);
       if (refreshed) setSelectedVideo(refreshed);
     } catch (error) {
-      Alert.alert('오류', '댓글 등록에 실패했습니다.');
+      Alert.alert(t('errorTitle'), '댓글 등록에 실패했습니다.');
     } finally {
       setIsSubmittingComment(false);
     }
@@ -343,9 +343,9 @@ export default function FeedbackScreen() {
   };
 
   const handleDeleteVideo = (video: VideoFeedback) => {
-    Alert.alert('영상 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert('영상 삭제', t('deleteConfirmMsg'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         await deleteVideo(video.id);
         if (selectedVideo?.id === video.id) setSelectedVideo(null);
         refreshAllData();
@@ -361,9 +361,9 @@ export default function FeedbackScreen() {
   };
 
   const handleDeleteComment = (cid: string) => {
-    Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert('댓글 삭제', t('deleteConfirmMsg'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         await deleteComment(cid);
         refreshAllData();
       }}
@@ -487,7 +487,7 @@ export default function FeedbackScreen() {
               style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
               player={subPlayer}
               contentFit="contain"
-              fullscreenOptions={{ allowsFullscreen: false }}
+              fullscreenOptions={{ enable: false }}
               nativeControls={false}
               surfaceType="textureView"
             />
@@ -536,7 +536,7 @@ export default function FeedbackScreen() {
             style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
             player={player}
             contentFit="contain"
-            fullscreenOptions={{ allowsFullscreen: false }}
+            fullscreenOptions={{ enable: false }}
             nativeControls={false}
             surfaceType="textureView"
           />
@@ -571,7 +571,7 @@ export default function FeedbackScreen() {
                   style={{ flex: 1 }}
                   player={player}
                   contentFit="contain"
-                  fullscreenOptions={{ allowsFullscreen: false }}
+                  fullscreenOptions={{ enable: false }}
                   nativeControls={false}
                   surfaceType="textureView"
                 />
@@ -581,7 +581,7 @@ export default function FeedbackScreen() {
                 style={{ flex: 1 }}
                 player={subPlayer}
                 contentFit="contain"
-                fullscreenOptions={{ allowsFullscreen: false }}
+                fullscreenOptions={{ enable: false }}
                 nativeControls={false}
                 surfaceType="textureView"
               />
@@ -887,7 +887,7 @@ export default function FeedbackScreen() {
             onClose={() => setShowCommentOptions(false)}
             options={[
               {
-                label: "수정",
+                label: t('edit'),
                 icon: "create-outline",
                 onPress: () => {
                   if (!selectedCommentForOptions) return;
@@ -896,7 +896,7 @@ export default function FeedbackScreen() {
                 },
               },
               {
-                label: "삭제",
+                label: t('delete'),
                 icon: "trash-outline",
                 destructive: true,
                 onPress: () => {
@@ -905,7 +905,7 @@ export default function FeedbackScreen() {
                 },
               },
             ]}
-            title="댓글 설정"
+            title={t('commentSettingsTitle')}
             theme={theme}
           />
 
@@ -937,7 +937,7 @@ export default function FeedbackScreen() {
                 />
                 <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
                   <TouchableOpacity onPress={() => setShowCommentInput(false)} style={{ marginRight: 20, padding: 10 }}>
-                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>취소</Text>
+                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>{t('cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleAddComment} style={{ padding: 10 }} disabled={isSubmittingComment}>
                     {isSubmittingComment ? (
@@ -971,10 +971,10 @@ export default function FeedbackScreen() {
                 />
                 <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
                   <TouchableOpacity onPress={() => setEditingComment(null)} style={{ marginRight: 20, padding: 10 }}>
-                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>취소</Text>
+                    <Text style={{ color: theme.textSecondary, fontWeight: "700" }}>{t('cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleUpdateComment} style={{ padding: 10 }}>
-                    <Text style={{ color: theme.primary, fontWeight: "900" }}>수정</Text>
+                    <Text style={{ color: theme.primary, fontWeight: "900" }}>{t('edit')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1036,7 +1036,7 @@ export default function FeedbackScreen() {
           setEditingVideo(selectedVideoForOptions);
           setEditTitle(selectedVideoForOptions.title);
         }},
-        { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
+        { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
       ]} title="영상 설정" theme={theme} />
 
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
@@ -1045,7 +1045,7 @@ export default function FeedbackScreen() {
             <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>영상 업로드</Text>
             <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
             {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}, Shadows.glow]}><Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>갤러리에서 선택</Text></TouchableOpacity>}
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>취소</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1056,8 +1056,8 @@ export default function FeedbackScreen() {
             <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>제목 수정</Text>
             <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editTitle} onChangeText={setEditTitle} />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
-              <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdateVideo} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateVideo} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>{t('edit')}</Text></TouchableOpacity>
             </View>
           </View>
         </View>

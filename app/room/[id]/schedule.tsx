@@ -130,8 +130,8 @@ export default function ScheduleScreen() {
   };
 
   const handleAddSchedule = async () => {
-    if (!title.trim() || selectedDates.length === 0) return Alert.alert('오류', '제목과 날짜를 선택해주세요.');
-    if (startTime >= endTime) return Alert.alert('시간 설정 오류', '종료 시간은 시작 시간보다 늦어야 합니다.');
+    if (!title.trim() || selectedDates.length === 0) return Alert.alert(t('error'), t('titleAndDateRequired'));
+    if (startTime >= endTime) return Alert.alert(t('timeSettingError'), t('endTimeAfterStartTime'));
     
     setIsUpdating(true);
     const opts: string[] = [];
@@ -143,7 +143,7 @@ export default function ScheduleScreen() {
       await addSchedule(id || '', title, opts, useNotification, hasDeadline ? deadline.getTime() : undefined, reminderMinutes);
       setShowAddModal(false);
       resetForm();
-    } catch (e: any) { Alert.alert('오류', e.message); }
+    } catch (e: any) { Alert.alert(t('error'), e.message); }
     finally { setIsUpdating(false); }
   };
 
@@ -177,14 +177,14 @@ export default function ScheduleScreen() {
     try {
       await updateSchedule(selectedScheduleId, { title: title.trim(), deadline: hasDeadline ? deadline.getTime() : undefined, useNotification, reminderMinutes });
       setShowEditModal(false);
-    } catch (e: any) { Alert.alert('오류', e.message); }
+    } catch (e: any) { Alert.alert(t('error'), e.message); }
     finally { setIsUpdating(false); }
   };
 
   const handleDeleteSchedule = () => {
-    Alert.alert('일정 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert(t('deleteScheduleTitle'), t('deleteConfirm'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         await deleteSchedule(selectedScheduleId!);
         setSelectedScheduleId(null);
         setCachedSchedule(null);
@@ -197,11 +197,11 @@ export default function ScheduleScreen() {
     const access = checkProAccess('reminder');
     if (!access.canAccess) {
       return Alert.alert(
-        'Pro 전용 기능',
-        '미응답자에게 리마인드 알림을 보내는 기능은 Pro 멤버십 전용입니다.',
+        t('proFeatureTitle'),
+        t('reminderProOnly'),
         [
-          { text: '취소', style: 'cancel' },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -209,33 +209,33 @@ export default function ScheduleScreen() {
     setIsSendingReminder(true);
     try {
       await sendProReminder(id!, 'schedule', selectedScheduleId);
-      Alert.alert('알림 전송', '미응답자에게 리마인드 푸시 알림을 보냈습니다.');
+      Alert.alert(t('notificationSent'), t('reminderSentDesc'));
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setIsSendingReminder(false);
     }
   };
 
   const scheduleOptions = activeSchedule?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
-    { label: '미응답자에게 알림 보내기', icon: 'notifications-outline', onPress: handleSendReminder },
-    { label: '제목/기한 수정', icon: 'create-outline', onPress: openEditModal },
-    { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? '종료됨' : '지금 즉시 종료', 
+    { label: t('remindNotParticipants'), icon: 'notifications-outline', onPress: handleSendReminder },
+    { label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal },
+    { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? t('closedBadge') : t('closeImmediately'), 
       icon: 'stop-circle-outline', 
       destructive: true, 
       onPress: () => {
-        Alert.alert('일정 종료', '지금 즉시 투표를 마감할까요?', [
-          { text: '취소', style: 'cancel' },
-          { text: '종료하기', style: 'destructive', onPress: async () => {
+        Alert.alert(t('closeScheduleTitle'), t('closeScheduleConfirm'), [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('closeAction'), style: 'destructive', onPress: async () => {
             await closeSchedule(selectedScheduleId!);
           }}
         ]);
       }
     },
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteSchedule }
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteSchedule }
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(activeSchedule) reportContent(activeSchedule.id, 'schedule'); } },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(activeSchedule) blockUser(activeSchedule.userId); } }
+    { label: t('report'), icon: 'warning-outline', destructive: true, onPress: () => { if(activeSchedule) reportContent(activeSchedule.id, 'schedule'); } },
+    { label: t('blockUser'), icon: 'ban-outline', destructive: true, onPress: () => { if(activeSchedule) blockUser(activeSchedule.userId); } }
   ];
 
   const renderScheduleListItem = ({ item: schedule }: { item: any }) => {
@@ -256,11 +256,11 @@ export default function ScheduleScreen() {
             <Text style={[styles.listTitle, { color: theme.text }]} numberOfLines={1}>{schedule.title}</Text>
             {isClosed && (
               <View style={[styles.closedBadge, {backgroundColor: theme.textSecondary + '20'}]}>
-                <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '800'}}>종료</Text>
+                <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '800'}}>{t('closedBadge')}</Text>
               </View>
             )}
           </View>
-          <Text style={[styles.listMeta, { color: theme.textSecondary }]}>참여 {participantsCount}명 • {formatDateFull(schedule.createdAt)}</Text>
+          <Text style={[styles.listMeta, { color: theme.textSecondary }]}>{t('participants')} {participantsCount}{t('peopleCount')} • {formatDateFull(schedule.createdAt)}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} style={{opacity: isClosed ? 0.2 : 0.5}} />
       </TouchableOpacity>
@@ -381,12 +381,12 @@ export default function ScheduleScreen() {
     const unreadMembers = allMembers.filter(id => !viewedMembers.includes(id) && !participants.includes(id));
 
     const handleSendUnreadReminder = async () => {
-      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: '취소', style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: t('cancel'), style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
       setIsSendingUnreadReminder(true);
       try {
         await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${schedule.title}" 일정 조율을 아직 확인하지 않으셨어요!`);
         Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), '알림을 보냈습니다.');
-      } catch (e: any) { Alert.alert('오류', e.message); }
+      } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
       finally { setIsSendingUnreadReminder(false); }
     };
 
@@ -412,9 +412,9 @@ export default function ScheduleScreen() {
           <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
             <View style={styles.statusRow}>
               {isClosed ? (
-                <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>마감됨</Text></View>
+                <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>{t('statusDeadline')}</Text></View>
               ) : (
-                <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>진행 중</Text></View>
+                <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>{t('statusActive')}</Text></View>
               )}
               {schedule.deadline && !isClosed && (
                 <View style={styles.deadlineInfo}>
@@ -637,8 +637,8 @@ export default function ScheduleScreen() {
     return (
       <View style={[styles.compactPicker, {backgroundColor: theme.background}, Shadows.soft]}>
         <View style={styles.pickerHeader}>
-          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>날짜</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>시간</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>{t('dateLabel')}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>{t('timeLabel')}</Text></TouchableOpacity>
         </View>
         {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => {
           const isSelected = date.toDateString() === d.toDateString();
@@ -694,12 +694,12 @@ export default function ScheduleScreen() {
       <Modal visible={showAddModal || showEditModal} animationType="slide" transparent onRequestClose={() => { setShowAddModal(false); setShowEditModal(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card, flex: 1, marginTop: 60 }]}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '조율 수정' : '새 일정 조율'}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
+            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? t('editScheduleTitle') : t('newScheduleTitle')}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
             <ScrollView showsVerticalScrollIndicator={false} style={{flex: 1}}>
-              <Text style={[styles.label, { color: theme.text }]}>조율 제목</Text>
+              <Text style={[styles.label, { color: theme.text }]}>{t('scheduleTitleLabel')}</Text>
               <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 차주 정기 연습 시간" placeholderTextColor={theme.textSecondary} value={title} onChangeText={setTitle} />
               
-              <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>날짜 선택 (다중)</Text>
+              <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>{t('selectDatesMultiple')}</Text>
               <View style={[styles.dateSelectionContainer, { backgroundColor: theme.background }]}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {Array.from({length: 30}).map((_, i) => {
@@ -755,7 +755,7 @@ export default function ScheduleScreen() {
                 </View>
               </View>
               
-              <View style={[styles.settingItem, {marginTop: 10}]}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={[styles.settingItem, {marginTop: 10}]}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('setDeadlineLabel')}</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
               {hasDeadline && (
                 <View style={{marginTop: 10, marginBottom: 20}}>
                   <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
@@ -768,7 +768,7 @@ export default function ScheduleScreen() {
 
               {hasDeadline && (
                 <>
-                  <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>마감 전 알림 설정</Text>
+                  <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>{t('preDeadlineNotification')}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
                     {reminderOptions.map((opt) => (
                       <TouchableOpacity 
@@ -783,9 +783,9 @@ export default function ScheduleScreen() {
                 </>
               )}
 
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>푸시 알림 전송</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('sendPushNotification')}</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
 
-              <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? '변경사항 저장' : '일정 조율 등록'}</Text>}</TouchableOpacity>
+              <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? t('saveChangesBtn') : t('registerScheduleBtn')}</Text>}</TouchableOpacity>
             </ScrollView>
           </View></View>
         </KeyboardAvoidingView>

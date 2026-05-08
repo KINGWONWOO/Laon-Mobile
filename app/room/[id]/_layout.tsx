@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function RoomLayout() {
   const { id, passcode } = useLocalSearchParams<{ id: string, passcode?: string }>();
-  const { rooms, currentUser, joinRoom, getRoomByIdRemote, theme } = useAppContext();
+  const { rooms, currentUser, joinRoom, getRoomByIdRemote, theme, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
@@ -27,7 +27,7 @@ export default function RoomLayout() {
     },
     tabBarActiveTintColor: theme.primary,
     tabBarInactiveTintColor: theme.textSecondary,
-    tabBarLabelStyle: { fontSize: 11, fontWeight: '600' }
+    tabBarLabelStyle: { fontSize: 11, fontWeight: '600' as const }
   }), [theme, insets]);
 
   useEffect(() => {
@@ -58,18 +58,18 @@ export default function RoomLayout() {
 
     const showInviteAlert = (remoteRoom: Room) => {
       Alert.alert(
-        '팀 초대',
-        `'${remoteRoom.name}' 팀에 초대되셨습니다. 참여하시겠습니까?`,
+        t('teamInvite'),
+        `'${remoteRoom.name}' ${t('inviteDesc')}`,
         [
-          { text: '거절', style: 'cancel', onPress: () => router.replace('/rooms') },
+          { text: t('decline'), style: 'cancel', onPress: () => router.replace('/rooms') },
           {
-            text: '참여하기',
+            text: t('join'),
             onPress: async () => {
               try {
                 const joined = await joinRoom(id, passcode!);
                 if (joined) setRoom(joined);
               } catch (e) {
-                Alert.alert('오류', '참여 중 문제가 발생했습니다.');
+                Alert.alert(t('error'), t('joinError'));
               } finally {
                 setIsCheckingJoin(false);
               }
@@ -92,7 +92,7 @@ export default function RoomLayout() {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={{ marginTop: 10, color: theme.textSecondary }}>정보를 확인 중입니다...</Text>
+        <Text style={{ marginTop: 10, color: theme.textSecondary }}>{t('checkingInfo')}</Text>
       </View>
     );
   }
@@ -104,18 +104,18 @@ export default function RoomLayout() {
       <Tabs.Screen 
         name="index" 
         options={{ 
-          title: '홈', 
+          title: t('home'), 
           tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} /> 
         }} 
       />
-      <Tabs.Screen name="schedule" options={{ title: '일정', tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} /> }} />
-      <Tabs.Screen name="vote" options={{ title: '투표', tabBarIcon: ({ color }) => <Ionicons name="checkbox" size={24} color={color} /> }} />
-      <Tabs.Screen name="feedback" options={{ title: '피드백', tabBarIcon: ({ color }) => <Ionicons name="videocam" size={24} color={color} /> }} />
-      <Tabs.Screen name="archive" options={{ title: '사진', tabBarIcon: ({ color }) => <Ionicons name="images" size={24} color={color} /> }} />
+      <Tabs.Screen name="schedule" options={{ title: t('scheduleTitle'), tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} /> }} />
+      <Tabs.Screen name="vote" options={{ title: t('voteTitle'), tabBarIcon: ({ color }) => <Ionicons name="checkbox" size={24} color={color} /> }} />
+      <Tabs.Screen name="feedback" options={{ title: t('videoFeedback'), tabBarIcon: ({ color }) => <Ionicons name="videocam" size={24} color={color} /> }} />
+      <Tabs.Screen name="archive" options={{ title: t('photos'), tabBarIcon: ({ color }) => <Ionicons name="images" size={24} color={color} /> }} />
       <Tabs.Screen 
         name="formation/index" 
         options={{ 
-          title: '동선', 
+          title: t('formationTitle'), 
           tabBarIcon: ({ color }) => <Ionicons name="map" size={24} color={color} /> 
         }} 
       />

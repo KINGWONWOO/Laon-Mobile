@@ -11,7 +11,7 @@ import { storageService } from '../../../../services/storageService';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
-  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro } = useAppContext();
+  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro, t } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -56,9 +56,9 @@ export default function NoticeDetailScreen() {
   if (!notice) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: theme.text }}>공지사항을 찾을 수 없습니다.</Text>
+        <Text style={{ color: theme.text }}>{t('noticeNotFound')}</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
-          <Text style={{ color: theme.primary }}>뒤로 가기</Text>
+          <Text style={{ color: theme.primary }}>{t('goBack')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -71,16 +71,16 @@ export default function NoticeDetailScreen() {
       await addNoticeComment(notice.id, commentText.trim());
       setCommentText('');
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteNotice = () => {
-    Alert.alert('공지 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert(t('deleteNotice'), t('deleteConfirm'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         await deleteNotice(notice.id);
         router.back();
       }}
@@ -89,7 +89,7 @@ export default function NoticeDetailScreen() {
 
   const handleUpdateNotice = async () => {
     if (!editNoticeTitle.trim() || !editNoticeContent.trim()) return;
-    if (editNoticeImages.length > 5) return Alert.alert('오류', '사진은 최대 5장까지만 등록 가능합니다.');
+    if (editNoticeImages.length > 5) return Alert.alert(t('error'), t('maxImages'));
     setIsUpdatingNotice(true);
     try {
       const uploadedUrls = await Promise.all(
@@ -107,7 +107,7 @@ export default function NoticeDetailScreen() {
       } as any);
       setShowEditNotice(false);
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setIsUpdatingNotice(false);
     }
@@ -123,7 +123,7 @@ export default function NoticeDetailScreen() {
     if (!result.canceled) {
       const newImages = [...editNoticeImages, ...result.assets.map(a => a.uri)];
       if (newImages.length > 5) {
-        Alert.alert('알림', '사진은 최대 5장까지만 등록 가능합니다.');
+        Alert.alert(t('notification'), t('maxImages'));
         setEditNoticeImages(newImages.slice(0, 5));
       } else {
         setEditNoticeImages(newImages);
@@ -144,41 +144,41 @@ export default function NoticeDetailScreen() {
       setEditingCommentId(null);
       setEditCommentText('');
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setIsUpdatingComment(false);
     }
   };
 
   const noticeOptions = notice?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
-    { label: notice.isPinned ? '고정 해제' : '상단 고정', icon: 'pin-outline', onPress: async () => {
-      try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert('오류', e.message); }
+    { label: notice.isPinned ? t('unpinNotice') : t('pinTop'), icon: 'pin-outline', onPress: async () => {
+      try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert(t('error'), e.message); }
     }},
-    { label: '수정하기', icon: 'create-outline', onPress: () => {
+    { label: t('edit'), icon: 'create-outline', onPress: () => {
       setShowEditNotice(true);
     }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => reportContent(notice.id, 'notice') },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => blockUser(notice.userId) }
+    { label: t('report'), icon: 'warning-outline', destructive: true, onPress: () => reportContent(notice.id, 'notice') },
+    { label: t('blockUser'), icon: 'ban-outline', destructive: true, onPress: () => blockUser(notice.userId) }
   ];
 
   const commentOptions = selectedComment?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
-    { label: '수정', icon: 'create-outline', onPress: () => {
+    { label: t('edit'), icon: 'create-outline', onPress: () => {
       if (!selectedComment) return;
       setEditingCommentId(selectedComment.id);
       setEditCommentText(selectedComment.text);
     }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => {
       if (!selectedComment) return;
-      Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
-        { text: '취소' },
-        { text: '삭제', style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
+      Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
+        { text: t('cancel') },
+        { text: t('delete'), style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
       ]);
     }}
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(selectedComment) reportContent(selectedComment.id, 'notice_comment'); } },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(selectedComment) blockUser(selectedComment.userId); } }
+    { label: t('report'), icon: 'warning-outline', destructive: true, onPress: () => { if(selectedComment) reportContent(selectedComment.id, 'notice_comment'); } },
+    { label: t('blockUser'), icon: 'ban-outline', destructive: true, onPress: () => { if(selectedComment) blockUser(selectedComment.userId); } }
   ];
 
   return (
@@ -191,7 +191,7 @@ export default function NoticeDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>공지 상세</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>{t('noticeDetail')}</Text>
         <TouchableOpacity onPress={() => setShowNoticeOptions(true)} style={styles.deleteBtn}>
           <Ionicons name="ellipsis-vertical" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -211,7 +211,7 @@ export default function NoticeDetailScreen() {
                 </View>
               )}
               <View>
-                <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{author?.name || '알 수 없음'}</Text>
+                <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{author?.name || t('unknownAuthor')}</Text>
                 <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(notice.createdAt)}</Text>
               </View>
             </View>
@@ -233,7 +233,7 @@ export default function NoticeDetailScreen() {
             )}
 
             <View style={[styles.divider, { backgroundColor: theme.border, opacity: 0.5 }]} />
-            <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>댓글 {notice.comments?.length || 0}</Text>
+            <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{t('commentCountLabel')} {notice.comments?.length || 0}</Text>
           </View>
         }
         renderItem={({ item: comment }) => {
@@ -261,9 +261,9 @@ export default function NoticeDetailScreen() {
                     autoFocus
                   />
                   <View style={styles.commentEditBtns}>
-                    <TouchableOpacity onPress={() => setEditingCommentId(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>취소</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={() => setEditingCommentId(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>{t('cancel')}</Text></TouchableOpacity>
                     <TouchableOpacity onPress={handleUpdateComment} disabled={isUpdatingComment}>
-                      {isUpdatingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: '800' }}>저장</Text>}
+                      {isUpdatingComment ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: '800' }}>{t('save')}</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -280,7 +280,7 @@ export default function NoticeDetailScreen() {
         visible={showNoticeOptions} 
         onClose={() => setShowNoticeOptions(false)} 
         options={noticeOptions} 
-        title="공지 설정" 
+        title={t('noticeSettings')} 
         theme={theme} 
       />
 
@@ -288,7 +288,7 @@ export default function NoticeDetailScreen() {
         visible={showCommentOptions} 
         onClose={() => { setShowCommentOptions(false); setSelectedComment(null); }} 
         options={commentOptions} 
-        title="댓글 설정" 
+        title={t('noticeCommentSettings')} 
         theme={theme} 
       />
 
@@ -308,16 +308,16 @@ export default function NoticeDetailScreen() {
               style={[styles.modalContent, { backgroundColor: theme.card, paddingBottom: insets.bottom + 20 }]}
             >
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>공지 수정</Text>
+                <Text style={[styles.modalTitle, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{t('editNotice')}</Text>
                 <TouchableOpacity onPress={() => setShowEditNotice(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, marginBottom: 15 }]} placeholder="공지 제목" placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
-                <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, backgroundColor: theme.background, marginBottom: 20 }]} placeholder="공지 내용" placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, marginBottom: 15 }]} placeholder={t('noticeTitle')} placeholderTextColor={theme.textSecondary} value={editNoticeTitle} onChangeText={setEditNoticeTitle} />
+                <TextInput style={[styles.input, { height: 120, textAlignVertical: 'top', color: theme.text, backgroundColor: theme.background, marginBottom: 20 }]} placeholder={t('noticeContent')} placeholderTextColor={theme.textSecondary} multiline numberOfLines={5} value={editNoticeContent} onChangeText={setEditNoticeContent} />
                 
                 <View style={styles.imagePickerArea}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <Text style={{ color: theme.text, fontSize: 14, fontWeight: '800' }}>사진 첨부 (최대 5장)</Text>
+                    <Text style={{ color: theme.text, fontSize: 14, fontWeight: '800' }}>{t('addImage')} ({t('maxImages')})</Text>
                     <Text style={{ color: editNoticeImages.length >= 5 ? theme.error : theme.textSecondary, fontSize: 12, fontWeight: '700' }}>
                       ({editNoticeImages.length}/5)
                     </Text>
@@ -330,7 +330,7 @@ export default function NoticeDetailScreen() {
                   >
                     <Ionicons name="camera" size={28} color={editNoticeImages.length >= 5 ? theme.textSecondary : theme.primary} />
                     <Text style={{marginTop: 6, color: theme.textSecondary, fontWeight: '700', fontSize: 13}}>
-                      {editNoticeImages.length >= 5 ? '최대 개수 도달' : '사진 추가'}
+                      {editNoticeImages.length >= 5 ? t('maxImages') : t('addImage')}
                     </Text>
                   </TouchableOpacity>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 15}}>
@@ -346,11 +346,11 @@ export default function NoticeDetailScreen() {
                 </View>
 
                 <View style={[styles.settingItem, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, marginTop: 10}]}>
-                  <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>푸시 알림 전송</Text>
+                  <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>{t('pushNoti')}</Text>
                   <Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" />
                 </View>
                 <TouchableOpacity style={[styles.submitBtn, { backgroundColor: theme.primary }]} onPress={handleUpdateNotice} disabled={isUpdatingNotice}>
-                  {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>수정 완료</Text>}
+                  {isUpdatingNotice ? <ActivityIndicator size="small" color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>{t('editComplete')}</Text>}
                 </TouchableOpacity>
               </ScrollView>
             </TouchableOpacity>
@@ -361,7 +361,7 @@ export default function NoticeDetailScreen() {
       <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
         <TextInput
           style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
-          placeholder="댓글을 입력하세요..."
+          placeholder={t('noticeCommentInput')}
           placeholderTextColor="#888"
           value={commentText}
           onChangeText={setCommentText}

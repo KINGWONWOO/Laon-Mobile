@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
@@ -352,11 +352,11 @@ export default function RoomsScreen() {
               </View>
 
               <View style={styles.policyRow}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/privacy-policy.html')}>
+                <TouchableOpacity onPress={() => router.push('/legal/privacy')}>
                   <Text style={[styles.policyText, { color: theme.textSecondary }]}>{t('privacyPolicy')}</Text>
                 </TouchableOpacity>
                 <Text style={{ color: theme.border, marginHorizontal: 8 }}>|</Text>
-                <TouchableOpacity onPress={() => Linking.openURL('https://kingwonwoo.github.io/Laon-Mobile/terms.html')}>
+                <TouchableOpacity onPress={() => router.push('/legal/terms')}>
                   <Text style={[styles.policyText, { color: theme.textSecondary }]}>{t('termsOfService')}</Text>
                 </TouchableOpacity>
               </View>

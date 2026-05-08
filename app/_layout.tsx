@@ -17,6 +17,8 @@ import { initAds } from '../services/adService';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -95,6 +97,8 @@ function RootLayoutNav() {
         <Stack.Screen name="rooms" />
         <Stack.Screen name="room/[id]" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="legal/privacy" />
+        <Stack.Screen name="legal/terms" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

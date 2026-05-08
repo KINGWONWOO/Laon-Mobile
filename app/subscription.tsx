@@ -66,7 +66,7 @@ export default function SubscriptionScreen() {
       await purchasePro();
       Alert.alert('구독 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
     } catch (e: any) {
-      Alert.alert('오류', '결제 처리 중 문제가 발생했습니다.');
+      Alert.alert(t('errorTitle'), '결제 처리 중 문제가 발생했습니다.');
     } finally {
       setIsProcessing(false);
     }

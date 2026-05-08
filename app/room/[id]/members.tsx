@@ -9,7 +9,7 @@ import AdBanner from '../../../components/ui/AdBanner';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { theme, users, getRoomByIdRemote, getRoomUserProfile, currentUser } = useAppContext();
+  const { theme, users, getRoomByIdRemote, getRoomUserProfile, currentUser, t } = useAppContext();
   const router = useRouter();
   
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -55,7 +55,7 @@ export default function MembersScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text }]}>참여 멤버 ({roomMembers.length})</Text>
+        <Text style={[styles.title, { color: theme.text }]}>{t('membersTitle')} ({roomMembers.length})</Text>
         <View style={{ width: 40 }} />
       </View>
       
@@ -88,17 +88,17 @@ export default function MembersScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.6 }}>본명: {realName}</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.6 }}>{t('realName')}: {realName}</Text>
               </View>
               {item.id === currentUser?.id && (
                 <View style={[styles.meBadge, { backgroundColor: theme.textSecondary + '10' }]}>
-                  <Text style={{ fontSize: 10, color: theme.textSecondary, fontWeight: 'bold' }}>나</Text>
+                  <Text style={{ fontSize: 10, color: theme.textSecondary, fontWeight: 'bold' }}>{t('me')}</Text>
                 </View>
               )}
             </View>
           );
         }}
-        ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>참여 중인 멤버가 없습니다.</Text>}
+        ListEmptyComponent={<Text style={{color: '#666', textAlign: 'center', marginTop: 50}}>{t('noMembers')}</Text>}
       />
       <View style={{ paddingHorizontal: 24 }}>
         <AdBanner />

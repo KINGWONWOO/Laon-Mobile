@@ -26,7 +26,7 @@ export default function ArchiveScreen() {
     addPhotoComment, updatePhotoComment, deletePhotoComment, 
     theme, currentUser, refreshAllData, getUserById, 
     markItemAsAccessed, rooms, checkProAccess, blockUser, 
-    reportContent
+    reportContent, t
   } = context;
   const isPro = context?.isPro || false;
   const insets = useSafeAreaInsets();
@@ -91,7 +91,7 @@ export default function ArchiveScreen() {
       const asset = result.assets[0];
       const type = asset.type === 'video' ? 'video' : 'image';
       if (type === 'video' && asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        return Alert.alert('용량 제한', '영상은 5MB 이하만 업로드 가능합니다.');
+        return Alert.alert(t('videoSizeLimitTitle'), t('videoSizeLimit'));
       }
       setSelectedContent({ uri: asset.uri, type });
     }
@@ -103,11 +103,11 @@ export default function ArchiveScreen() {
     const access = checkProAccess('archive_limit');
     if (!access.canAccess && roomPhotos.length >= (access.limit || 20)) {
       return Alert.alert(
-        '아카이브 용량 초과',
-        `Free 플랜은 방당 최대 ${access.limit}개까지 아카이브를 저장할 수 있습니다.\n무제한으로 저장하고 싶으신가요?`,
+        t('archiveLimitExceeded'),
+        `${t('archiveLimitMsg')} ${access.limit}${t('archiveLimitSuffix')}`,
         [
-          { text: '취소', style: 'cancel' },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -119,7 +119,7 @@ export default function ArchiveScreen() {
       setDescription('');
       setSelectedContent(null);
     } catch (error: any) {
-      Alert.alert('업로드 실패', error.message);
+      Alert.alert(t('uploadFailed'), error.message);
     } finally {
       setIsLoading(false);
     }
@@ -139,7 +139,7 @@ export default function ArchiveScreen() {
     try {
       await addPhotoComment(selectedPhoto.id, commentText);
     } catch (e) {
-      Alert.alert('오류', '댓글 등록에 실패했습니다.');
+      Alert.alert(t('error'), t('commentError'));
       setSelectedPhoto(selectedPhoto); // Rollback
     }
   };
@@ -156,20 +156,20 @@ export default function ArchiveScreen() {
     try {
       await updatePhoto(selectedPhoto.id, newDesc);
     } catch (e) {
-      Alert.alert('오류', '설명 수정에 실패했습니다.');
+      Alert.alert(t('error'), t('descriptionEditError'));
       setSelectedPhoto({ ...selectedPhoto, description: oldDesc });
     }
   };
 
   const handleDeletePhoto = (photo: any) => {
-    Alert.alert('사진 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert(t('deletePhotoTitle'), t('deleteConfirm'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         try {
           await deletePhoto(photo.id, photo.photoUrl);
           setSelectedPhoto(null);
         } catch (e) {
-          Alert.alert('오류', '사진 삭제에 실패했습니다.');
+          Alert.alert(t('error'), t('deletePhotoError'));
         }
       }}
     ]);
@@ -189,16 +189,16 @@ export default function ArchiveScreen() {
     try {
       await updatePhotoComment(cid, newText);
     } catch (e) {
-      Alert.alert('오류', '댓글 수정에 실패했습니다.');
+      Alert.alert(t('error'), t('commentEditError'));
       const rollbackComments = selectedPhoto.comments.map((c: any) => c.id === cid ? { ...c, text: oldText } : c);
       setSelectedPhoto({ ...selectedPhoto, comments: rollbackComments });
     }
   };
 
   const handleDeleteComment = (cid: string) => {
-    Alert.alert('댓글 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         const oldComments = [...selectedPhoto.comments];
         // Optimistic update
         const updatedComments = selectedPhoto.comments.filter((c: any) => c.id !== cid);
@@ -207,7 +207,7 @@ export default function ArchiveScreen() {
         try {
           await deletePhotoComment(cid);
         } catch (e) {
-          Alert.alert('오류', '댓글 삭제에 실패했습니다.');
+          Alert.alert(t('error'), t('deleteCommentError'));
           setSelectedPhoto({ ...selectedPhoto, comments: oldComments });
         }
       }}
@@ -219,29 +219,29 @@ export default function ArchiveScreen() {
     setIsDownloading(true);
     try {
       await saveMediaToDevice(selectedPhoto.photoUrl);
-      Alert.alert('저장 완료', '기기 갤러리에 저장되었습니다.');
+      Alert.alert(t('saveSuccessTitle'), t('saveSuccess'));
     } catch (e: any) {
-      if (e.message !== 'PERMISSION_DENIED') Alert.alert('저장 실패', e.message || '저장 중 오류가 발생했습니다.');
+      if (e.message !== 'PERMISSION_DENIED') Alert.alert(t('saveFailed'), e.message || t('saveError'));
     } finally {
       setIsDownloading(false);
     }
   };
 
   const photoOptions = [
-    { label: '설명 수정', icon: 'create-outline', onPress: () => {
+    { label: t('descriptionEdit'), icon: 'create-outline', onPress: () => {
       setEditDesc(selectedPhoto.description || '');
       setIsEditingPhoto(true);
     }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => handleDeletePhoto(selectedPhoto) }
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeletePhoto(selectedPhoto) }
   ];
 
   const commentOptions = [
-    { label: '수정', icon: 'create-outline', onPress: () => {
+    { label: t('edit'), icon: 'create-outline', onPress: () => {
       if (!selectedCommentForModal) return;
       setEditingComment(selectedCommentForModal);
       setEditCommentText(selectedCommentForModal.text);
     }},
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: () => {
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => {
       if (!selectedCommentForModal) return;
       handleDeleteComment(selectedCommentForModal.id);
     }}
@@ -274,7 +274,7 @@ export default function ArchiveScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={{alignItems: 'center'}}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>팀 아카이브</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>{t('archiveTitle')}</Text>
           <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomPhotos.length} / {isPro ? '∞' : '20'}</Text>
         </View>
         <TouchableOpacity onPress={() => { setShowAddModal(true); setSelectedContent(null); setDescription(''); }}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
@@ -298,7 +298,7 @@ export default function ArchiveScreen() {
             <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.backBtn}>
               <Ionicons name="close" size={28} color={theme.text} />
             </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>아카이브 상세</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>{t('archiveDetailTitle')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TouchableOpacity onPress={handleDownload} style={[styles.saveIconBtn, { backgroundColor: theme.primary + '18', borderColor: theme.primary + '44' }]} disabled={isDownloading}>
                 {isDownloading
@@ -330,7 +330,7 @@ export default function ArchiveScreen() {
                     );
                   })()}
                   <View>
-                    <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || '알 수 없음'}</Text>
+                    <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || t('unknownAuthor')}</Text>
                     <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
                   </View>
                 </View>
@@ -377,9 +377,9 @@ export default function ArchiveScreen() {
                         autoFocus
                       />
                       <View style={styles.commentEditBtns}>
-                        <TouchableOpacity onPress={() => setEditingComment(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>취소</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setEditingComment(null)}><Text style={{ color: theme.textSecondary, marginRight: 15, fontWeight: '500', opacity: 0.7 }}>{t('cancel')}</Text></TouchableOpacity>
                         <TouchableOpacity onPress={handleUpdateComment}>
-                          <Text style={{ color: theme.primary, fontWeight: '800' }}>저장</Text>
+                          <Text style={{ color: theme.primary, fontWeight: '800' }}>{t('save')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -404,7 +404,7 @@ export default function ArchiveScreen() {
             visible={showCommentOptions} 
             onClose={() => { setShowCommentOptions(false); setSelectedCommentForModal(null); }} 
             options={commentOptions} 
-            title="댓글 설정" 
+            title={t('commentSettingsTitle')} 
             theme={theme} 
           />
 
@@ -432,11 +432,11 @@ export default function ArchiveScreen() {
       <Modal visible={isEditingPhoto} transparent animationType="fade" onRequestClose={() => setIsEditingPhoto(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }, Shadows.medium]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>설명 수정</Text>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>{t('editDescription')}</Text>
             <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} value={editDesc} onChangeText={setEditDesc} multiline />
             <View style={{flexDirection:'row', justifyContent:'flex-end', marginTop: 10}}>
-              <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdatePhoto} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>수정</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsEditingPhoto(false)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdatePhoto} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>{t('edit')}</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -458,7 +458,7 @@ export default function ArchiveScreen() {
               ) : (
                 <TouchableOpacity style={{ height: 100, width: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background, borderRadius: 15, borderStyle: 'dashed', borderWidth: 1, borderColor: '#888' }} onPress={handlePickContent}>
                   <Ionicons name="cloud-upload" size={32} color={theme.primary} />
-                  <Text style={{color: theme.text, marginTop: 8, fontSize: 14, fontWeight:'700'}}>사진 또는 영상 선택</Text>
+                  <Text style={{color: theme.text, marginTop: 8, fontSize: 14, fontWeight:'700'}}>{t('selectPhotoOrVideo')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -487,7 +487,7 @@ export default function ArchiveScreen() {
                 <Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>업로드 완료</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>취소</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>

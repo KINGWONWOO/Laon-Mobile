@@ -36,7 +36,7 @@ export const storageService = {
 
       console.log(`[Storage] Uploading: ${bucketPath}/${fileName}`);
       
-      const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true });
+      const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true } as any);
       if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
 
       const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';

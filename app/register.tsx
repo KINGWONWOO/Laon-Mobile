@@ -39,7 +39,7 @@ export default function RegisterScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [inputCode, setInputCode] = useState('');
   const [timer, setTimer] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { sendVerificationCode, checkEmailCode, verifyAndSignup } = useAppContext();
   const router = useRouter();
@@ -72,7 +72,7 @@ export default function RegisterScreen() {
     
     if (error) {
       setCodeStep('idle');
-      Alert.alert('오류', error.message);
+      Alert.alert(t('errorTitle'), error.message);
       return;
     }
 
@@ -99,7 +99,7 @@ export default function RegisterScreen() {
     
     if (error || !valid) {
       setCodeStep('sent');
-      Alert.alert('오류', '인증 코드가 올바르지 않거나 이미 만료되었습니다.\n최신 코드를 입력해주세요.');
+      Alert.alert(t('errorTitle'), '인증 코드가 올바르지 않거나 이미 만료되었습니다.\n최신 코드를 입력해주세요.');
       return;
     }
 
@@ -125,19 +125,19 @@ export default function RegisterScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password || !name || !phone) {
-      Alert.alert('오류', '모든 정보를 입력해주세요.');
+      Alert.alert(t('errorTitle'), '모든 정보를 입력해주세요.');
       return;
     }
     if (!isCodeVerified) {
-      Alert.alert('오류', '이메일 인증을 완료해주세요.');
+      Alert.alert(t('errorTitle'), '이메일 인증을 완료해주세요.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('오류', '비밀번호가 일치하지 않습니다.');
+      Alert.alert(t('errorTitle'), '비밀번호가 일치하지 않습니다.');
       return;
     }
     if (!pwValid) {
-      Alert.alert('오류', '비밀번호 조건을 모두 충족해야 합니다.');
+      Alert.alert(t('errorTitle'), '비밀번호 조건을 모두 충족해야 합니다.');
       return;
     }
 

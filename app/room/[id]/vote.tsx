@@ -71,12 +71,12 @@ export default function VoteScreen() {
   };
 
   const handleCreateVote = async () => {
-    if (!question.trim() || options.some(opt => !opt.trim())) return Alert.alert('오류', '질문과 모든 선택지 내용을 입력해주세요.');
+    if (!question.trim() || options.some(opt => !opt.trim())) return Alert.alert(t('errorTitle'), '질문과 모든 선택지 내용을 입력해주세요.');
     setIsUpdating(true);
     try {
       await addVote(id || '', question, options, { isAnonymous, allowMultiple, useNotification, deadline: hasDeadline ? deadline.getTime() : undefined, reminderMinutes });
       setShowAddModal(false); resetForm();
-    } catch (e: any) { Alert.alert('오류', e.message); }
+    } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
     finally { setIsUpdating(false); }
   };
 
@@ -107,14 +107,14 @@ export default function VoteScreen() {
       if (newOptions.length > 0) await contentService.addVoteOptions(selectedVoteId, newOptions);
       await refreshAllData();
       setShowEditModal(false);
-    } catch (e: any) { Alert.alert('오류', e.message); }
+    } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
     finally { setIsUpdating(false); }
   };
 
   const handleDeleteVote = () => {
-    Alert.alert('투표 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert('투표 삭제', t('deleteConfirmMsg'), [
+      { text: t('cancel') },
+      { text: t('delete'), style: 'destructive', onPress: async () => {
         await deleteVote(selectedVoteId!);
         setSelectedVoteId(null);
         setCachedVote(null);
@@ -125,23 +125,23 @@ export default function VoteScreen() {
   const handleSendReminder = async () => {
     if (!selectedVoteId) return;
     const access = checkProAccess('reminder');
-    if (!access.canAccess) return Alert.alert('Pro 전용 기능', '리마인드 알림은 Pro 멤버십 전용입니다.', [{ text: '취소', style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+    if (!access.canAccess) return Alert.alert('Pro 전용 기능', '리마인드 알림은 Pro 멤버십 전용입니다.', [{ text: t('cancel'), style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
     setIsSendingReminder(true);
     try {
       await sendProReminder(id!, 'vote', selectedVoteId);
-      Alert.alert('알림 전송', '미응답자에게 리마인드 푸시 알림을 보냈습니다.');
-    } catch (e: any) { Alert.alert('오류', e.message); }
+      Alert.alert(t('notificationSentTitle'), '미응답자에게 리마인드 푸시 알림을 보냈습니다.');
+    } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
     finally { setIsSendingReminder(false); }
   };
 
   const voteOptionsList = activeVote?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
-    { label: '미응답자에게 알림 보내기', icon: 'notifications-outline', onPress: handleSendReminder },
-    { label: '제목/기한 수정', icon: 'create-outline', onPress: openEditModal },
-    { label: activeVote?.deadline && new Date(activeVote.deadline) < new Date() ? '종료됨' : '지금 즉시 종료', icon: 'stop-circle-outline', destructive: true, onPress: () => { Alert.alert('투표 종료', '지금 즉시 투표를 마감할까요?', [{ text: '취소', style: 'cancel' }, { text: '종료하기', style: 'destructive', onPress: async () => { await closeVote(selectedVoteId!); } }]); } },
-    { label: '삭제', icon: 'trash-outline', destructive: true, onPress: handleDeleteVote }
+    { label: t('notifyNonResponders'), icon: 'notifications-outline', onPress: handleSendReminder },
+    { label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal },
+    { label: activeVote?.deadline && new Date(activeVote.deadline) < new Date() ? t('statusClosed') : t('endImmediately'), icon: 'stop-circle-outline', destructive: true, onPress: () => { Alert.alert(t('endVoteTitle'), t('endVoteConfirm'), [{ text: t('cancel'), style: 'cancel' }, { text: t('endAction'), style: 'destructive', onPress: async () => { await closeVote(selectedVoteId!); } }]); } },
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteVote }
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(activeVote) reportContent(activeVote.id, 'vote'); } },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(activeVote) blockUser(activeVote.userId); } }
+    { label: t('reportLabel'), icon: 'warning-outline', destructive: true, onPress: () => { if(activeVote) reportContent(activeVote.id, 'vote'); } },
+    { label: t('blockAuthorLabel'), icon: 'ban-outline', destructive: true, onPress: () => { if(activeVote) blockUser(activeVote.userId); } }
   ];
 
   const renderVoteListItem = ({ item: vote }: { item: any }) => {
@@ -185,12 +185,12 @@ export default function VoteScreen() {
     const unreadMembers = allMembers.filter(id => !viewedMembers.includes(id) && !responders.includes(id));
 
     const handleSendUnreadReminder = async () => {
-      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: '취소', style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: t('cancel'), style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
       setIsSendingUnreadReminder(true);
       try {
         await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${vote.question}" 투표를 아직 확인하지 않으셨어요!`);
         Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), '알림을 보냈습니다.');
-      } catch (e: any) { Alert.alert('오류', e.message); }
+      } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
       finally { setIsSendingUnreadReminder(false); }
     };
 
@@ -206,9 +206,9 @@ export default function VoteScreen() {
           <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
             <View style={styles.statusRow}>
               {isClosed ? (
-                <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>마감됨</Text></View>
+                <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>{t('statusDeadline')}</Text></View>
               ) : (
-                <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>진행 중</Text></View>
+                <View style={[styles.statusBadge, {backgroundColor: theme.primary + '15'}]}><Text style={{color: theme.primary, fontWeight:'800', fontSize: 12}}>{t('statusActive')}</Text></View>
               )}
               {vote.deadline && !isClosed && (
                 <View style={styles.deadlineInfo}>
@@ -333,8 +333,8 @@ export default function VoteScreen() {
     return (
       <View style={[styles.compactPicker, {backgroundColor: theme.background}]}>
         <View style={styles.pickerHeader}>
-          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>날짜</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>시간</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'date' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('date')}><Text style={{color: theme.text, fontWeight: '700'}}>{t('dateLabel')}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.pickerTab, show === 'time' && {borderBottomColor: theme.primary, borderBottomWidth: 3}]} onPress={() => setShow('time')}><Text style={{color: theme.text, fontWeight: '700'}}>{t('timeLabel')}</Text></TouchableOpacity>
         </View>
         {show === 'date' && <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{padding: 15}}>{days.map((d, i) => {
           const isSelected = date.toDateString() === d.toDateString();
@@ -374,22 +374,22 @@ export default function VoteScreen() {
       <Modal visible={showAddModal || showEditModal} animationType="slide" transparent onRequestClose={() => { setShowAddModal(false); setShowEditModal(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalOverlay}><View style={[styles.modalContent, { backgroundColor: theme.card, flex: 1, marginTop: 60 }]}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? '투표 수정' : '새 투표'}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
+            <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? t('editVoteTitle') : t('newVoteTitle')}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
             <ScrollView showsVerticalScrollIndicator={false} style={{flex: 1}}>
-              <Text style={[styles.label, { color: theme.text }]}>질문 내용</Text><TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="무엇을 결정할까요?" placeholderTextColor={theme.textSecondary} value={question} onChangeText={setQuestion} />
-              <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>선택지</Text>
+              <Text style={[styles.label, { color: theme.text }]}>{t('questionContentLabel')}</Text><TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder={t('whatToDecide')} placeholderTextColor={theme.textSecondary} value={question} onChangeText={setQuestion} />
+              <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>{t('optionsLabel')}</Text>
               {options.map((opt, i) => (
                 <View key={i} style={{flexDirection:'row', alignItems:'center', marginBottom: 10}}>
                   <TextInput style={[styles.input, { flex: 1, marginBottom: 0, color: theme.text, backgroundColor: theme.background }]} placeholder={`옵션 ${i+1}`} placeholderTextColor={theme.textSecondary} value={opt} onChangeText={text => { const next = [...options]; next[i] = text; setOptions(next); }} />
                   {options.length > 2 && <TouchableOpacity style={{marginLeft: 10}} onPress={() => setOptions(options.filter((_, idx) => idx !== i))}><Ionicons name="remove-circle-outline" size={24} color={theme.error} /></TouchableOpacity>}
                 </View>
               ))}
-              <TouchableOpacity style={[styles.addOptBtn, { borderColor: theme.primary }]} onPress={() => setOptions([...options, ''])}><Text style={{color: theme.primary, fontWeight: '700'}}>+ 옵션 추가</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.addOptBtn, { borderColor: theme.primary }]} onPress={() => setOptions([...options, ''])}><Text style={{color: theme.primary, fontWeight: '700'}}>{t('addOptionLabel')}</Text></TouchableOpacity>
               
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>익명 투표</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>복수 선택 허용</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>푸시 알림 전송</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>마감 기한 설정</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('anonymousVoteLabel')}</Text><Switch value={isAnonymous} onValueChange={setIsAnonymous} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('allowMultipleVote')}</Text><Switch value={allowMultiple} onValueChange={setAllowMultiple} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('sendPushNotification')}</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('setDeadlineLabel')}</Text><Switch value={hasDeadline} onValueChange={v => { setHasDeadline(v); if (v) setShowPicker('date'); }} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
 
               {hasDeadline && (
                 <View style={{marginTop: 10, marginBottom: 20}}>
@@ -403,7 +403,7 @@ export default function VoteScreen() {
 
               {hasDeadline && (
                 <>
-                  <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>마감 전 알림 설정</Text>
+                  <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>{t('preDeadlineNotification')}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
                     {reminderOptions.map((opt) => (
                       <TouchableOpacity
@@ -418,7 +418,7 @@ export default function VoteScreen() {
                 </>
               )}
 
-              <TouchableOpacity onPress={showEditModal ? handleUpdateVote : handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? '변경사항 저장' : '투표 시작하기'}</Text>}</TouchableOpacity>
+              <TouchableOpacity onPress={showEditModal ? handleUpdateVote : handleCreateVote} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? t('saveChangesBtn') : t('startVoteBtn')}</Text>}</TouchableOpacity>
             </ScrollView>
           </View></View>
         </KeyboardAvoidingView>

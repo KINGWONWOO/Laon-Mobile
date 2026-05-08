@@ -4,7 +4,7 @@ import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { Dancer, FormationScene, TimelineEntry, Position, Formation, FormationSettings } from '../../../../types';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction, useAnimatedRef, scrollTo } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction, useAnimatedRef, scrollTo, SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -26,7 +26,7 @@ const formatTime = (ms: number) => {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 };
 
-const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ currentTimeMs }: { currentTimeMs: Animated.SharedValue<number> }) {
+const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ currentTimeMs }: { currentTimeMs: SharedValue<number> }) {
   const { theme } = useAppContext();
   const [timeStr, setTimeStr] = useState('0:00');
 
@@ -42,7 +42,7 @@ const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ currentTim
   return <Text style={[styles.timeText, { color: theme.text }]}>{timeStr}</Text>;
 });
 
-const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, isPlayingSV }: { player: any, videoPlayer: any, theme: any, isPlayingSV: Animated.SharedValue<boolean> }) {
+const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, isPlayingSV }: { player: any, videoPlayer: any, theme: any, isPlayingSV: SharedValue<boolean> }) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   useAnimatedReaction(
@@ -78,7 +78,7 @@ const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, 
 });
 
 // [Tiling Optimized] 30초 단위의 고해상도 이미지 조각들을 이어 붙여 깨짐 방지 및 성능 극대화
-const WaveformBackground = React.memo(function WaveformBackground({ duration, tiles, pxPerSecSV }: { duration: number, tiles: string[], pxPerSecSV: Animated.SharedValue<number> }) {
+const WaveformBackground = React.memo(function WaveformBackground({ duration, tiles, pxPerSecSV }: { duration: number, tiles: string[], pxPerSecSV: SharedValue<number> }) {
   const { theme } = useAppContext();
   
   const animatedStyle = useAnimatedStyle(() => ({
@@ -129,7 +129,7 @@ const WaveformTile = React.memo(function WaveformTile({ uri, index, totalDuratio
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
-const TimeMarkers = React.memo(function TimeMarkers({ duration, pxPerSecSV }: { duration: number, pxPerSecSV: Animated.SharedValue<number> }) {
+const TimeMarkers = React.memo(function TimeMarkers({ duration, pxPerSecSV }: { duration: number, pxPerSecSV: SharedValue<number> }) {
   const { theme } = useAppContext();
   const markers = useMemo(() => {
     const list = [];
@@ -167,7 +167,7 @@ const MiniFormationPreview = React.memo(function MiniFormationPreview({ scene, d
   );
 });
 
-const TransitionX = React.memo(function TransitionX({ durationMs, startMs, pxPerSecSV }: { durationMs: number, startMs: number, pxPerSecSV: Animated.SharedValue<number> }) {
+const TransitionX = React.memo(function TransitionX({ durationMs, startMs, pxPerSecSV }: { durationMs: number, startMs: number, pxPerSecSV: SharedValue<number> }) {
   const { theme } = useAppContext();
   const height = 85; 
   
@@ -648,7 +648,7 @@ const GUIDE_STEPS = [
   },
   {
     title: '5. 저장 및 내보내기',
-    description: "작업 중에는 **상단의 '저장' 버튼을 눌러 자주 저장**하는 것이 안전합니다. '내보내기' 버튼을 통해 파일로 저장하거나 동료들에게 피드백을 발행할 수 있습니다.",
+    description: "작업 중에는 **상단의 t('save') 버튼을 눌러 자주 저장**하는 것이 안전합니다. '내보내기' 버튼을 통해 파일로 저장하거나 동료들에게 피드백을 발행할 수 있습니다.",
     image: require('../../../../guideimage/Guide5.png')
   }
 ];
@@ -662,7 +662,7 @@ interface HistoryState {
 
 export default function FormationEditorScreen() {
   const { id, formationId } = useGlobalSearchParams<{ id: string, formationId: string }>();
-  const { formations, updateFormation, publishFormationAsFeedback, theme, blockUser, reportContent, currentUser, rooms } = useAppContext();
+  const { formations, updateFormation, publishFormationAsFeedback, theme, blockUser, reportContent, currentUser, rooms, t } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const formation = formations.find(f => f.id === formationId);
@@ -839,8 +839,8 @@ export default function FormationEditorScreen() {
     { label: '저장하기', icon: 'save-outline', onPress: () => handleSave() },
     { label: '내보내기 / 공유', icon: 'share-outline', onPress: () => setShowExportModal(true) }
   ] : [
-    { label: '신고하기', icon: 'warning-outline', destructive: true, onPress: () => { if(formation) reportContent(formation.id, 'formation'); } },
-    { label: '작성자 차단', icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
+    { label: t('reportLabel'), icon: 'warning-outline', destructive: true, onPress: () => { if(formation) reportContent(formation.id, 'formation'); } },
+    { label: t('blockAuthorLabel'), icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
   ];
 
   const compressAudio = async (uri: string): Promise<string> => {
@@ -939,7 +939,7 @@ export default function FormationEditorScreen() {
         localUri = `file://${uri}`;
       }
 
-      const fInfo = await FileSystem.getInfoAsync(localUri, { size: true });
+      const fInfo = await FileSystem.getInfoAsync(localUri, { size: true } as any) as any;
       // 분석 전 파일이 너무 크면 스킵하여 메모리 보호
       if (fInfo.exists && fInfo.size && fInfo.size > 20 * 1024 * 1024) {
         setIsAnalyzing(false);
@@ -1468,7 +1468,7 @@ export default function FormationEditorScreen() {
       
       // [Compression] 2.5MB 이상인 경우 성능을 위해 Mono 64kbps로 압축
       let finalUri = sourceUri;
-      const fInfo = await FileSystem.getInfoAsync(sourceUri, { size: true });
+      const fInfo = await FileSystem.getInfoAsync(sourceUri, { size: true } as any) as any;
       if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
         try {
           finalUri = await compressAudio(sourceUri);
@@ -1498,7 +1498,7 @@ export default function FormationEditorScreen() {
     const checkAndCompress = async () => {
       if (!audioUrl || audioUrl.startsWith('http') || isCompressing) return;
       try {
-        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true });
+        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true } as any) as any;
         if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
           const compressedUri = await compressAudio(audioUrl);
           setAudioUrl(compressedUri);
@@ -1519,7 +1519,7 @@ export default function FormationEditorScreen() {
   }, [syncOffset, videoPlayer, videoUrl]);
 
   const handleAddVideo = async () => {
-    Alert.alert('알림', '영상 추가 기능은 현재 개발 중입니다. 조금만 기다려주세요!');
+    Alert.alert(t('notification'), t('videoFeatureNote'));
   };
 
   const handleSave = async () => { 
@@ -1533,13 +1533,13 @@ export default function FormationEditorScreen() {
       setShowSaveToast(true);
       setTimeout(() => setShowSaveToast(false), 2000);
     } catch (e: any) { 
-      Alert.alert('오류', e.message); 
+      Alert.alert(t('error'), e.message); 
     } 
   };
 
   const handleExportJSON = async () => {
     try {
-      const finalName = (exportFileName || '동선').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
+      const finalName = (exportFileName || t('formationTitle')).replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
       const data = {
         title: formation?.title,
         audioUrl,
@@ -1551,9 +1551,9 @@ export default function FormationEditorScreen() {
       await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
       setShowFilenameModal(false);
       setShowExportModal(false);
-      Alert.alert('저장 완료', `${finalName}.json 파일이 저장되었습니다.`);
+      Alert.alert(t('success'), `${finalName}.json ${t('fileSaveSuccess')}`);
     } catch (e: any) {
-      Alert.alert('오류', `파일 저장 실패: ${e.message}`);
+      Alert.alert(t('error'), `${t('fileSaveFailed')}: ${e.message}`);
     }
   };
 
@@ -1561,13 +1561,13 @@ export default function FormationEditorScreen() {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-    const defaultName = `${formation?.title || '동선'}_${dateStr}_${timeStr}`;
+    const defaultName = `${formation?.title || t('formationTitle')}_${dateStr}_${timeStr}`;
     setExportFileName(defaultName);
     setShowFilenameModal(true);
   };
 
   const handlePublish = async () => {
-    if (!publishTitle.trim()) { Alert.alert('알림', '피드백 제목을 입력해주세요.'); return; }
+    if (!publishTitle.trim()) { Alert.alert(t('notification'), t('enterPublishTitle')); return; }
     
     // TODO: 안무 영상 추가 기능 구현 전까지 비활성화
     const choreographyUrl = undefined;
@@ -1581,9 +1581,9 @@ export default function FormationEditorScreen() {
         data: { dancers, scenes, timeline } 
       }, choreographyUrl);
       setShowPublishModal(false); setShowExportModal(false);
-      Alert.alert('성공', '피드백이 성공적으로 업로드되었습니다.');
+      Alert.alert(t('success'), t('formationPublished'));
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setIsExporting(false);
     }
@@ -1601,12 +1601,12 @@ export default function FormationEditorScreen() {
     setScenes(newScenes); setActiveSceneId(newId);
   };
 
-  const deleteActiveScene = () => { if (!activeSceneId || scenes.length <= 1) { Alert.alert('알림', '최소 하나의 대형은 유지되어야 합니다.'); return; } pushHistory(); const newScenes = scenes.filter(s => s.id !== activeSceneId), newTimeline = timeline.filter(e => e.sceneId !== activeSceneId); setScenes(newScenes); setTimeline(newTimeline); setActiveSceneId(newScenes[0].id); setShowDeleteModal(false); };
-  const addDancer = () => { pushHistory(); const newDancer: Dancer = { id: Math.random().toString(36).substr(2, 9), name: `댄서 ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] }; setDancers([...dancers, newDancer]); };
+  const deleteActiveScene = () => { if (!activeSceneId || scenes.length <= 1) { Alert.alert(t('notification'), t('minOneFormation')); return; } pushHistory(); const newScenes = scenes.filter(s => s.id !== activeSceneId), newTimeline = timeline.filter(e => e.sceneId !== activeSceneId); setScenes(newScenes); setTimeline(newTimeline); setActiveSceneId(newScenes[0].id); setShowDeleteModal(false); };
+  const addDancer = () => { pushHistory(); const newDancer: Dancer = { id: Math.random().toString(36).substr(2, 9), name: `${t('dancer')} ${dancers.length + 1}`, color: COLORS[dancers.length % COLORS.length] }; setDancers([...dancers, newDancer]); };
   const handleApplySettings = () => { 
     const r = parseInt(tempRows), c = parseInt(tempCols), w = parseInt(tempWingWidth); 
     if (isNaN(r) || isNaN(c) || isNaN(w) || r <= 0 || c <= 0 || w < 0) { 
-      Alert.alert('입력 오류', '격자 행과 열은 1 이상, 대기 공간은 0 이상의 숫자여야 합니다.'); 
+      Alert.alert(t('error'), t('gridInputError')); 
       return; 
     } 
     setSettings({ ...settings, gridRows: r, gridCols: c, sideWingWidth: w }); 
@@ -1628,12 +1628,12 @@ export default function FormationEditorScreen() {
   }, [scenes]);
 
   const handleSceneCardLongPress = useCallback((scene: any) => {
-    Alert.alert(scene.name, '작업', [
-      { text: '이름 변경', onPress: () => { setSceneModalMode('rename'); setTargetSceneId(scene.id); setInputName(scene.name); setShowSceneModal(true); } },
-      { text: '삭제', style: 'destructive', onPress: () => { pushHistory(); setScenes((prev: any[]) => prev.filter((x: any) => x.id !== scene.id)); } },
-      { text: '취소' }
+    Alert.alert(scene.name, t('confirm'), [
+      { text: t('renameFormation'), onPress: () => { setSceneModalMode('rename'); setTargetSceneId(scene.id); setInputName(scene.name); setShowSceneModal(true); } },
+      { text: t('delete'), style: 'destructive', onPress: () => { pushHistory(); setScenes((prev: any[]) => prev.filter((x: any) => x.id !== scene.id)); } },
+      { text: t('cancel') }
     ]);
-  }, [pushHistory]);
+  }, [pushHistory, t]);
 
   const handleDancerPress = useCallback((dancerId: string) => {
     setSelectedDancerId(dancerId);
@@ -1671,8 +1671,8 @@ export default function FormationEditorScreen() {
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={[styles.modeToggle, { backgroundColor: theme.card }]}>
-          <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'create' ? theme.background : theme.textSecondary }]}>대형 생성</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'place' ? theme.background : theme.textSecondary }]}>대형 배치</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'create' ? theme.background : theme.textSecondary }]}>{t('createFormation')}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'place' ? theme.background : theme.textSecondary }]}>{t('placeFormation')}</Text></TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
           {(formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id) ? (
@@ -1707,7 +1707,7 @@ export default function FormationEditorScreen() {
       {showSaveToast && (
         <View style={[styles.toast, { backgroundColor: theme.primary }]}>
           <Ionicons name="checkmark-circle" size={20} color={theme.background} />
-          <Text style={[styles.toastText, { color: theme.background }]}>성공적으로 저장되었습니다.</Text>
+          <Text style={[styles.toastText, { color: theme.background }]}>{t('saveSuccessToast')}</Text>
         </View>
       )}
 
@@ -1715,7 +1715,7 @@ export default function FormationEditorScreen() {
       {isAnalyzing && (
         <View style={[styles.analysisLoader, { backgroundColor: theme.card + 'CC' }]}>
           <ActivityIndicator color={theme.primary} />
-          <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>음악 데이터 정밀 분석 중...</Text>
+          <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>{t('analyzingAudio')}</Text>
         </View>
       )}
 
@@ -1723,8 +1723,8 @@ export default function FormationEditorScreen() {
       {isCompressing && (
         <View style={[styles.analysisLoader, { backgroundColor: theme.card + 'CC' }]}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>음원 압축 중... ({Math.round(compressionProgress * 100)}%)</Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 5 }}>대용량 파일의 경우 성능을 위해 최적화가 필요합니다.</Text>
+          <Text style={{ color: theme.text, marginTop: 10, fontSize: 12, fontWeight: 'bold' }}>{t('compressingAudio')} ({Math.round(compressionProgress * 100)}%)</Text>
+          <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 5 }}>{t('compressingNote')}</Text>
         </View>
       )}
 
@@ -1743,7 +1743,7 @@ export default function FormationEditorScreen() {
           <View style={[styles.stageWrapper, { paddingTop: 40 }]}>
             <Animated.View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, backgroundColor: theme.card, borderColor: theme.border }, stageAnimatedStyle]}>
               <View style={{ position: 'absolute', top: -45, left: 0, right: 0, alignSelf: 'center' }}>
-                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'top' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
+                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'top' ? t('front') : t('backDir')}</Text>
               </View>
               <GridLayer settings={settings} />
               
@@ -1752,7 +1752,7 @@ export default function FormationEditorScreen() {
                 <DancerNode key={d.id} index={i} dancer={d} dancerPos={dancerPositions[d.id]} isSelected={selectedDancerId === d.id} onPress={handleDancerPress} mode={mode} settings={settings} stageWidth={STAGE_WIDTH} stageHeight={STAGE_HEIGHT} cellSize={STAGE_CELL_SIZE} scale={scale} onDragEnd={onDragEnd} canDragInPlace={!!(activeEntryIdInPlace || selectedEntryId)} />
               ))}
               <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignSelf: 'center' }}>
-                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? 'FRONT (앞)' : 'BACK (뒤)'}</Text>
+                <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center' }]}>{settings.stageDirection === 'bottom' ? t('front') : t('backDir')}</Text>
               </View>
             </Animated.View>
           </View>
@@ -1830,15 +1830,15 @@ export default function FormationEditorScreen() {
             </View>
             <View style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
               <View style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>영상 추가</Text></TouchableOpacity>
-                <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>노래 변경</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('addVideo')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('changeSong')}</Text></TouchableOpacity>
                 {videoUrl && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 6, height: 36, borderWidth: 1, borderColor: theme.border }}>
                     <TouchableOpacity onPress={() => handleSyncAdjust(-0.1)} style={{ padding: 4 }}>
                       <Ionicons name="remove-circle-outline" size={20} color={theme.textSecondary} />
                     </TouchableOpacity>
                     <View style={{ width: 55, alignItems: 'center' }}>
-                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: 'bold' }}>싱크 {syncOffset >= 0 ? '+' : ''}{syncOffset.toFixed(1)}s</Text>
+                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: 'bold' }}>{t('sync')} {syncOffset >= 0 ? '+' : ''}{syncOffset.toFixed(1)}s</Text>
                     </View>
                     <TouchableOpacity onPress={() => handleSyncAdjust(0.1)} style={{ padding: 4 }}>
                       <Ionicons name="add-circle-outline" size={20} color={theme.textSecondary} />
@@ -1865,16 +1865,16 @@ export default function FormationEditorScreen() {
         ) : (
           <View style={styles.createDock}>
             <View style={styles.createToolbar}>
-              <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>댄서 추가</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setTempWingWidth(String(settings.sideWingWidth || 0)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>무대 설정</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>가이드</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={addDancer}><Ionicons name="person-add" size={24} color={theme.primary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('addDancer')}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => { setTempRows(String(settings.gridRows)); setTempCols(String(settings.gridCols)); setTempWingWidth(String(settings.sideWingWidth || 0)); setShowStageSettings(true); }}><Ionicons name="settings-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('stageSettings')}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.toolBtn} onPress={() => { setGuideIndex(0); setShowGuide(true); }}><Ionicons name="help-circle-outline" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('guide')}</Text></TouchableOpacity>
             </View>
             <View style={styles.sceneSection}>
               <View style={styles.actionColumn}>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.primary }]} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={16} color={theme.background} /><Text style={[styles.addSceneText, { color: theme.background }]}>대형 추가</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowMirrorModal(true)}><Ionicons name="swap-horizontal" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>대형 반전</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={copyActiveScene}><Ionicons name="copy-outline" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>대형 복사</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(true)}><Ionicons name="trash-outline" size={16} color={theme.error} /><Text style={[styles.addSceneText, { color: theme.error }]}>대형 삭제</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.primary }]} onPress={() => { setSceneModalMode('add'); setInputName(''); setShowSceneModal(true); }}><Ionicons name="add-circle" size={16} color={theme.background} /><Text style={[styles.addSceneText, { color: theme.background }]}>{t('addFormation')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowMirrorModal(true)}><Ionicons name="swap-horizontal" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>{t('mirrorFormation')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={copyActiveScene}><Ionicons name="copy-outline" size={16} color={theme.text} /><Text style={[styles.addSceneText, { color: theme.text }]}>{t('copyFormation')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.addSceneBtnWide, { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(true)}><Ionicons name="trash-outline" size={16} color={theme.error} /><Text style={[styles.addSceneText, { color: theme.error }]}>{t('deleteFormation')}</Text></TouchableOpacity>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ alignItems: 'center' }}>
                 {scenes.map(s => (
@@ -1898,36 +1898,36 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>내보내기 / 공유</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={startExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>JSON 파일로 추출</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>동선 데이터를 파일로 내보냅니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>피드백 영상 업로드</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>방 멤버들이 볼 수 있게 발행합니다.</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
+          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('exportShare')}</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={startExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('exportJson')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('exportJsonDesc')}</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('uploadFeedback')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('uploadFeedbackDesc')}</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
         </View>
       </Modal>
 
       <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>피드백 발행</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>발행할 피드백의 제목을 입력하세요.</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder="피드백 제목" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>발행</Text>}</TouchableOpacity></View></View></View>
+          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{t('publishFeedback')}</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>{t('publishTitleLabel')}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder={t('publishTitlePlaceholder')} placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('post')}</Text>}</TouchableOpacity></View></View></View>
         </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={styles.modalBg}><View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 삭제</Text><TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ alignItems: 'center', marginVertical: 15 }}><Ionicons name="trash" size={32} color={theme.error} /><Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>현재 대형을 삭제할까요?</Text></View><View style={{ gap: 8 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>취소</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>삭제 확인</Text></TouchableOpacity></View></View></View></Modal>
+        <View style={styles.modalBg}><View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('deleteFormation')}</Text><TouchableOpacity onPress={() => setShowDeleteModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ alignItems: 'center', marginVertical: 15 }}><Ionicons name="trash" size={32} color={theme.error} /><Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginTop: 10 }}>{t('deleteFormationConfirm')}</Text></View><View style={{ gap: 8 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, padding: 12, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowDeleteModal(false)}><Text style={[styles.mirrorApplyText, { color: theme.textSecondary }]}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.error, padding: 12 }]} onPress={deleteActiveScene}><Text style={[styles.mirrorApplyText, { color: '#FFF' }]}>{t('delete')}</Text></TouchableOpacity></View></View></View></Modal>
 
       <Modal visible={showFilenameModal} transparent animationType="fade" onRequestClose={() => setShowFilenameModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={styles.modalBg}>
             <View style={[styles.menu, { backgroundColor: theme.card }]}>
-              <Text style={[styles.menuTitle, { color: theme.text }]}>파일 이름 설정</Text>
-              <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>저장할 JSON 파일의 이름을 입력하세요.</Text>
+              <Text style={[styles.menuTitle, { color: theme.text }]}>{t('fileNameSettings')}</Text>
+              <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>{t('fileNameLabel')}</Text>
               <TextInput 
                 style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
                 value={exportFileName} 
                 onChangeText={setExportFileName} 
-                placeholder="파일 이름" 
+                placeholder={t('fileNamePlaceholder')} 
                 placeholderTextColor={theme.textSecondary} 
                 autoFocus 
               />
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}>
-                <TouchableOpacity onPress={() => setShowFilenameModal(false)}><Text style={{ color: theme.textSecondary }}>취소</Text></TouchableOpacity>
-                <TouchableOpacity onPress={handleExportJSON}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>내보내기</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowFilenameModal(false)}><Text style={{ color: theme.textSecondary }}>{t('cancel')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleExportJSON}><Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('save')}</Text></TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1986,7 +1986,7 @@ export default function FormationEditorScreen() {
                 style={[styles.mirrorApplyBtn, { backgroundColor: theme.error + '22', borderColor: theme.error, borderWidth: 1 }]} 
                 onPress={handleDeleteTimelineEntryAction}
               >
-                <Text style={[styles.mirrorApplyText, { color: theme.error }]}>삭제</Text>
+                <Text style={[styles.mirrorApplyText, { color: theme.error }]}>{t('delete')}</Text>
                 <Ionicons name="trash-outline" size={18} color={theme.error} />
               </TouchableOpacity>
             </View>
@@ -1997,7 +1997,7 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showSceneModal} transparent animationType="fade">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>취소</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : '저장'}</Text></TouchableOpacity></View></View></View>
+          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : t('save')}</Text></TouchableOpacity></View></View></View>
         </KeyboardAvoidingView>
       </Modal>
       <Modal visible={showDancerSheet} transparent animationType="slide">

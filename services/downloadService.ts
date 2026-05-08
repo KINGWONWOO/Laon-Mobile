@@ -13,7 +13,7 @@ export const saveMediaToDevice = async (url: string): Promise<void> => {
 
   const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
 
-  if (status === 'granted' || status === 'limited') {
+  if (status === 'granted' || (status as string) === 'limited') {
     await MediaLibrary.saveToLibraryAsync(uri);
     return;
   }

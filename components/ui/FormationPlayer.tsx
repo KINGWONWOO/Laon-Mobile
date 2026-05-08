@@ -99,7 +99,7 @@ export default function FormationPlayer({
   const STAGE_CELL_SIZE = (effectiveWidth - padding) / gridCols;
   const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
-  const wingPct = sideWingWidth > 0 ? `${(sideWingWidth / gridCols) * 100}%` : '0%';
+  const wingPct = (sideWingWidth > 0 ? `${(sideWingWidth / gridCols) * 100}%` : '0%') as `${number}%`;
 
   const durationReportedRef = useRef(false);
 

@@ -22,6 +22,7 @@ interface ButtonProps {
   icon?: any;
   soundEffect?: 'tap' | 'success' | 'error' | 'pop';
   loading?: boolean;
+  disabled?: boolean;
 }
 
 export const DanceButton = ({
@@ -58,7 +59,7 @@ export const DanceButton = ({
   const getBackgroundColor = () => {
     switch (variant) {
       case 'primary': return Colors.primary;
-      case 'secondary': return Colors.secondary;
+      case 'secondary': return Colors.border;
       case 'accent': return Colors.primary; // Accent replaced with primary
       case 'ghost': return 'transparent';
       case 'apple': return '#000000';

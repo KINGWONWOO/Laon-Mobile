@@ -70,7 +70,7 @@ export default function FormationListScreen() {
         });
       }
     } catch (err) {
-      Alert.alert('오류', '파일을 선택할 수 없습니다.');
+      Alert.alert(t('errorTitle'), '파일을 선택할 수 없습니다.');
     }
   };
 
@@ -81,7 +81,7 @@ export default function FormationListScreen() {
         'Pro 멤버십 기능',
         '동선 가져오기 기능은 Pro 멤버십 전용입니다.',
         [
-          { text: '취소', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           { text: '멤버십 보기', onPress: () => router.push('/subscription') }
         ]
       );
@@ -114,10 +114,10 @@ export default function FormationListScreen() {
           await updateFormation(newId, { videoSettings: importedData.videoSettings });
         }
         
-        Alert.alert('성공', '동선 파일을 성공적으로 가져왔습니다.');
+        Alert.alert(t('successTitle'), '동선 파일을 성공적으로 가져왔습니다.');
       }
     } catch (err: any) {
-      Alert.alert('오류', err.message || '파일을 가져오는 중 오류가 발생했습니다.');
+      Alert.alert(t('errorTitle'), err.message || '파일을 가져오는 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +199,7 @@ export default function FormationListScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert('오류', '동선 제목을 입력해주세요.');
+      Alert.alert(t('errorTitle'), '동선 제목을 입력해주세요.');
       return;
     }
     
@@ -208,7 +208,7 @@ export default function FormationListScreen() {
       let audioUrl = selectedAudio ? selectedAudio.uri : undefined;
       
       if (audioUrl) {
-        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true });
+        const fInfo = await FileSystem.getInfoAsync(audioUrl, { size: true } as any) as any;
         if (fInfo.exists && fInfo.size && fInfo.size > 2.5 * 1024 * 1024) {
           try {
             audioUrl = await compressAudio(audioUrl);
@@ -224,7 +224,7 @@ export default function FormationListScreen() {
       setSelectedAudio(null);
       router.push(`/room/${id}/formation/${newId}`);
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert(t('errorTitle'), e.message);
     } finally {
       setIsSubmitting(false);
       setIsCompressingAudio(false);
@@ -232,9 +232,9 @@ export default function FormationListScreen() {
   };
 
   const handleDelete = (fid: string) => {
-    Alert.alert('동선 삭제', '정말 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => deleteFormation(fid) }
+    Alert.alert('동선 삭제', t('deleteConfirmMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('delete'), style: 'destructive', onPress: () => deleteFormation(fid) }
     ]);
   };
 
@@ -250,7 +250,7 @@ export default function FormationListScreen() {
         setExtractProgress(0);
       }
     } catch (e) {
-      Alert.alert('오류', '파일을 선택할 수 없습니다.');
+      Alert.alert(t('errorTitle'), '파일을 선택할 수 없습니다.');
     }
   };
 
@@ -261,7 +261,7 @@ export default function FormationListScreen() {
     setExtractStatus('준비 중...');
     
     try {
-      const fileInfo = await FileSystem.getInfoAsync(extractSourceUri, { size: true });
+      const fileInfo = await FileSystem.getInfoAsync(extractSourceUri, { size: true } as any) as any;
       const fileSize = fileInfo.size || 0;
       
       // Initialize WebView state for reconstruction
@@ -341,14 +341,14 @@ export default function FormationListScreen() {
             'audio/mpeg'
           );
           await FileSystem.writeAsStringAsync(destinationUri, base64Content, { encoding: FileSystem.EncodingType.Base64 });
-          Alert.alert('성공', '파일이 선택한 폴더에 저장되었습니다.');
+          Alert.alert(t('successTitle'), '파일이 선택한 폴더에 저장되었습니다.');
         }
       } else {
         // iOS fallback to sharing for "Save to Files"
         await Sharing.shareAsync(filePath, { mimeType: 'audio/mpeg', UTI: 'public.mp3' });
       }
     } catch (e: any) {
-      Alert.alert('오류', `저장 실패: ${e.message}`);
+      Alert.alert(t('errorTitle'), `저장 실패: ${e.message}`);
     }
   };
 
@@ -361,12 +361,12 @@ export default function FormationListScreen() {
       await FileSystem.writeAsStringAsync(filePath, base64Content, { encoding: FileSystem.EncodingType.Base64 });
       
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('오류', '공유 기능을 사용할 수 없습니다.');
+        Alert.alert(t('errorTitle'), '공유 기능을 사용할 수 없습니다.');
         return;
       }
       await Sharing.shareAsync(filePath, { mimeType: 'audio/mpeg', dialogTitle: '음원 공유' });
     } catch (e: any) {
-      Alert.alert('오류', `공유 실패: ${e.message}`);
+      Alert.alert(t('errorTitle'), `공유 실패: ${e.message}`);
     }
   };
 
@@ -397,7 +397,7 @@ export default function FormationListScreen() {
           compressionRejecterRef.current(new Error(event.message));
           compressionRejecterRef.current = null;
         } else {
-          Alert.alert('오류', '처리 중 문제가 발생했습니다: ' + event.message);
+          Alert.alert(t('errorTitle'), '처리 중 문제가 발생했습니다: ' + event.message);
         }
       }
     } catch (err) {

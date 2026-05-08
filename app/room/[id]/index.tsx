@@ -210,13 +210,13 @@ export default function RoomMainScreen() {
             <NoticeItem key={notice.id} notice={notice} theme={theme} onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} />
           )) : (
             <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
-              <Text style={{ color: theme.textSecondary }}>등록된 공지사항이 없습니다.</Text>
+              <Text style={{ color: theme.textSecondary }}>{t('noNotice')}</Text>
             </View>
           )}
 
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionLabel, { color: theme.primary }]}>CORE</Text>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>핵심 기능</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('coreFeatures')}</Text>
           </View>
           
           <View style={styles.coreGrid}>
@@ -234,7 +234,7 @@ export default function RoomMainScreen() {
 
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionLabel, { color: theme.primary }]}>MANAGE</Text>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>팀 관리</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('teamManagement')}</Text>
           </View>
           <View style={styles.gridContainer}>
             {manageActions.map((item, idx) => (
@@ -247,27 +247,27 @@ export default function RoomMainScreen() {
 
           {isLeader && (
             <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
-              <Text style={styles.roomDeleteText}>방 삭제하기</Text>
+              <Text style={styles.roomDeleteText}>{t('deleteRoom')}</Text>
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
 
-      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title="방을 삭제하시겠습니까?" theme={theme} />
+      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title={t('deleteRoomConfirm')} theme={theme} />
 
       <Modal visible={showRoomEditModal} animationType="fade" transparent onRequestClose={() => setShowRoomEditModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
-            <Text style={[styles.polishedModalTitle, { color: theme.text }]}>방 정보 수정</Text>
+            <Text style={[styles.polishedModalTitle, { color: theme.text }]}>{t('roomInfoEdit')}</Text>
             <TouchableOpacity style={styles.avatarPicker} onPress={async () => { const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 }); if(!res.canceled) setRoomImage(res.assets[0].uri); }}>
               <Image source={{ uri: roomImage || room.imageUri || 'https://placeholder.com/150' }} style={styles.avatarLarge} />
               <View style={[styles.avatarCamera, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={16} color="#fff" /></View>
             </TouchableOpacity>
-            <TextInput style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }]} placeholder="방 이름" placeholderTextColor={theme.textSecondary} value={roomName} onChangeText={setRoomName} />
+            <TextInput style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }]} placeholder={t('roomNameLabel')} placeholderTextColor={theme.textSecondary} value={roomName} onChangeText={setRoomName} />
             <View style={styles.polishedModalBtns}>
-              <TouchableOpacity style={styles.polishedCancel} onPress={() => setShowRoomEditModal(false)}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.polishedCancel} onPress={() => setShowRoomEditModal(false)}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.polishedSave, {backgroundColor: theme.primary}]} onPress={handleUpdateRoomInfo} disabled={isUpdating}>
-                {isUpdating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '800'}}>저장</Text>}
+                {isUpdating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '800'}}>{t('save')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -277,20 +277,20 @@ export default function RoomMainScreen() {
       <Modal visible={showUserProfileModal} animationType="fade" transparent onRequestClose={() => setShowUserProfileModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
-            <Text style={[styles.polishedModalTitle, { color: theme.text }]}>나의 방 프로필 설정</Text>
+            <Text style={[styles.polishedModalTitle, { color: theme.text }]}>{t('myProfileTitle')}</Text>
             <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 20, textAlign: 'center', lineHeight: 18 }}>
-              여기서 설정하는 이름과 사진은{"\n"}
-              <Text style={{ color: theme.primary, fontWeight: '700' }}>현재 방({room.name})</Text>에서만 사용됩니다.
+              {t('roomProfileDesc').split('\n')[0]}{"\n"}
+              <Text style={{ color: theme.primary, fontWeight: '700' }}>{room.name}</Text>{t('roomProfileDesc').split('\n')[1]}
             </Text>
             <TouchableOpacity style={styles.avatarPicker} onPress={async () => { const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 }); if(!res.canceled) setUserImage(res.assets[0].uri); }}>
               <Image source={{ uri: userImage || myRoomProfile?.profileImage || currentUser?.profileImage || 'https://placeholder.com/150' }} style={styles.avatarLarge} />
               <View style={[styles.avatarCamera, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={16} color="#fff" /></View>
             </TouchableOpacity>
-            <TextInput style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }]} placeholder="이 방에서 쓸 닉네임" placeholderTextColor={theme.textSecondary} value={userNickname} onChangeText={setUserNickname} />
+            <TextInput style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }]} placeholder={t('username')} placeholderTextColor={theme.textSecondary} value={userNickname} onChangeText={setUserNickname} />
             <View style={styles.polishedModalBtns}>
-              <TouchableOpacity style={styles.polishedCancel} onPress={() => setShowUserProfileModal(false)}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>취소</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.polishedCancel} onPress={() => setShowUserProfileModal(false)}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.polishedSave, {backgroundColor: theme.primary}]} onPress={handleUpdateUserProfile} disabled={isUpdating}>
-                {isUpdating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '800'}}>저장</Text>}
+                {isUpdating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '800'}}>{t('save')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -302,16 +302,16 @@ export default function RoomMainScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.addModalMain, { backgroundColor: theme.background }]}>
               <View style={styles.modalTopBar}>
-                <TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>취소</Text></TouchableOpacity>
-                <Text style={[styles.modalTitleHeader, {color: theme.text}]}>공지 작성</Text>
-                <TouchableOpacity onPress={handleAddNotice} disabled={isSubmitting}><Text style={{color: theme.primary, fontWeight: '800'}}>완료</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>{t('cancel')}</Text></TouchableOpacity>
+                <Text style={[styles.modalTitleHeader, {color: theme.text}]}>{t('addNoticeTitle')}</Text>
+                <TouchableOpacity onPress={handleAddNotice} disabled={isSubmitting}><Text style={{color: theme.primary, fontWeight: '800'}}>{t('ok')}</Text></TouchableOpacity>
               </View>
               <ScrollView style={{flex: 1, padding: 24}}>
-                <TextInput style={[styles.fancyTitleInput, { color: theme.text }]} placeholder="제목" placeholderTextColor={theme.textSecondary + '80'} value={noticeTitle} onChangeText={setNoticeTitle} />
-                <TextInput style={[styles.fancyContentInput, { color: theme.text }]} placeholder="내용을 입력하세요..." placeholderTextColor={theme.textSecondary + '80'} value={noticeContent} onChangeText={setNoticeContent} multiline />
+                <TextInput style={[styles.fancyTitleInput, { color: theme.text }]} placeholder={t('noticeTitle')} placeholderTextColor={theme.textSecondary + '80'} value={noticeTitle} onChangeText={setNoticeTitle} />
+                <TextInput style={[styles.fancyContentInput, { color: theme.text }]} placeholder={t('noticeContent')} placeholderTextColor={theme.textSecondary + '80'} value={noticeContent} onChangeText={setNoticeContent} multiline />
                 <View style={styles.imagePickerArea}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: '800' }}>사진 첨부</Text>
+                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: '800' }}>{t('addImage')}</Text>
                     <Text style={{ color: selectedImages.length >= 5 ? theme.error : theme.textSecondary, fontSize: 13, fontWeight: '700' }}>
                       ({selectedImages.length}/5)
                     </Text>
@@ -324,7 +324,7 @@ export default function RoomMainScreen() {
                   >
                     <Ionicons name="camera" size={32} color={selectedImages.length >= 5 ? theme.textSecondary : theme.primary} />
                     <Text style={{marginTop: 8, color: theme.textSecondary, fontWeight: '700'}}>
-                      {selectedImages.length >= 5 ? '최대 개수 도달' : '사진 추가'}
+                      {selectedImages.length >= 5 ? t('maxImages') : t('addImage')}
                     </Text>
                   </TouchableOpacity>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 16}}>

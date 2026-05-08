@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "com.laon.dancefeedback",
+      "versionCode": 1,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",

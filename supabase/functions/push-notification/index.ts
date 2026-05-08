@@ -12,6 +12,19 @@ serve(async (req) => {
   }
 
   try {
+    // 호출자 JWT 검증 — anon key만으로는 통과 불가
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const callerToken = authHeader.replace('Bearer ', '').trim()
+
+    const verifier = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!
+    )
+    const { data: { user: caller }, error: authError } = await verifier.auth.getUser(callerToken)
+    if (authError || !caller) {
+      return new Response(JSON.stringify({ error: '인증된 사용자만 호출할 수 있습니다.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     const { user_ids, title, body, data } = await req.json()
 
     if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
