@@ -25,8 +25,8 @@ export default function ArchiveScreen() {
     photos, addPhoto, updatePhoto, deletePhoto, 
     addPhotoComment, updatePhotoComment, deletePhotoComment, 
     theme, currentUser, refreshAllData, getUserById, 
-    markItemAsAccessed, rooms, checkProAccess, blockUser, 
-    reportContent, t
+    markItemAsAccessed, rooms, checkProAccess, blockUser,
+    reportContent, t, language
   } = context;
   const isPro = context?.isPro || false;
   const insets = useSafeAreaInsets();
@@ -331,7 +331,7 @@ export default function ArchiveScreen() {
                   })()}
                   <View>
                     <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || t('unknownAuthor')}</Text>
-                    <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt)}</Text>
+                    <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt, language)}</Text>
                   </View>
                 </View>
 
@@ -343,10 +343,10 @@ export default function ArchiveScreen() {
                   )}
                 </View>
                 
-                <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || '설명이 없습니다.'}</Text>
+                <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || t('noDescription')}</Text>
 
                 <View style={[styles.divider, { backgroundColor: theme.border, opacity: 0.5, marginTop: 20 }]} />
-                <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>댓글 {selectedPhoto?.comments?.length || 0}</Text>
+                <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{t('commentCountLabel')} {selectedPhoto?.comments?.length || 0}</Text>
               </View>
             }
             renderItem={({ item: comment }) => {
@@ -357,7 +357,7 @@ export default function ArchiveScreen() {
                 <View style={styles.commentItem}>
                   <View style={styles.commentHeader}>
                     <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
-                    <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
+                    <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
                     {comment.userId === currentUser?.id && !isEditing && (
                       <TouchableOpacity onPress={() => {
                         setSelectedCommentForModal(comment);
@@ -392,26 +392,28 @@ export default function ArchiveScreen() {
             contentContainerStyle={{ paddingBottom: 100 }}
           />
 
-          <OptionModal 
-            visible={showPhotoOptions} 
-            onClose={() => setShowPhotoOptions(false)} 
-            options={photoOptions} 
-            title="아카이브 설정" 
-            theme={theme} 
+          <OptionModal
+            visible={showPhotoOptions}
+            onClose={() => setShowPhotoOptions(false)}
+            options={photoOptions}
+            title={t('archiveSettings')}
+            theme={theme}
+            cancelLabel={t('cancel')}
           />
 
-          <OptionModal 
-            visible={showCommentOptions} 
-            onClose={() => { setShowCommentOptions(false); setSelectedCommentForModal(null); }} 
-            options={commentOptions} 
-            title={t('commentSettingsTitle')} 
-            theme={theme} 
+          <OptionModal
+            visible={showCommentOptions}
+            onClose={() => { setShowCommentOptions(false); setSelectedCommentForModal(null); }}
+            options={commentOptions}
+            title={t('commentSettingsTitle')}
+            theme={theme}
+            cancelLabel={t('cancel')}
           />
 
           <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>
             <TextInput
               style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
-              placeholder="댓글을 입력하세요..."
+              placeholder={t('enterComment')}
               placeholderTextColor="#888"
               value={newComment}
               onChangeText={setNewComment}
@@ -445,7 +447,7 @@ export default function ArchiveScreen() {
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>팀 아카이브 업로드</Text>
+            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>{t('archiveUploadTitle')}</Text>
             
             <View style={[styles.uploadPreview, { backgroundColor: '#000', height: 200, justifyContent: 'center', alignItems: 'center', borderRadius: 15, overflow: 'hidden' }]}>
               {selectedContent ? (
@@ -465,7 +467,7 @@ export default function ArchiveScreen() {
 
             <TextInput 
               style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1, marginTop: 20 }]} 
-              placeholder="아카이브에 대한 설명 (필수)" 
+              placeholder={t('archiveDescPlaceholder')}
               placeholderTextColor={theme.textSecondary} 
               value={description} 
               onChangeText={setDescription} 
@@ -484,7 +486,7 @@ export default function ArchiveScreen() {
                   Shadows.glow
                 ]}
               >
-                <Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>업로드 완료</Text>
+                <Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>{t('uploadCompleteBtn')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>

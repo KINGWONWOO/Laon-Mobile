@@ -15,7 +15,7 @@ import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -106,7 +106,7 @@ export default function RoomMainScreen() {
   };
 
   const handleInvite = async () => {
-    try { await LinkingService.shareRoomInvite(room.name, room.id, room.passcode); } catch (error) { Alert.alert(t('error'), t('shareError')); }
+    try { await LinkingService.shareRoomInvite(room.name, room.id, room.passcode, t('inviteMsg'), t('inviteMsgWithLink'), t('inviteShareTitle')); } catch (error) { Alert.alert(t('error'), t('shareError')); }
   };
 
   const deleteOptions = [
@@ -207,7 +207,7 @@ export default function RoomMainScreen() {
           </View>
 
           {roomNotices.length > 0 ? roomNotices.slice(0, 3).map(notice => (
-            <NoticeItem key={notice.id} notice={notice} theme={theme} onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} />
+            <NoticeItem key={notice.id} notice={notice} theme={theme} lang={language} onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} />
           )) : (
             <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
               <Text style={{ color: theme.textSecondary }}>{t('noNotice')}</Text>
@@ -253,7 +253,7 @@ export default function RoomMainScreen() {
         </View>
       </ScrollView>
 
-      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title={t('deleteRoomConfirm')} theme={theme} />
+      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title={t('deleteRoomConfirm')} theme={theme} cancelLabel={t('cancel')} />
 
       <Modal visible={showRoomEditModal} animationType="fade" transparent onRequestClose={() => setShowRoomEditModal(false)}>
         <View style={styles.modalOverlayCenter}>

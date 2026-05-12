@@ -12,7 +12,9 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed, theme, currentUser, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, sendDirectReminder, isPro, blockUser, reportContent, t } = useAppContext();
+  const { schedules, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed, theme, currentUser, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, sendDirectReminder, isPro, blockUser, reportContent, t, language } = useAppContext();
+  const localeMap: Record<string, string> = { ko: 'ko-KR', en: 'en-US', es: 'es-ES', id: 'id-ID', ja: 'ja-JP', zh: 'zh-CN', th: 'th-TH' };
+  const locale = localeMap[language] || 'ko-KR';
   const insets = useSafeAreaInsets();
   const router = useRouter();
   
@@ -381,11 +383,11 @@ export default function ScheduleScreen() {
     const unreadMembers = allMembers.filter(id => !viewedMembers.includes(id) && !participants.includes(id));
 
     const handleSendUnreadReminder = async () => {
-      if (!isPro) return Alert.alert('Pro 전용 기능', '안읽음 인원 알림은 Pro 멤버십 전용입니다.', [{ text: t('cancel'), style: 'cancel' }, { text: '멤버십 보기', onPress: () => router.push('/subscription') }]);
+      if (!isPro) return Alert.alert(t('proFeatureTitle'), t('unreadReminderProOnly'), [{ text: t('cancel'), style: 'cancel' }, { text: t('viewMembership'), onPress: () => router.push('/subscription') }]);
       setIsSendingUnreadReminder(true);
       try {
         await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${schedule.title}" 일정 조율을 아직 확인하지 않으셨어요!`);
-        Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), '알림을 보냈습니다.');
+        Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), t('notificationSent'));
       } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
       finally { setIsSendingUnreadReminder(false); }
     };
@@ -405,7 +407,7 @@ export default function ScheduleScreen() {
         <View style={[styles.detailContainer, { backgroundColor: theme.background, paddingTop: insets.top }]}>
           <View style={styles.detailHeader}>
             <TouchableOpacity onPress={() => setSelectedScheduleId(null)} style={styles.closeBtn}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity>
-            <Text style={[styles.detailHeaderTitle, { color: theme.text }]}>일정 상세</Text>
+            <Text style={[styles.detailHeaderTitle, { color: theme.text }]}>{t('scheduleDetail')}</Text>
             <TouchableOpacity onPress={() => setShowScheduleOptions(true)} style={styles.detailDeleteBtn}><Ionicons name="ellipsis-vertical" size={24} color={theme.text} /></TouchableOpacity>
           </View>
 
@@ -419,7 +421,7 @@ export default function ScheduleScreen() {
               {schedule.deadline && !isClosed && (
                 <View style={styles.deadlineInfo}>
                   <Ionicons name="time-outline" size={14} color={theme.textSecondary} />
-                  <Text style={{color: theme.textSecondary, fontSize: 12, marginLeft: 4, fontWeight: '600'}}>{formatDateFull(schedule.deadline)} 마감</Text>
+                  <Text style={{color: theme.textSecondary, fontSize: 12, marginLeft: 4, fontWeight: '600'}}>{formatDateFull(schedule.deadline, language)} {t('deadline')}</Text>
                 </View>
               )}
             </View>
@@ -451,7 +453,7 @@ export default function ScheduleScreen() {
                     <View style={{ flexDirection: 'row' }}>
                       {uniqueDates.map(date => {
                         const d = new Date(date as string);
-                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
+                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{d.toLocaleDateString(locale, { weekday: 'short' })}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                       })}
                     </View>
                     {hours.map(hour => (
@@ -501,7 +503,7 @@ export default function ScheduleScreen() {
                     <View style={{ flexDirection: 'row' }}>
                       {uniqueDates.map(date => {
                         const d = new Date(date as string);
-                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
+                        return (<View key={date as string} style={styles.dateHeaderCell}><Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{d.toLocaleDateString(locale, { weekday: 'short' })}</Text><Text style={[styles.dateHeaderDay, { color: theme.text }]}>{d.getDate()}</Text></View>);
                       })}
                     </View>
                     {hours.map(hour => (
@@ -515,7 +517,7 @@ export default function ScheduleScreen() {
                             <TouchableOpacity key={date as string} activeOpacity={0.9} style={[styles.gridCell, { backgroundColor: getHeatmapColor(votersForThisOpt.length), borderColor: theme.border + '50' }]} onPress={() => {
                               if (votersForThisOpt.length > 0) {
                                 setVotersToDisplay(votersForThisOpt);
-                                setVoterModalTitle(`${dateTimeStr.slice(5)} 가능 인원`);
+                                setVoterModalTitle(`${dateTimeStr.slice(5)} ${t('availableMembers')}`);
                                 setShowVoterModal(true);
                               }
                             }}>
@@ -567,7 +569,7 @@ export default function ScheduleScreen() {
             </View>
 
             <View style={[styles.rankingSection, { backgroundColor: theme.card }, Shadows.soft]}>
-              <Text style={[styles.rankingHeader, { color: theme.text, marginBottom: 15 }]}>가장 많이 모이는 시간</Text>
+              <Text style={[styles.rankingHeader, { color: theme.text, marginBottom: 15 }]}>{t('bestTimes')}</Text>
               {topBlocks.length > 0 ? (
                 <View style={{ gap: 16 }}>
                   {topBlocks.map((group: any, index: number) => {
@@ -579,9 +581,9 @@ export default function ScheduleScreen() {
                       >
                         <View style={styles.rankGroupHeader}>
                           <View style={[styles.rankBadge, { backgroundColor: rankNum === 1 ? theme.primary : theme.textSecondary + '40' }]}>
-                            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{rankNum}위</Text>
+                            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{rankNum}{t('rankSuffix')}</Text>
                           </View>
-                          <Text style={{ color: rankNum === 1 ? theme.primary : theme.text, fontWeight: '900', fontSize: 16, marginLeft: 10 }}>{group.votes}명</Text>
+                          <Text style={{ color: rankNum === 1 ? theme.primary : theme.text, fontWeight: '900', fontSize: 16, marginLeft: 10 }}>{group.votes}{t('peopleCount')}</Text>
                         </View>
                         
                         <View style={styles.rankGroupContent}>
@@ -593,17 +595,17 @@ export default function ScheduleScreen() {
                               onPress={() => {
                                 setVotersToDisplay(block.voters);
                                 const d = new Date(block.date);
-                                const dateStr = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
-                                setVoterModalTitle(`${dateStr} ${block.startHour}-${block.endHour}시 가능 인원`);
+                                const dateStr = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', weekday: 'short' });
+                                setVoterModalTitle(`${dateStr} ${block.startHour}-${block.endHour} ${t('availableMembers')}`);
                                 setShowVoterModal(true);
                               }}
                             >
                               <View style={{ flex: 1 }}>
                                 <Text style={{ color: theme.text, fontWeight: '800', fontSize: 15 }}>
-                                  {new Date(block.date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+                                  {new Date(block.date).toLocaleDateString(locale, { month: 'long', day: 'numeric', weekday: 'short' })}
                                 </Text>
                                 <Text style={{ color: theme.textSecondary, fontWeight: '700', fontSize: 13, marginTop: 2 }}>
-                                  {block.startHour}시 - {block.endHour}시
+                                  {block.startHour}{t('hourSuffix')} - {block.endHour}{t('hourSuffix')}
                                 </Text>
                               </View>
                               <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
@@ -614,16 +616,16 @@ export default function ScheduleScreen() {
                     );
                   })}
                   <Text style={{ fontSize: 11, color: theme.textSecondary, textAlign: 'center', marginTop: 4, opacity: 0.7 }}>
-                    항목을 터치하면 참여 가능한 멤버를 확인할 수 있습니다.
+                    {t('touchToViewMembers')}
                   </Text>
                 </View>
               ) : (
-                <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>아직 조율 데이터가 없습니다.</Text>
+                <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noScheduleData')}</Text>
               )}
             </View>
           </ScrollView>
 
-          <OptionModal visible={showScheduleOptions} onClose={() => setShowScheduleOptions(false)} options={scheduleOptions} title="조율 설정" theme={theme} />
+          <OptionModal visible={showScheduleOptions} onClose={() => setShowScheduleOptions(false)} options={scheduleOptions} title={t('scheduleSettings')} theme={theme} cancelLabel={t('cancel')} />
         </View>
         </GestureHandlerRootView>
       </Modal>
@@ -652,30 +654,30 @@ export default function ScheduleScreen() {
               ]} 
               onPress={() => { const newD = new Date(date); newD.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); onDateChange(newD); }}
             >
-              <Text style={{fontSize: 10, color: isSelected ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+              <Text style={{fontSize: 10, color: isSelected ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{d.toLocaleDateString(locale, { weekday: 'short' })}</Text>
               <Text style={{fontSize: 16, fontWeight: '900', color: isSelected ? '#fff' : theme.text}}>{d.getDate()}</Text>
             </TouchableOpacity>
           );
         })}</ScrollView>}
-        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}시</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}분</Text></TouchableOpacity>)}</ScrollView></View>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 120}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}{t('hourSuffix')}</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}{t('minuteSuffix')}</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
 
   const reminderOptions = [
-    { label: '없음', value: 0 },
-    { label: '30분 전', value: 30 },
-    { label: '1시간 전', value: 60 },
-    { label: '3시간 전', value: 180 },
-    { label: '6시간 전', value: 360 },
-    { label: '12시간 전', value: 720 },
-    { label: '1일 전', value: 1440 },
+    { label: t('none'), value: 0 },
+    { label: t('30minsBefore'), value: 30 },
+    { label: t('1hourBefore'), value: 60 },
+    { label: t('3hoursBefore'), value: 180 },
+    { label: t('6hoursBefore'), value: 360 },
+    { label: t('12hoursBefore'), value: 720 },
+    { label: t('1dayBefore'), value: 1440 },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 50 }]}>
       <View style={styles.header}>
-        <View><Text style={[styles.headerTitle, { color: theme.text }]}>연습 일정 조율</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>가능한 시간을 함께 찾아보아요!</Text></View>
+        <View><Text style={[styles.headerTitle, { color: theme.text }]}>{t('practiceScheduleTitle')}</Text><Text style={[styles.headerSub, { color: theme.textSecondary }]}>{t('practiceScheduleSub')}</Text></View>
         <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.primary }, Shadows.glow]} onPress={() => { resetForm(); setShowAddModal(true); }}><Ionicons name="add" size={28} color="#fff" /></TouchableOpacity>
       </View>
 
@@ -685,7 +687,7 @@ export default function ScheduleScreen() {
         contentContainerStyle={{paddingBottom: 100}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />} 
         renderItem={renderScheduleListItem} 
-        ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="calendar-outline" size={48} color={theme.textSecondary + '30'} /><Text style={[styles.emptyText, { color: theme.textSecondary }]}>등록된 일정 조율이 없습니다.</Text></View>} 
+        ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="calendar-outline" size={48} color={theme.textSecondary + '30'} /><Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('noSchedulesFound')}</Text></View>} 
       />
 
       {renderDetail()}
@@ -697,7 +699,7 @@ export default function ScheduleScreen() {
             <View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text }]}>{showEditModal ? t('editScheduleTitle') : t('newScheduleTitle')}</Text><TouchableOpacity onPress={() => { setShowAddModal(false); setShowEditModal(false); }}><Ionicons name="close" size={28} color={theme.text} /></TouchableOpacity></View>
             <ScrollView showsVerticalScrollIndicator={false} style={{flex: 1}}>
               <Text style={[styles.label, { color: theme.text }]}>{t('scheduleTitleLabel')}</Text>
-              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder="예: 차주 정기 연습 시간" placeholderTextColor={theme.textSecondary} value={title} onChangeText={setTitle} />
+              <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.background }]} placeholder={t('scheduleExample')} placeholderTextColor={theme.textSecondary} value={title} onChangeText={setTitle} />
               
               <Text style={[styles.label, { color: theme.text, marginTop: 10 }]}>{t('selectDatesMultiple')}</Text>
               <View style={[styles.dateSelectionContainer, { backgroundColor: theme.background }]}>
@@ -715,7 +717,7 @@ export default function ScheduleScreen() {
                           isSel && Shadows.glow
                         ]}
                       >
-                        <Text style={{fontSize: 10, color: isSel ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{['일','월','화','수','목','금','토'][d.getDay()]}</Text>
+                        <Text style={{fontSize: 10, color: isSel ? '#fff' : theme.textSecondary, fontWeight: '800'}}>{d.toLocaleDateString(locale, { weekday: 'short' })}</Text>
                         <Text style={{fontSize: 16, fontWeight: '900', color: isSel ? '#fff' : theme.text}}>{d.getDate()}</Text>
                       </TouchableOpacity>
                     );
@@ -723,19 +725,19 @@ export default function ScheduleScreen() {
                 </ScrollView>
                 {selectedDates.length === 0 && (
                   <View style={styles.dateSelectionPlaceholder}>
-                    <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '600' }}>연습 가능한 날짜들을 모두 선택해주세요</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '600' }}>{t('selectAvailableDates')}</Text>
                   </View>
                 )}
               </View>
 
-              <Text style={[styles.label, { color: theme.text, marginTop: 25 }]}>시간 범위 설정</Text>
+              <Text style={[styles.label, { color: theme.text, marginTop: 25 }]}>{t('setTimeRange')}</Text>
               <View style={[styles.timeRangeContainer, { backgroundColor: theme.background }]}>
                 <View style={{flex:1, alignItems:'center'}}>
-                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>시작</Text>
+                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>{t('startTimeLabel')}</Text>
                   <ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>
                     {Array.from({length: 24}).map((_,h) => (
                       <TouchableOpacity key={h} onPress={()=>setStartTime(h)} style={[styles.timeSlotBtn, startTime===h && {backgroundColor:theme.primary, ...Shadows.soft}]}>
-                        <Text style={{color:startTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text>
+                        <Text style={{color:startTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}{t('hourSuffix')}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -744,11 +746,11 @@ export default function ScheduleScreen() {
                   <Ionicons name="arrow-forward" size={18} color={theme.textSecondary} />
                 </View>
                 <View style={{flex:1, alignItems:'center'}}>
-                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>종료</Text>
+                  <Text style={{color: theme.textSecondary, fontSize:11, marginBottom:8, fontWeight:'700'}}>{t('endTimeLabel')}</Text>
                   <ScrollView horizontal style={{width:'100%'}} showsHorizontalScrollIndicator={false}>
                     {Array.from({length: 24}).map((_,h) => (
                       <TouchableOpacity key={h} onPress={()=>setEndTime(h)} style={[styles.timeSlotBtn, endTime===h && {backgroundColor:theme.primary, ...Shadows.soft}]}>
-                        <Text style={{color:endTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}시</Text>
+                        <Text style={{color:endTime===h?'#fff':theme.text, fontWeight:'800'}}>{h}{t('hourSuffix')}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -792,7 +794,7 @@ export default function ScheduleScreen() {
       </Modal>
 
       <Modal visible={showVoterModal} transparent animationType="fade" onRequestClose={() => setShowVoterModal(false)}>
-        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUserById(vId)?.name?.[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUserById(vId)?.name || '알 수 없음'}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>가능 인원이 없습니다.</Text>}</View></View></View>
+        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUserById(vId)?.name?.[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUserById(vId)?.name || t('unknownAuthor')}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noParticipants')}</Text>}</View></View></View>
       </Modal>
       <AdBanner />
     </View>

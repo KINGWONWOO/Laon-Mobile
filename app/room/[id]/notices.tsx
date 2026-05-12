@@ -9,7 +9,7 @@ import AdBanner from '../../../components/ui/AdBanner';
 
 export default function NoticesFullListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { notices, theme, refreshAllData } = useAppContext();
+  const { notices, theme, refreshAllData, language, t } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -37,7 +37,7 @@ export default function NoticesFullListScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>전체 공지사항</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{t('allNotices')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -47,16 +47,17 @@ export default function NoticesFullListScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20 }}
         renderItem={({ item: notice }) => (
-          <NoticeItem 
-            notice={notice} 
-            theme={theme} 
-            onPress={() => router.push(`/room/${id}/notice/${notice.id}`)} 
+          <NoticeItem
+            notice={notice}
+            theme={theme}
+            lang={language}
+            onPress={() => router.push(`/room/${id}/notice/${notice.id}`)}
           />
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="document-text-outline" size={64} color={theme.textSecondary} style={{ opacity: 0.2, marginBottom: 16 }} />
-            <Text style={{ color: theme.textSecondary, fontSize: 16, fontWeight: '600' }}>등록된 공지사항이 없습니다.</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 16, fontWeight: '600' }}>{t('noNotice')}</Text>
           </View>
         }
       />

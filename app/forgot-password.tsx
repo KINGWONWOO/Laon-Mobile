@@ -3,14 +3,16 @@ import { View, Text, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platfor
 import { Colors, Shadows } from '../constants/theme';
 import { StyledBackButton, DanceButton } from '../components/ui/Interactions';
 import { authService } from '../services/authService';
+import { useAppContext } from '../context/AppContext';
 
 export default function ForgotPasswordScreen() {
+  const { theme, t } = useAppContext();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     if (!email) {
-      Alert.alert('오류', '이메일 주소를 입력해주세요.');
+      Alert.alert(t('errorTitle'), t('enterEmailMsg'));
       return;
     }
     setLoading(true);
@@ -18,36 +20,42 @@ export default function ForgotPasswordScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('오류', error.message);
+      Alert.alert(t('errorTitle'), error.message);
     } else {
-      Alert.alert('메일 전송 완료', '비밀번호 재설정 링크가 이메일로 전송되었습니다.');
+      Alert.alert(t('resetEmailSentTitle'), t('resetEmailSentMsg'));
     }
   };
+
+  const currentColors = theme || Colors;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: currentColors.background }]}
     >
       <View style={styles.navHeader}><StyledBackButton /></View>
       <View style={styles.content}>
-        <Text style={styles.title}>비밀번호 찾기</Text>
-        <Text style={styles.subtitle}>가입하신 이메일 주소를 입력하시면{'\n'}재설정 링크를 보내드립니다.</Text>
+        <Text style={[styles.title, { color: currentColors.text }]}>{t('forgotPasswordTitle')}</Text>
+        <Text style={[styles.subtitle, { color: currentColors.textSecondary }]}>{t('forgotPasswordSubtitle')}</Text>
 
         <View style={styles.form}>
-          <Text style={styles.label}>이메일 주소</Text>
+          <Text style={[styles.label, { color: currentColors.text }]}>{t('emailAddress')}</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { 
+              backgroundColor: currentColors.card, 
+              color: currentColors.text,
+              borderColor: currentColors.border 
+            }]}
             value={email}
             onChangeText={setEmail}
             placeholder="example@email.com"
-            placeholderTextColor={Colors.textSecondary}
+            placeholderTextColor={currentColors.textSecondary}
             keyboardType="email-address"
             autoCapitalize="none"
           />
 
           <DanceButton 
-            title="재설정 이메일 보내기" 
+            title={t('sendResetEmail')} 
             onPress={handleReset}
             loading={loading}
             style={styles.resetBtn}

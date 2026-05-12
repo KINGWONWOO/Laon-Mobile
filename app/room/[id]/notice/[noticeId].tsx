@@ -11,7 +11,7 @@ import { storageService } from '../../../../services/storageService';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
-  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro, t } = useAppContext();
+  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro, t, language } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -212,7 +212,7 @@ export default function NoticeDetailScreen() {
               )}
               <View>
                 <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{author?.name || t('unknownAuthor')}</Text>
-                <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(notice.createdAt)}</Text>
+                <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(notice.createdAt, language)}</Text>
               </View>
             </View>
 
@@ -244,7 +244,7 @@ export default function NoticeDetailScreen() {
             <View style={styles.commentItem}>
               <View style={styles.commentHeader}>
                 <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
-                <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt)}</Text>
+                <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
                 {!isEditing && (
                   <TouchableOpacity onPress={() => { setSelectedComment(comment); setShowCommentOptions(true); }}>
                     <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
@@ -276,20 +276,22 @@ export default function NoticeDetailScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
       />
 
-      <OptionModal 
-        visible={showNoticeOptions} 
-        onClose={() => setShowNoticeOptions(false)} 
-        options={noticeOptions} 
-        title={t('noticeSettings')} 
-        theme={theme} 
+      <OptionModal
+        visible={showNoticeOptions}
+        onClose={() => setShowNoticeOptions(false)}
+        options={noticeOptions}
+        title={t('noticeSettings')}
+        theme={theme}
+        cancelLabel={t('cancel')}
       />
 
-      <OptionModal 
-        visible={showCommentOptions} 
-        onClose={() => { setShowCommentOptions(false); setSelectedComment(null); }} 
-        options={commentOptions} 
-        title={t('noticeCommentSettings')} 
-        theme={theme} 
+      <OptionModal
+        visible={showCommentOptions}
+        onClose={() => { setShowCommentOptions(false); setSelectedComment(null); }}
+        options={commentOptions}
+        title={t('noticeCommentSettings')}
+        theme={theme}
+        cancelLabel={t('cancel')}
       />
 
       <Modal visible={showEditNotice} transparent animationType="slide" onRequestClose={() => setShowEditNotice(false)}>

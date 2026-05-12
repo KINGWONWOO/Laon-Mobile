@@ -10,12 +10,12 @@ export default function JoinRoomScreen() {
   const [roomId, setRoomId] = useState('');
   const [passcode, setPasscode] = useState('');
   const [loading, setLoading] = useState(false);
-  const { joinRoom } = useAppContext();
+  const { joinRoom, t } = useAppContext();
   const router = useRouter();
 
   const handleJoin = async () => {
     if (!roomId.trim() || !passcode.trim()) {
-      Alert.alert('오류', '방 ID와 비밀번호를 모두 입력해주세요.');
+      Alert.alert(t('error'), t('roomIdRequired'));
       return;
     }
 
@@ -23,16 +23,16 @@ export default function JoinRoomScreen() {
     try {
       const room = await joinRoom(roomId.trim(), passcode.trim());
       if (room) {
-        Alert.alert('참여 성공', `'${room.name}' 크루룸에 참여되었습니다.`);
+        Alert.alert(t('successTitle'), t('joinSuccess').replace('{roomName}', room.name));
         router.replace('/rooms');
         setTimeout(() => {
           router.push(`/room/${room.id as string}` as any);
         }, 100);
       } else {
-        Alert.alert('참여 실패', '방 ID 또는 비밀번호가 올바르지 않습니다.');
+        Alert.alert(t('failure'), t('joinFailed'));
       }
     } catch (error: any) {
-      Alert.alert('오류', error.message || '참여 중 문제가 발생했습니다.');
+      Alert.alert(t('error'), error.message || t('joinError'));
     } finally {
       setLoading(false);
     }
@@ -42,23 +42,23 @@ export default function JoinRoomScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <StyledBackButton />
-        <Text style={styles.headerTitle}>JOIN CREW</Text>
+        <Text style={styles.headerTitle}>{t('joinRoomTitle')}</Text>
       </View>
 
       <View style={styles.content}>
         <Text style={styles.description}>
-          공유받은 크루룸의 고유 ID와 비밀번호를 입력하여 입장하세요.
+          {t('joinRoomDesc')}
         </Text>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>크루룸 고유 ID</Text>
+          <Text style={styles.label}>{t('roomIdLabel')}</Text>
           <View style={styles.inputWrapper}>
             <Ionicons name="finger-print" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               value={roomId}
               onChangeText={setRoomId}
-              placeholder="방 ID를 입력하세요"
+              placeholder={t('roomIdPlaceholder')}
               placeholderTextColor={Colors.textSecondary}
               autoCapitalize="none"
             />
@@ -66,14 +66,14 @@ export default function JoinRoomScreen() {
         </View>
 
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>입장 비밀번호 (4자리)</Text>
+          <Text style={styles.label}>{t('passcodeLabelWithLength')}</Text>
           <View style={styles.inputWrapper}>
             <Ionicons name="key-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               value={passcode}
               onChangeText={setPasscode}
-              placeholder="비밀번호 4자리"
+              placeholder={t('passcodePlaceholder4Digit')}
               placeholderTextColor={Colors.textSecondary}
               secureTextEntry
               keyboardType="number-pad"
@@ -83,7 +83,7 @@ export default function JoinRoomScreen() {
         </View>
 
         <DanceButton 
-          title={loading ? "확인 중..." : "크루룸 입장하기"} 
+          title={loading ? t('checkingInfo') : t('joinRoomBtn')} 
           onPress={handleJoin}
           disabled={loading}
           style={styles.button}

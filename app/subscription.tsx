@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function SubscriptionScreen() {
-  const { currentUser, theme, isPro, purchasePro } = useAppContext();
+  const { currentUser, theme, isPro, purchasePro, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -40,19 +40,19 @@ export default function SubscriptionScreen() {
         .maybeSingle();
       if (error) {
         console.error('[coupon] supabase error:', error);
-        setCouponError('쿠폰 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        setCouponError(t('couponError'));
         return;
       }
       if (!data) {
-        setCouponError('유효하지 않은 쿠폰 코드입니다.');
+        setCouponError(t('couponInvalid'));
         return;
       }
       await purchasePro(data.duration_days);
-      Alert.alert('쿠폰 적용 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
+      Alert.alert(t('couponApplied'), t('proActivated'));
       setCouponCode('');
     } catch (e: any) {
       console.error('[coupon] unexpected error:', e);
-      setCouponError('쿠폰 적용 중 오류가 발생했습니다.');
+      setCouponError(t('couponApplyError'));
     } finally {
       setIsCouponProcessing(false);
     }
@@ -64,9 +64,9 @@ export default function SubscriptionScreen() {
       // In a real app, this would involve expo-in-app-purchases or react-native-iap
       // For now, we simulate the store purchase through our context
       await purchasePro();
-      Alert.alert('구독 완료', '라온 댄스 Pro 멤버십이 활성화되었습니다!');
+      Alert.alert(t('subscriptionComplete'), t('proActivated'));
     } catch (e: any) {
-      Alert.alert(t('errorTitle'), '결제 처리 중 문제가 발생했습니다.');
+      Alert.alert(t('errorTitle'), t('paymentError'));
     } finally {
       setIsProcessing(false);
     }
@@ -81,7 +81,7 @@ export default function SubscriptionScreen() {
     ]}>
       {isPopular && !isCurrent && (
         <View style={[styles.popularBadge, { backgroundColor: theme.primary }]}>
-          <Text style={styles.popularBadgeText}>추천</Text>
+          <Text style={styles.popularBadgeText}>{t('recommended')}</Text>
         </View>
       )}
       
@@ -121,7 +121,7 @@ export default function SubscriptionScreen() {
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={[styles.upgradeBtnText, { color: isCurrent ? theme.textSecondary : '#fff' }]}>
-            {isCurrent ? '현재 이용 중' : 'Pro 시작하기'}
+            {isCurrent ? t('currentlyUsing') : t('startProBtn')}
           </Text>
         )}
       </TouchableOpacity>
@@ -134,7 +134,7 @@ export default function SubscriptionScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="close" size={28} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>멤버십</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{t('subscriptionTitle')}</Text>
         <View style={{ width: 44 }} />
       </View>
 
@@ -147,18 +147,18 @@ export default function SubscriptionScreen() {
             end={{ x: 1, y: 1 }}
           >
             <View>
-              <Text style={styles.statusLabel}>현재 멤버십</Text>
-              <Text style={styles.statusTier}>Pro 멤버십 이용 중</Text>
+              <Text style={styles.statusLabel}>{t('currentPlan')}</Text>
+              <Text style={styles.statusTier}>{t('proCurrently')}</Text>
             </View>
             <View style={styles.daysBadge}>
-              <Text style={styles.daysText}>{daysLeft}일 남음</Text>
+              <Text style={styles.daysText}>{daysLeft}{t('daysLeft')}</Text>
             </View>
           </LinearGradient>
         ) : (
           <View style={styles.heroSection}>
-            <Text style={[styles.heroTitle, { color: theme.text }]}>라온 댄스 Pro</Text>
+            <Text style={[styles.heroTitle, { color: theme.text }]}>{t('proProductTitle')}</Text>
             <Text style={[styles.heroSub, { color: theme.textSecondary }]}>
-              크루를 위한 모든 기능을 무제한으로 즐기세요
+              {t('proTagline')}
             </Text>
           </View>
         )}
@@ -167,16 +167,16 @@ export default function SubscriptionScreen() {
           <View style={[styles.couponSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.couponHeader}>
               <Ionicons name="ticket-outline" size={18} color={theme.primary} />
-              <Text style={[styles.couponLabel, { color: theme.text }]}>쿠폰 코드 입력</Text>
+              <Text style={[styles.couponLabel, { color: theme.text }]}>{t('enterCouponLabel')}</Text>
             </View>
             <View style={styles.couponRow}>
               <TextInput
                 ref={couponRef}
                 style={[styles.couponInput, { color: theme.text, borderColor: couponError ? '#ff4d4f' : theme.border, backgroundColor: theme.background }]}
-                placeholder="쿠폰 코드를 입력하세요"
+                placeholder={t('couponPlaceholder')}
                 placeholderTextColor={theme.textSecondary}
                 value={couponCode}
-                onChangeText={t => { setCouponCode(t); setCouponError(''); }}
+                onChangeText={text => { setCouponCode(text); setCouponError(''); }}
                 autoCapitalize="characters"
                 returnKeyType="done"
                 onSubmitEditing={handleCoupon}
@@ -188,7 +188,7 @@ export default function SubscriptionScreen() {
               >
                 {isCouponProcessing
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.couponApplyText}>적용</Text>
+                  : <Text style={styles.couponApplyText}>{t('applyCoupon')}</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -200,43 +200,43 @@ export default function SubscriptionScreen() {
           <View style={[styles.trialBanner, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}>
             <Ionicons name="gift" size={24} color={theme.primary} />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={[styles.trialTitle, { color: theme.primary }]}>첫 달 100원 이벤트</Text>
-              <Text style={[styles.trialDesc, { color: theme.textSecondary }]}>지금 시작하면 첫 달은 단돈 100원!</Text>
+              <Text style={[styles.trialTitle, { color: theme.primary }]}>{t('trialEventTitle')}</Text>
+              <Text style={[styles.trialDesc, { color: theme.textSecondary }]}>{t('trialEventDesc')}</Text>
             </View>
           </View>
         )}
 
-        <PlanCard 
-          title="Pro 멤버십"
+        <PlanCard
+          title={t('proCardTitle')}
           price="₩3,900"
-          subText=" / 월 (첫 달 100원)"
+          subText={t('priceSubText')}
           tier="pro"
           isCurrent={isPro}
           isPopular={true}
           features={[
-            { text: "방 생성 무제한 (Free: 3개)", pro: true },
-            { text: "동선 제작 기능 (Pro 전용)", pro: true },
-            { text: "아카이브 무제한 (Free: 20개)", pro: true },
-            { text: "피드백 영상 100개 (Free: 10개)", pro: true },
-            { text: "미응답자 알림 기능 (Pro 전용)", pro: true },
-            { text: "광고 제거", pro: true },
+            { text: t('featureUnlimitedRooms'), pro: true },
+            { text: t('featureFormation'), pro: true },
+            { text: t('featureUnlimitedArchive'), pro: true },
+            { text: t('featureFeedbackVideos'), pro: true },
+            { text: t('featureNonResponder'), pro: true },
+            { text: t('featureNoAds'), pro: true },
           ]}
         />
 
         <View style={styles.faqSection}>
-          <Text style={[styles.faqTitle, { color: theme.text }]}>자주 묻는 질문</Text>
+          <Text style={[styles.faqTitle, { color: theme.text }]}>{t('faqTitle')}</Text>
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQ, { color: theme.text }]}>Q. 언제든지 해지할 수 있나요?</Text>
-            <Text style={[styles.faqA, { color: theme.textSecondary }]}>네, 스토어 계정 설정에서 언제든지 구독을 취소할 수 있습니다.</Text>
+            <Text style={[styles.faqQ, { color: theme.text }]}>{t('faq1Q')}</Text>
+            <Text style={[styles.faqA, { color: theme.textSecondary }]}>{t('faq1A')}</Text>
           </View>
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQ, { color: theme.text }]}>Q. 첫 달 100원은 어떻게 적용되나요?</Text>
-            <Text style={[styles.faqA, { color: theme.textSecondary }]}>Pro 멤버십을 처음 이용하시는 분들께 자동으로 적용됩니다.</Text>
+            <Text style={[styles.faqQ, { color: theme.text }]}>{t('faq2Q')}</Text>
+            <Text style={[styles.faqA, { color: theme.textSecondary }]}>{t('faq2A')}</Text>
           </View>
         </View>
 
         <Text style={[styles.footerInfo, { color: theme.textSecondary }]}>
-          결제는 스토어 계정으로 청구되며, 구독 기간 종료 24시간 전에 취소하지 않으면 자동으로 갱신됩니다.
+          {t('footerInfo')}
         </Text>
       </ScrollView>
     </View>

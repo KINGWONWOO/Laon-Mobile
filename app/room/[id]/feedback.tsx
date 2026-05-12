@@ -294,11 +294,11 @@ export default function FeedbackScreen() {
     const access = checkProAccess('feedback_limit');
     if (!access.canAccess && roomVideos.length >= (access.limit || 10)) {
       return Alert.alert(
-        '영상 업로드 제한',
-        `Free 플랜은 방당 최대 ${access.limit}개까지 영상을 업로드할 수 있습니다.\nPro 멤버십으로 100개까지 업로드해보세요!`,
+        t('videoUploadLimitTitle'),
+        t('videoUploadLimitMsg').replace('{limit}', String(access.limit)),
         [
           { text: t('cancel'), style: 'cancel' },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -523,7 +523,7 @@ export default function FeedbackScreen() {
           </View>
         ) : (
           <View style={styles.errorContainer}>
-            <Text style={{ color: theme.textSecondary }}>동선 정보를 불러올 수 없습니다.</Text>
+            <Text style={{ color: theme.textSecondary }}>{t('formationLoadError')}</Text>
           </View>
         );
       }
@@ -843,7 +843,7 @@ export default function FeedbackScreen() {
                 ]}
               >
                 <View style={[styles.sidebarHeader, { borderBottomColor: theme.border }]}>
-                  <Text style={[styles.sidebarTitle, { color: theme.text }]}>피드백 {videoObj.comments.length}</Text>
+                  <Text style={[styles.sidebarTitle, { color: theme.text }]}>{t('feedbackSidebar')} {videoObj.comments.length}</Text>
                   <TouchableOpacity onPress={() => setShowCommentInput(true)}>
                     <Ionicons name="add-circle" size={24} color={theme.primary} />
                   </TouchableOpacity>
@@ -907,6 +907,7 @@ export default function FeedbackScreen() {
             ]}
             title={t('commentSettingsTitle')}
             theme={theme}
+            cancelLabel={t('cancel')}
           />
 
           <Modal
@@ -921,8 +922,7 @@ export default function FeedbackScreen() {
                 style={[styles.modalContent, { backgroundColor: theme.card }]}
               >
                 <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "800" }}>
-                  {formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000))} 시점에 의견
-                  남기기
+                  {t('commentAtTime').replace('{time}', formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000)))}
                 </Text>
                 <TextInput
                   style={[
@@ -931,7 +931,7 @@ export default function FeedbackScreen() {
                   ]}
                   value={newComment}
                   onChangeText={setNewComment}
-                  placeholder="피드백 입력..."
+                  placeholder={t('commentInputPlaceholder')}
                   placeholderTextColor={theme.textSecondary}
                   autoFocus
                 />
@@ -943,7 +943,7 @@ export default function FeedbackScreen() {
                     {isSubmittingComment ? (
                       <ActivityIndicator size="small" color={theme.primary} />
                     ) : (
-                      <Text style={{ color: theme.primary, fontWeight: "900" }}>등록</Text>
+                      <Text style={{ color: theme.primary, fontWeight: "900" }}>{t('commentRegister')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -959,7 +959,7 @@ export default function FeedbackScreen() {
           >
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-                <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "900" }}>댓글 수정</Text>
+                <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "900" }}>{t('editCommentTitle')}</Text>
                 <TextInput
                   style={[
                     styles.input,
@@ -991,7 +991,7 @@ export default function FeedbackScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={{alignItems: 'center'}}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>영상 피드백</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>{t('videoFeedback')}</Text>
           <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomVideos.length} / {isPro ? '100' : '10'}</Text>
         </View>
         <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
@@ -1001,7 +1001,7 @@ export default function FeedbackScreen() {
         {['all', 'choreography', 'formation'].map((type) => (
           <TouchableOpacity key={type} style={[styles.filterBtn, filterType === type ? {backgroundColor: theme.primary} : {backgroundColor: theme.card}]} onPress={() => setFilterType(type as any)}>
             <Text style={[styles.filterText, {color: filterType === type ? '#fff' : theme.textSecondary}]}>
-              {type === 'all' ? '전체' : type === 'choreography' ? '안무' : '동선'}
+              {type === 'all' ? t('allFilter') : type === 'choreography' ? t('choreographyFilter') : t('formationFilter')}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1019,7 +1019,7 @@ export default function FeedbackScreen() {
             </View>
             <View style={{marginLeft: 15, flex: 1}}>
               <Text style={{color: theme.text, fontWeight: '800', fontSize: 16, letterSpacing: -0.5}} numberOfLines={1}>{item.title}</Text>
-              <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUserById(item.userId)?.name} • {formatDateFull(item.createdAt)}</Text>
+              <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUserById(item.userId)?.name} • {formatDateFull(item.createdAt, language)}</Text>
             </View>
             {item.userId === currentUser?.id && (
               <TouchableOpacity onPress={() => { setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>
@@ -1031,20 +1031,20 @@ export default function FeedbackScreen() {
       />
 
       <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={[
-        { label: '제목 수정', icon: 'create-outline', onPress: () => {
+        { label: t('titleEditTitle'), icon: 'create-outline', onPress: () => {
           if (!selectedVideoForOptions) return;
           setEditingVideo(selectedVideoForOptions);
           setEditTitle(selectedVideoForOptions.title);
         }},
         { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
-      ]} title="영상 설정" theme={theme} />
+      ]} title={t('videoSettings')} theme={theme} cancelLabel={t('cancel')} />
 
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
-            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>영상 업로드</Text>
-            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder="영상 제목" placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}, Shadows.glow]}><Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>갤러리에서 선택</Text></TouchableOpacity>}
+            <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>{t('videoUploadTitle')}</Text>
+            <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder={t('videoTitleInput')} placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
+            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}, Shadows.glow]}><Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>{t('selectFromGallery')}</Text></TouchableOpacity>}
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
           </View>
         </View>
@@ -1053,7 +1053,7 @@ export default function FeedbackScreen() {
       <Modal visible={!!editingVideo} transparent animationType="fade" onRequestClose={() => setEditingVideo(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }, Shadows.medium]}>
-            <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>제목 수정</Text>
+            <Text style={{color: theme.text, fontSize: 18, fontWeight: '900', marginBottom: 20}}>{t('titleEditTitle')}</Text>
             <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editTitle} onChangeText={setEditTitle} />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
               <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>

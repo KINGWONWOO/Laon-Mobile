@@ -13,7 +13,7 @@ import { Shadows } from '../../../../constants/theme';
 
 export default function FormationListScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { formations, addFormation, updateFormation, deleteFormation, theme, checkProAccess, isPro } = useAppContext();
+  const { formations, addFormation, updateFormation, deleteFormation, theme, checkProAccess, isPro, t } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -41,11 +41,11 @@ export default function FormationListScreen() {
     const access = checkProAccess('formation');
     if (!access.canAccess) {
       Alert.alert(
-        'Pro 멤버십 기능',
-        '동선 제작 기능은 Pro 멤버십 전용입니다.\nPro 멤버십으로 업그레이드하고 동선을 제작해보세요!',
+        t('proFeatureTitle'),
+        t('formationProOnlyMsg'),
         [
-          { text: '뒤로가기', onPress: () => router.back() },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('back'), onPress: () => router.back() },
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -70,7 +70,7 @@ export default function FormationListScreen() {
         });
       }
     } catch (err) {
-      Alert.alert(t('errorTitle'), '파일을 선택할 수 없습니다.');
+      Alert.alert(t('errorTitle'), t('filePickFailed'));
     }
   };
 
@@ -78,11 +78,11 @@ export default function FormationListScreen() {
     const access = checkProAccess('formation');
     if (!access.canAccess) {
       return Alert.alert(
-        'Pro 멤버십 기능',
-        '동선 가져오기 기능은 Pro 멤버십 전용입니다.',
+        t('proFeatureTitle'),
+        t('importFormationProOnly'),
         [
           { text: t('cancel'), style: 'cancel' },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -98,13 +98,13 @@ export default function FormationListScreen() {
         const importedData = JSON.parse(fileContent);
         
         if (!importedData.data || !importedData.settings) {
-          throw new Error('올바른 동선 파일 형식이 아닙니다.');
+          throw new Error(t('invalidFormationFormat'));
         }
 
         setIsSubmitting(true);
         const newId = await addFormation(
           id as string,
-          importedData.title || '가져온 동선',
+          importedData.title || t('importedFormation'),
           importedData.audioUrl,
           importedData.settings,
           importedData.data
@@ -114,10 +114,10 @@ export default function FormationListScreen() {
           await updateFormation(newId, { videoSettings: importedData.videoSettings });
         }
         
-        Alert.alert(t('successTitle'), '동선 파일을 성공적으로 가져왔습니다.');
+        Alert.alert(t('successTitle'), t('importSuccess'));
       }
     } catch (err: any) {
-      Alert.alert(t('errorTitle'), err.message || '파일을 가져오는 중 오류가 발생했습니다.');
+      Alert.alert(t('errorTitle'), err.message || t('importError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +199,7 @@ export default function FormationListScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert(t('errorTitle'), '동선 제목을 입력해주세요.');
+      Alert.alert(t('errorTitle'), t('enterFormationTitle'));
       return;
     }
     
@@ -232,7 +232,7 @@ export default function FormationListScreen() {
   };
 
   const handleDelete = (fid: string) => {
-    Alert.alert('동선 삭제', t('deleteConfirmMsg'), [
+    Alert.alert(t('deleteFormationTitle'), t('deleteConfirmMsg'), [
       { text: t('cancel'), style: 'cancel' },
       { text: t('delete'), style: 'destructive', onPress: () => deleteFormation(fid) }
     ]);
@@ -250,7 +250,7 @@ export default function FormationListScreen() {
         setExtractProgress(0);
       }
     } catch (e) {
-      Alert.alert(t('errorTitle'), '파일을 선택할 수 없습니다.');
+      Alert.alert(t('errorTitle'), t('filePickFailed'));
     }
   };
 
@@ -258,7 +258,7 @@ export default function FormationListScreen() {
     if (!extractSourceUri) return;
     setIsExtractingAudio(true);
     setExtractProgress(0);
-    setExtractStatus('준비 중...');
+    setExtractStatus(t('extractStatusPreparing'));
     
     try {
       const fileInfo = await FileSystem.getInfoAsync(extractSourceUri, { size: true } as any) as any;
@@ -275,7 +275,7 @@ export default function FormationListScreen() {
       const CHUNK_SIZE = 1024 * 1024 * 3; // 3MB chunks to be safe with string limits
       
       for (let i = 0; i < fileSize; i += CHUNK_SIZE) {
-        setExtractStatus(`파일 전송 중... (${Math.round((i / fileSize) * 100)}%)`);
+        setExtractStatus(`${t('extractStatusTransferring')} (${Math.round((i / fileSize) * 100)}%)`);
         const length = Math.min(CHUNK_SIZE, fileSize - i);
         
         // Read only a portion of the file to prevent OOM in Java/Bridge
@@ -319,14 +319,14 @@ export default function FormationListScreen() {
       setIsExtractingAudio(false);
       const errorLog = `[AudioExtraction ERROR] Date: ${new Date().toLocaleString()}\\nMessage: ${e.message}\\nStack: ${e.stack}`;
       console.error(errorLog);
-      Alert.alert('오류 발생 (OOM 대응 필요)', '파일을 처리하는 중 메모리가 부족하거나 오류가 발생했습니다.\\n\\n' + e.message);
+      Alert.alert(t('extractErrorOOM'), t('extractErrorMsg') + '\n\n' + e.message);
     }
   };
 
   const handleDownloadMP3 = async () => {
     if (!extractedAudioBase64) return;
     try {
-      const finalName = (extractFileName || '추출된_음원').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
+      const finalName = (extractFileName || t('extractedAudio')).replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
       const filePath = `${FileSystem.documentDirectory}${finalName}.mp3`;
       const base64Content = extractedAudioBase64.split(',')[1];
       await FileSystem.writeAsStringAsync(filePath, base64Content, { encoding: FileSystem.EncodingType.Base64 });
@@ -341,32 +341,32 @@ export default function FormationListScreen() {
             'audio/mpeg'
           );
           await FileSystem.writeAsStringAsync(destinationUri, base64Content, { encoding: FileSystem.EncodingType.Base64 });
-          Alert.alert(t('successTitle'), '파일이 선택한 폴더에 저장되었습니다.');
+          Alert.alert(t('successTitle'), t('saveToFolderSuccess'));
         }
       } else {
         // iOS fallback to sharing for "Save to Files"
         await Sharing.shareAsync(filePath, { mimeType: 'audio/mpeg', UTI: 'public.mp3' });
       }
     } catch (e: any) {
-      Alert.alert(t('errorTitle'), `저장 실패: ${e.message}`);
+      Alert.alert(t('errorTitle'), `${t('saveFailed')}: ${e.message}`);
     }
   };
 
   const handleShareMP3 = async () => {
     if (!extractedAudioBase64) return;
     try {
-      const finalName = (extractFileName || '추출된_음원').replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
+      const finalName = (extractFileName || t('extractedAudio')).replace(/[^a-z0-9가-힣ㄱ-ㅎㅏ-ㅣ._-]/gi, '_');
       const filePath = `${FileSystem.documentDirectory}${finalName}.mp3`;
       const base64Content = extractedAudioBase64.split(',')[1];
       await FileSystem.writeAsStringAsync(filePath, base64Content, { encoding: FileSystem.EncodingType.Base64 });
       
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert(t('errorTitle'), '공유 기능을 사용할 수 없습니다.');
+        Alert.alert(t('errorTitle'), t('shareNotAvailable'));
         return;
       }
-      await Sharing.shareAsync(filePath, { mimeType: 'audio/mpeg', dialogTitle: '음원 공유' });
+      await Sharing.shareAsync(filePath, { mimeType: 'audio/mpeg', dialogTitle: t('shareAudio') });
     } catch (e: any) {
-      Alert.alert(t('errorTitle'), `공유 실패: ${e.message}`);
+      Alert.alert(t('errorTitle'), `${t('shareError')}: ${e.message}`);
     }
   };
 
@@ -377,9 +377,9 @@ export default function FormationListScreen() {
         setExtractedAudioBase64(event.data);
         setIsExtractingAudio(false);
         setExtractProgress(1);
-        setExtractStatus('추출 완료');
+        setExtractStatus(t('extractComplete'));
       } else if (event.type === 'EXTRACTION_PROGRESS') {
-        setExtractStatus('음원 추출 중...');
+        setExtractStatus(t('extractingAudio'));
         setExtractProgress(event.progress);
       } else if (event.type === 'COMPRESSION_RESULT') {
         if (compressionResolverRef.current) {
@@ -392,12 +392,12 @@ export default function FormationListScreen() {
       } else if (event.type === 'ERROR') {
         setIsExtractingAudio(false);
         setIsCompressingAudio(false);
-        setExtractStatus('오류 발생');
+        setExtractStatus(t('error'));
         if (isCompressingAudio && compressionRejecterRef.current) {
           compressionRejecterRef.current(new Error(event.message));
           compressionRejecterRef.current = null;
         } else {
-          Alert.alert(t('errorTitle'), '처리 중 문제가 발생했습니다: ' + event.message);
+          Alert.alert(t('errorTitle'), `${t('processingError')}: ${event.message}`);
         }
       }
     } catch (err) {
@@ -412,7 +412,7 @@ export default function FormationListScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={28} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>동선 관리</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>{t('formationManagement')}</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity onPress={handleImportFile} style={styles.headerIconBtn}>
             <Ionicons name="download-outline" size={24} color={theme.primary} />
@@ -437,7 +437,7 @@ export default function FormationListScreen() {
                 <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
               </View>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                서버 저장됨 • {new Date(item.createdAt).toLocaleDateString()}
+                {t('savedToServer')} • {new Date(item.createdAt).toLocaleDateString()}
               </Text>
             </View>
             <TouchableOpacity onPress={() => handleDelete(item.id)} style={{ padding: 5 }}>
@@ -449,7 +449,7 @@ export default function FormationListScreen() {
           <View style={styles.emptyContainer}>
             <Ionicons name="map-outline" size={60} color={theme.border} style={{ marginBottom: 15 }} />
             <Text style={{ color: theme.textSecondary, textAlign: 'center' }}>
-              아직 작성된 동선이 없습니다.{'\n'}우측 상단의 + 버튼을 눌러 새 동선을 만들어보세요!
+              {t('noFormationMsg')}
             </Text>
           </View>
         }
@@ -467,7 +467,7 @@ export default function FormationListScreen() {
         onPress={() => setShowAudioExtractModal(true)}
       >
         <Ionicons name="musical-notes" size={24} color="#FFF" />
-        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold', marginTop: 2 }}>추출</Text>
+        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold', marginTop: 2 }}>{t('extract')}</Text>
       </TouchableOpacity>
 
       <Modal visible={showAddModal} transparent animationType="slide">
@@ -475,29 +475,29 @@ export default function FormationListScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>새 동선 만들기</Text>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>{t('newFormation')}</Text>
                 <TouchableOpacity onPress={() => setShowAddModal(false)}>
                   <Ionicons name="close" size={24} color={theme.text} />
                 </TouchableOpacity>
               </View>
               
-              <Text style={[styles.label, { color: theme.text }]}>동선 제목</Text>
-              <TextInput 
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]} 
-                placeholder="예: 1절 코러스" 
+              <Text style={[styles.label, { color: theme.text }]}>{t('formationTitleLabel')}</Text>
+              <TextInput
+                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                placeholder={t('formationExample')}
                 placeholderTextColor="#888" 
                 value={title} 
                 onChangeText={setTitle} 
               />
 
-              <Text style={[styles.label, { color: theme.text }]}>음원 설정</Text>
+              <Text style={[styles.label, { color: theme.text }]}>{t('audioSettings')}</Text>
               <TouchableOpacity 
                 style={[styles.audioPickBtn, { borderColor: theme.border, backgroundColor: theme.background }]} 
                 onPress={handlePickAudio}
               >
                 <Ionicons name="musical-notes" size={20} color={theme.primary} />
                 <Text style={{ color: selectedAudio ? theme.text : theme.textSecondary, marginLeft: 10, flex: 1 }} numberOfLines={1}>
-                  {selectedAudio ? selectedAudio.name : '기기에서 오디오 파일 선택'}
+                  {selectedAudio ? selectedAudio.name : t('selectAudioFromDevice')}
                 </Text>
                 {selectedAudio && (
                   <TouchableOpacity onPress={() => setSelectedAudio(null)}>
@@ -509,7 +509,7 @@ export default function FormationListScreen() {
               {isCompressingAudio && (
                 <View style={{ marginBottom: 15, alignItems: 'center' }}>
                   <ActivityIndicator size="small" color={theme.primary} />
-                  <Text style={{ color: theme.text, fontSize: 12, marginTop: 5 }}>음원 압축 중... ({Math.round(compressProgress * 100)}%)</Text>
+                  <Text style={{ color: theme.text, fontSize: 12, marginTop: 5 }}>{t('compressingAudio')} ({Math.round(compressProgress * 100)}%)</Text>
                 </View>
               )}
 
@@ -518,7 +518,7 @@ export default function FormationListScreen() {
                 onPress={handleCreate}
                 disabled={isSubmitting || isCompressingAudio}
               >
-                {isSubmitting || isCompressingAudio ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>만들기</Text>}
+                {isSubmitting || isCompressingAudio ? <ActivityIndicator color={theme.background} /> : <Text style={[styles.submitBtnText, { color: theme.background }]}>{t('create')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -530,7 +530,7 @@ export default function FormationListScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>음원 추출</Text>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>{t('extractAudio')}</Text>
                 <TouchableOpacity onPress={() => setShowAudioExtractModal(false)}>
                   <Ionicons name="close" size={24} color={theme.text} />
                 </TouchableOpacity>
@@ -539,7 +539,7 @@ export default function FormationListScreen() {
               {!isExtractingAudio && !extractedAudioBase64 && (
                 <View>
                   <Text style={{ color: theme.textSecondary, marginBottom: 20, fontSize: 13 }}>
-                    영상 파일에서 음원을 MP3 형식으로 추출합니다.
+                    {t('extractAudioDesc')}
                   </Text>
                   
                   <TouchableOpacity 
@@ -548,7 +548,7 @@ export default function FormationListScreen() {
                   >
                     <Ionicons name="videocam" size={20} color={theme.primary} />
                     <Text style={{ color: extractSourceUri ? theme.text : theme.textSecondary, marginLeft: 10, flex: 1 }} numberOfLines={1}>
-                      {extractSourceUri ? '영상 선택됨' : '추출할 영상 선택'}
+                      {extractSourceUri ? t('videoSelected') : t('selectVideoToExtract')}
                     </Text>
                   </TouchableOpacity>
 
@@ -557,7 +557,7 @@ export default function FormationListScreen() {
                       style={[styles.submitBtn, { backgroundColor: theme.primary }]} 
                       onPress={handleExtractAudio}
                     >
-                      <Text style={{ color: '#FFF', fontWeight: 'bold' }}>음원 추출 시작</Text>
+                      <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('startExtraction')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -578,15 +578,15 @@ export default function FormationListScreen() {
                 <View>
                   <View style={{ alignItems: 'center', marginBottom: 20 }}>
                     <Ionicons name="checkmark-circle" size={48} color={theme.success} />
-                    <Text style={{ color: theme.text, fontWeight: 'bold', marginTop: 10 }}>추출 완료!</Text>
+                    <Text style={{ color: theme.text, fontWeight: 'bold', marginTop: 10 }}>{t('extractComplete')}</Text>
                   </View>
 
-                  <Text style={[styles.label, { color: theme.text, marginBottom: 8 }]}>파일 이름</Text>
-                  <TextInput 
-                    style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]} 
-                    value={extractFileName} 
-                    onChangeText={setExtractFileName} 
-                    placeholder="파일 이름 입력" 
+                  <Text style={[styles.label, { color: theme.text, marginBottom: 8 }]}>{t('fileNamePlaceholder')}</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={extractFileName}
+                    onChangeText={setExtractFileName}
+                    placeholder={t('enterFileName')}
                     placeholderTextColor={theme.textSecondary}
                   />
 
@@ -596,7 +596,7 @@ export default function FormationListScreen() {
                       onPress={handleDownloadMP3}
                     >
                       <Ionicons name="download-outline" size={20} color="#FFF" />
-                      <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>다운로드</Text>
+                      <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>{t('download')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -604,7 +604,7 @@ export default function FormationListScreen() {
                       onPress={handleShareMP3}
                     >
                       <Ionicons name="share-social-outline" size={20} color="#FFF" />
-                      <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>공유</Text>
+                      <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>{t('share')}</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -612,7 +612,7 @@ export default function FormationListScreen() {
                     style={{ marginTop: 15, alignItems: 'center' }} 
                     onPress={() => { setExtractedAudioBase64(null); setExtractSourceUri(null); }}
                   >
-                    <Text style={{ color: theme.textSecondary }}>새로 추출하기</Text>
+                    <Text style={{ color: theme.textSecondary }}>{t('newExtraction')}</Text>
                   </TouchableOpacity>
                 </View>
               )}

@@ -3,12 +3,15 @@ import { View, Text, TouchableOpacity, Image, StyleSheet, Platform, Modal, Touch
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../../constants/theme';
 
-export const formatDateFull = (timestamp: number) => {
+const localeMap: Record<string, string> = { ko: 'ko-KR', en: 'en-US', es: 'es-ES', id: 'id-ID', ja: 'ja-JP', zh: 'zh-CN', th: 'th-TH' };
+
+export const formatDateFull = (timestamp: number, lang = 'ko') => {
   const date = new Date(timestamp);
-  return `${date.getMonth() + 1}월 ${date.getDate()}일 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+  const locale = localeMap[lang] || 'ko-KR';
+  return date.toLocaleString(locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-export const OptionModal = ({ visible, onClose, options, title, theme }: any) => (
+export const OptionModal = ({ visible, onClose, options, title, theme, cancelLabel = '취소' }: any) => (
   <Modal visible={visible} transparent animationType="fade">
     <TouchableWithoutFeedback onPress={onClose}>
       <View style={styles.modalOverlay}>
@@ -28,7 +31,7 @@ export const OptionModal = ({ visible, onClose, options, title, theme }: any) =>
               ))}
             </View>
             <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: theme.background }]} onPress={onClose}>
-              <Text style={[styles.cancelText, { color: theme.text }]}>취소</Text>
+              <Text style={[styles.cancelText, { color: theme.text }]}>{cancelLabel}</Text>
             </TouchableOpacity>
           </View>
         </TouchableWithoutFeedback>
@@ -56,7 +59,7 @@ export const RoomActionBtn = ({ item, onPress, theme }: any) => (
   </TouchableOpacity>
 );
 
-export const NoticeItem = ({ notice, onPress, theme }: any) => {
+export const NoticeItem = ({ notice, onPress, theme, lang = 'ko' }: any) => {
   const isPinned = notice.isPinned;
   
   return (
@@ -75,7 +78,7 @@ export const NoticeItem = ({ notice, onPress, theme }: any) => {
           <Text style={[styles.noticeTitle, { color: theme.text }]} numberOfLines={1}>{notice.title}</Text>
         </View>
         <Text style={[styles.noticeMeta, { color: theme.textSecondary }]}>
-          {formatDateFull(notice.createdAt)}
+          {formatDateFull(notice.createdAt, lang)}
         </Text>
       </View>
       {notice.imageUrls && notice.imageUrls[0] ? (

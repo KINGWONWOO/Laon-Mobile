@@ -625,32 +625,12 @@ const GridLayer = React.memo(function GridLayer({ settings }: { settings: Format
   );
 });
 
-const GUIDE_STEPS = [
-  {
-    title: '1. 댄서 추가 및 편집',
-    description: "'댄서 추가' 버튼으로 인원을 추가하고 드래그하여 배치하세요. **배치된 댄서를 클릭하면 이름과 상징 색상을 변경**할 수 있습니다.",
-    image: require('../../../../guideimage/Guide1.png')
-  },
-  {
-    title: '2. 대형 추가 및 편집',
-    description: "'대형 추가' 버튼으로 새로운 대형을 생성하세요. **하단 목록에서 현재 선택된 대형을 다시 한 번 클릭하면 이름을 수정**할 수 있습니다.",
-    image: require('../../../../guideimage/Guide2.png')
-  },
-  {
-    title: '3. 대형 배치 시작',
-    description: "대형 생성이 끝나면 상단의 **'대형 배치' 탭을 클릭해 노래에 맞춰 대형들을 배치**하세요. 타임라인의 원하는 시점을 터치하면 현재 대형이 배치됩니다.",
-    image: require('../../../../guideimage/Guide3.png')
-  },
-  {
-    title: '4. 대형 배치에서의 편집',
-    description: "배치된 대형 블록을 클릭하면 **길이 조절 및 이동**이 가능하며, 한번 더 클릭하면 **복사 및 삭제**를 할 수 있습니다. 이 모드에서도 **댄서들의 위치를 자유롭게 변경**할 수 있습니다.",
-    image: require('../../../../guideimage/Guide4.png')
-  },
-  {
-    title: '5. 저장 및 내보내기',
-    description: "작업 중에는 **상단의 t('save') 버튼을 눌러 자주 저장**하는 것이 안전합니다. '내보내기' 버튼을 통해 파일로 저장하거나 동료들에게 피드백을 발행할 수 있습니다.",
-    image: require('../../../../guideimage/Guide5.png')
-  }
+const GUIDE_IMAGES = [
+  require('../../../../guideimage/Guide1.png'),
+  require('../../../../guideimage/Guide2.png'),
+  require('../../../../guideimage/Guide3.png'),
+  require('../../../../guideimage/Guide4.png'),
+  require('../../../../guideimage/Guide5.png'),
 ];
 
 interface HistoryState {
@@ -836,8 +816,8 @@ export default function FormationEditorScreen() {
   }, [handleAutoSave]);
 
   const formationOptions = formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
-    { label: '저장하기', icon: 'save-outline', onPress: () => handleSave() },
-    { label: '내보내기 / 공유', icon: 'share-outline', onPress: () => setShowExportModal(true) }
+    { label: t('save'), icon: 'save-outline', onPress: () => handleSave() },
+    { label: t('exportShare'), icon: 'share-outline', onPress: () => setShowExportModal(true) }
   ] : [
     { label: t('reportLabel'), icon: 'warning-outline', destructive: true, onPress: () => { if(formation) reportContent(formation.id, 'formation'); } },
     { label: t('blockAuthorLabel'), icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
@@ -1346,7 +1326,7 @@ export default function FormationEditorScreen() {
     const newSceneId = Math.random().toString(36).substr(2, 9);
     const newScene: FormationScene = {
       id: newSceneId,
-      name: `대형 ${scenes.length + 1}`,
+      name: t('sceneDefaultName').replace('{n}', String(scenes.length + 1)),
       positions: {}
     };
     const newEntry: TimelineEntry = { 
@@ -1377,7 +1357,7 @@ export default function FormationEditorScreen() {
     const newSceneId = Math.random().toString(36).substr(2, 9);
     const newScene: FormationScene = {
       id: newSceneId,
-      name: (originalScene ? originalScene.name : '대형') + ' 복사본',
+      name: (originalScene ? originalScene.name : t('formationNamePlaceholder')) + ' ' + t('copySuffix'),
       positions: originalScene ? JSON.parse(JSON.stringify(originalScene.positions)) : {}
     };
 
@@ -1455,7 +1435,7 @@ export default function FormationEditorScreen() {
     setTimeline(prev => prev.filter(x => x.id !== entryId));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1], nScenes = [...scenes, { id: nid, name: inputName.trim() || `대형 ${scenes.length+1}`, positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]; setScenes(nScenes); setActiveSceneId(nid); } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
+  const handleSceneAction = () => { pushHistory(); if (sceneModalMode === 'add') { const nid = Math.random().toString(36).substr(2,9), last = scenes[scenes.length-1], nScenes = [...scenes, { id: nid, name: inputName.trim() || t('sceneDefaultName').replace('{n}', String(scenes.length + 1)), positions: last ? JSON.parse(JSON.stringify(last.positions)) : {} }]; setScenes(nScenes); setActiveSceneId(nid); } else if (sceneModalMode === 'rename' && targetSceneId) setScenes(prev => prev.map(s => s.id === targetSceneId ? {...s, name: inputName.trim() || s.name} : s)); setShowSceneModal(false); setInputName(''); };
   
   const handleChangeSong = async () => {
     try {
@@ -1486,7 +1466,7 @@ export default function FormationEditorScreen() {
       setAudioUrl(destUri);
       setWaveformPeaks([]); 
     } catch (e: any) {
-      Alert.alert('실패', e.message);
+      Alert.alert(t('failure'), e.message);
     } finally {
       setIsChangingSong(false);
       setIsCompressing(false);
@@ -1596,7 +1576,7 @@ export default function FormationEditorScreen() {
     if (activeIdx === -1) return;
     const activeScene = scenes[activeIdx];
     const newId = Math.random().toString(36).substr(2, 9);
-    const newScene: FormationScene = { id: newId, name: `${activeScene.name} 복사본`, positions: JSON.parse(JSON.stringify(activeScene.positions)) };
+    const newScene: FormationScene = { id: newId, name: `${activeScene.name} ${t('copySuffix')}`, positions: JSON.parse(JSON.stringify(activeScene.positions)) };
     const newScenes = [...scenes]; newScenes.splice(activeIdx + 1, 0, newScene);
     setScenes(newScenes); setActiveSceneId(newId);
   };
@@ -1645,7 +1625,7 @@ export default function FormationEditorScreen() {
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
-      setPublishTitle(`${formation?.title || '동선'}_${dateStr}.${timeStr}`);
+      setPublishTitle(`${formation?.title || t('formationFilter')}_${dateStr}.${timeStr}`);
     }
   }, [showExportModal, showPublishModal, formation?.title]);
 
@@ -1682,12 +1662,13 @@ export default function FormationEditorScreen() {
         </View>
       </View>
 
-      <OptionModal 
-        visible={showFormationOptions} 
-        onClose={() => setShowFormationOptions(false)} 
-        options={formationOptions} 
-        title="동선 설정" 
-        theme={theme} 
+      <OptionModal
+        visible={showFormationOptions}
+        onClose={() => setShowFormationOptions(false)}
+        options={formationOptions}
+        title={t('formationSettings')}
+        theme={theme}
+        cancelLabel={t('cancel')}
       />
 
       {/* Hidden WebView for Audio Analysis & Compression */}
@@ -1937,11 +1918,11 @@ export default function FormationEditorScreen() {
       <Modal visible={showTimelineMenu} transparent animationType="fade">
         <Pressable style={styles.modalBg} onPress={() => setShowTimelineMenu(false)}>
           <View style={[styles.menu, { backgroundColor: theme.card }]}>
-            <Text style={[styles.menuTitle, { color: theme.text }]}>대형 추가</Text>
-            
+            <Text style={[styles.menuTitle, { color: theme.text }]}>{t('addFormation')}</Text>
+
             {scenes.length > 0 ? (
               <>
-                <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>기존 대형 선택:</Text>
+                <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>{t('existingFormation')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {scenes.map(s => (
                     <TouchableOpacity 
@@ -1956,7 +1937,7 @@ export default function FormationEditorScreen() {
               </>
             ) : (
               <Text style={{ color: theme.textSecondary, textAlign: 'center', marginVertical: 10 }}>
-                먼저 '대형 생성' 탭에서 대형을 만들어주세요.
+                {t('noFormationCreateHint')}
               </Text>
             )}
           </View>
@@ -1967,7 +1948,7 @@ export default function FormationEditorScreen() {
         <Pressable style={styles.modalBg} onPress={() => setShowEntryActionModal(false)}>
           <View style={[styles.menu, { width: '80%', paddingBottom: 25, backgroundColor: theme.card }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 배치 작업</Text>
+              <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('formationAction')}</Text>
               <TouchableOpacity onPress={() => setShowEntryActionModal(false)}>
                 <Ionicons name="close" size={24} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -1978,7 +1959,7 @@ export default function FormationEditorScreen() {
                 style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} 
                 onPress={handleDuplicateTimelineEntry}
               >
-                <Text style={[styles.mirrorApplyText, { color: theme.text }]}>대형 복사</Text>
+                <Text style={[styles.mirrorApplyText, { color: theme.text }]}>{t('copyFormation')}</Text>
                 <Ionicons name="copy-outline" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
               
@@ -1997,7 +1978,7 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showSceneModal} transparent animationType="fade">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? '대형 추가' : '이름 변경'}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder="대형 이름" placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? '추가' : t('save')}</Text></TouchableOpacity></View></View></View>
+          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{sceneModalMode === 'add' ? t('addFormation') : t('renameFormation')}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={inputName} onChangeText={setInputName} placeholder={t('formationNamePlaceholder')} placeholderTextColor={theme.textSecondary} autoFocus /><View style={{flexDirection:'row', justifyContent:'flex-end', gap:20}}><TouchableOpacity onPress={() => setShowSceneModal(false)}><Text style={{color:theme.textSecondary}}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity onPress={handleSceneAction}><Text style={{color:theme.primary, fontWeight:'bold'}}>{sceneModalMode === 'add' ? t('add') : t('save')}</Text></TouchableOpacity></View></View></View>
         </KeyboardAvoidingView>
       </Modal>
       <Modal visible={showDancerSheet} transparent animationType="slide">
@@ -2038,22 +2019,22 @@ export default function FormationEditorScreen() {
                 }}
               >
                 <Ionicons name="trash" size={20} color={theme.error} />
-                <Text style={{ color: theme.error, marginLeft: 10 }}>댄서 삭제</Text>
+                <Text style={{ color: theme.error, marginLeft: 10 }}>{t('deleteDancer')}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>무대 설정</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 행 (세로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 열 (가로)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>대기 공간 (Wing)</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempWingWidth} onChangeText={setTempWingWidth} placeholder="칸 수" /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>Audience 위치</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? '상단 (Top)' : '하단 (Bottom)'}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>격자 스냅</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>확인</Text></TouchableOpacity></View></View></Modal>
-      <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>대형 반전</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>반전 방식</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>좌우</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>상하</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>완전</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>적용 대상</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>현재 대형만</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>모든 대형 일괄 적용</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
-      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{GUIDE_STEPS[guideIndex].title}</Text>{GUIDE_STEPS[guideIndex].image && <Image source={GUIDE_STEPS[guideIndex].image} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>
-  {GUIDE_STEPS[guideIndex].description.split(/(\*\*.*?\*\*)/).map((part, i) => {
+      <Modal visible={showStageSettings} transparent animationType="fade"><View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{t('stageSettings')}</Text><View style={styles.settingRow}><Text style={{color:theme.text}}>{t('gridRows')}</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempRows} onChangeText={setTempRows} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>{t('gridCols')}</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempCols} onChangeText={setTempCols} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>{t('wingSpace')}</Text><TextInput style={[styles.smallInput, { backgroundColor: theme.background, color: theme.primary, borderColor: theme.border, borderWidth: 1 }]} keyboardType="number-pad" value={tempWingWidth} onChangeText={setTempWingWidth} /></View><View style={styles.settingRow}><Text style={{color:theme.text}}>{t('audiencePos')}</Text><TouchableOpacity style={[styles.toggleBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setSettings({...settings, stageDirection: settings.stageDirection === 'top' ? 'bottom' : 'top'})}><Text style={{color: theme.primary, fontWeight: 'bold'}}>{settings.stageDirection === 'top' ? t('topSide') : t('bottomSide')}</Text></TouchableOpacity></View><View style={styles.settingRow}><Text style={{color:theme.text}}>{t('gridSnap')}</Text><TouchableOpacity onPress={() => setSettings({...settings, snapToGrid: !settings.snapToGrid})}><Ionicons name={settings.snapToGrid ? "checkbox" : "square-outline"} size={24} color={theme.primary} /></TouchableOpacity></View><TouchableOpacity style={[styles.doneBtn, { backgroundColor: theme.primary }]} onPress={handleApplySettings}><Text style={{fontWeight:'bold', color: theme.background}}>{t('ok')}</Text></TouchableOpacity></View></View></Modal>
+      <Modal visible={showMirrorModal} transparent animationType="fade" onRequestClose={() => setShowMirrorModal(false)}><View style={styles.modalBg}><View style={[styles.menu, { width: '90%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('mirrorFormation')}</Text><TouchableOpacity onPress={() => setShowMirrorModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><Text style={[styles.settingLabel, { color: theme.textSecondary }]}>{t('mirrorType')}</Text><View style={styles.mirrorRow}><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'horizontal' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('horizontal')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'horizontal' ? theme.primary : theme.textSecondary} style={{ transform: [{ rotate: '90deg' }] }} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'horizontal' && { color: theme.primary }]}>{t('horizontal')}</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'vertical' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('vertical')}><Ionicons name="resize" size={24} color={selectedMirrorType === 'vertical' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'vertical' && { color: theme.primary }]}>{t('vertical')}</Text></TouchableOpacity><TouchableOpacity style={[styles.mirrorBox, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }, selectedMirrorType === 'both' && { borderColor: theme.primary, backgroundColor: theme.primary + '11' }]} onPress={() => setSelectedMirrorType('both')}><Ionicons name="sync" size={24} color={selectedMirrorType === 'both' ? theme.primary : theme.textSecondary} /><Text style={[styles.mirrorText, { color: theme.textSecondary }, selectedMirrorType === 'both' && { color: theme.primary }]}>{t('both')}</Text></TouchableOpacity></View><Text style={[styles.settingLabel, { marginTop: 25, color: theme.textSecondary }]}>{t('applyTarget')}</Text><View style={{ gap: 10 }}><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(false)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>{t('currentOnly')}</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity><TouchableOpacity style={[styles.mirrorApplyBtn, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => applyMirror(true)}><Text style={[styles.mirrorApplyText, { color: theme.text }]}>{t('applyAll')}</Text><Ionicons name="chevron-forward" size={18} color={theme.textSecondary} /></TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showGuide} transparent animationType="fade" onRequestClose={() => setShowGuide(false)}><Pressable style={styles.modalBg} onPress={() => setShowGuide(false)}><View style={[styles.menu, {width:'95%', backgroundColor: theme.card}]}><Text style={[styles.menuTitle, { color: theme.text }]}>{t(`guideStep${guideIndex + 1}Title`)}</Text>{GUIDE_IMAGES[guideIndex] && <Image source={GUIDE_IMAGES[guideIndex]} style={{ width: '100%', height: 200, borderRadius: 15, marginVertical: 10 }} resizeMode="contain" />}<Text style={{color:theme.textSecondary, marginVertical:15, fontSize: 13, lineHeight: 18}}>
+  {t(`guideStep${guideIndex + 1}Desc`).split(/(\*\*.*?\*\*)/).map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <Text key={i} style={{color: theme.primary, fontWeight: 'bold'}}>{part.slice(2, -2)}</Text>;
     }
     return part;
   })}
-</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>이전</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < GUIDE_STEPS.length - 1) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === GUIDE_STEPS.length - 1 ? '닫기' : '다음'}</Text></TouchableOpacity></View></View></Pressable></Modal>
+</Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>{t('prev')}</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < GUIDE_IMAGES.length - 1) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === GUIDE_IMAGES.length - 1 ? t('close') : t('next')}</Text></TouchableOpacity></View></View></Pressable></Modal>
     </GestureHandlerRootView>
   );
 }

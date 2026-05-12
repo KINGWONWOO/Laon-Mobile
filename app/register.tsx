@@ -41,7 +41,7 @@ export default function RegisterScreen() {
   const [timer, setTimer] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { sendVerificationCode, checkEmailCode, verifyAndSignup } = useAppContext();
+  const { sendVerificationCode, checkEmailCode, verifyAndSignup, t } = useAppContext();
   const router = useRouter();
 
   const isCodeVerified = codeStep === 'verified';
@@ -63,7 +63,7 @@ export default function RegisterScreen() {
 
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) {
-      Alert.alert('알림', '유효한 이메일 주소를 입력해주세요.');
+      Alert.alert(t('notification'), t('validEmailRequired'));
       return;
     }
     
@@ -80,16 +80,16 @@ export default function RegisterScreen() {
     setInputCode('');
     setCodeStep('sent');
     setTimer(60); // 60초 타이머 시작
-    Alert.alert('전송 완료', '이메일로 6자리 인증 코드를 발송했습니다.\n유효 시간은 60초입니다.');
+    Alert.alert(t('codeSentTitle'), t('codeSentMsg'));
   };
 
   const handleVerifyCode = async () => {
     if (timer === 0) {
-      Alert.alert('만료됨', '인증 시간이 만료되었습니다. 코드를 재전송해주세요.');
+      Alert.alert(t('codeExpiredTitle'), t('codeExpiredMsg'));
       return;
     }
     if (inputCode.length !== 6) {
-      Alert.alert('알림', '6자리 코드를 입력해주세요.');
+      Alert.alert(t('notification'), t('enterSixDigitCode'));
       return;
     }
     if (!sessionToken) return;
@@ -99,7 +99,7 @@ export default function RegisterScreen() {
     
     if (error || !valid) {
       setCodeStep('sent');
-      Alert.alert(t('errorTitle'), '인증 코드가 올바르지 않거나 이미 만료되었습니다.\n최신 코드를 입력해주세요.');
+      Alert.alert(t('errorTitle'), t('invalidCodeMsg'));
       return;
     }
 
@@ -125,19 +125,19 @@ export default function RegisterScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password || !name || !phone) {
-      Alert.alert(t('errorTitle'), '모든 정보를 입력해주세요.');
+      Alert.alert(t('errorTitle'), t('fillAllFields'));
       return;
     }
     if (!isCodeVerified) {
-      Alert.alert(t('errorTitle'), '이메일 인증을 완료해주세요.');
+      Alert.alert(t('errorTitle'), t('verifyEmailFirst'));
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert(t('errorTitle'), '비밀번호가 일치하지 않습니다.');
+      Alert.alert(t('errorTitle'), t('passwordMismatch'));
       return;
     }
     if (!pwValid) {
-      Alert.alert(t('errorTitle'), '비밀번호 조건을 모두 충족해야 합니다.');
+      Alert.alert(t('errorTitle'), t('passwordConditions'));
       return;
     }
 
@@ -148,10 +148,10 @@ export default function RegisterScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('회원가입 실패', error.message);
+      Alert.alert(t('registerFailed'), error.message);
     } else {
-      Alert.alert('가입 완료', 'LAON DANCE에 오신 것을 환영합니다! 🎉', [
-        { text: '로그인하기', onPress: () => router.replace('/') },
+      Alert.alert(t('registerComplete'), t('signupCompleteMsg'), [
+        { text: t('login'), onPress: () => router.replace('/') },
       ]);
     }
   };
@@ -164,16 +164,16 @@ export default function RegisterScreen() {
       <View style={styles.navHeader}><StyledBackButton /></View>
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>JOIN US</Text>
-        <Text style={styles.subtitle}>새로운 댄서로 등록하세요</Text>
+        <Text style={styles.subtitle}>{t('registerSubtitle')}</Text>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>이메일 주소</Text>
+          <Text style={styles.label}>{t('emailAddress')}</Text>
           <View style={styles.row}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
               value={email}
-              onChangeText={(t) => {
-                setEmail(t);
+              onChangeText={(text) => {
+                setEmail(text);
                 if (codeStep !== 'idle') {
                   setCodeStep('idle');
                   setSessionToken(null);
@@ -201,9 +201,9 @@ export default function RegisterScreen() {
               ) : isCodeVerified ? (
                 <Ionicons name="checkmark-circle" size={18} color="#000" />
               ) : isCodeSent ? (
-                <Text style={styles.codeBtnText}>재전송</Text>
+                <Text style={styles.codeBtnText}>{t('resendCode')}</Text>
               ) : (
-                <Text style={styles.codeBtnText}>코드 전송</Text>
+                <Text style={styles.codeBtnText}>{t('sendCode')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -211,16 +211,16 @@ export default function RegisterScreen() {
           {isCodeSent && !isCodeVerified && (
             <View style={styles.codeInputSection}>
               <View style={styles.codeLabelRow}>
-                <Text style={styles.codeHint}>6자리 코드 입력</Text>
+                <Text style={styles.codeHint}>{t('sixDigitCodeHint')}</Text>
                 <Text style={[styles.timerText, timer < 10 && { color: '#FF4B4B' }]}>
-                  {timer > 0 ? formatTime(timer) : '만료됨'}
+                  {timer > 0 ? formatTime(timer) : t('expired')}
                 </Text>
               </View>
               <View style={styles.row}>
                 <TextInput
                   style={[styles.input, { flex: 1, marginBottom: 0, letterSpacing: 6, textAlign: 'center' }]}
                   value={inputCode}
-                  onChangeText={(t) => setInputCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                  onChangeText={(text) => setInputCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
                   placeholder="000000"
                   placeholderTextColor={Colors.textSecondary}
                   keyboardType="number-pad"
@@ -235,23 +235,23 @@ export default function RegisterScreen() {
                   {codeStep === 'verifying' ? (
                     <ActivityIndicator size="small" color="#000" />
                   ) : (
-                    <Text style={styles.codeBtnText}>확인</Text>
+                    <Text style={styles.codeBtnText}>{t('ok')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          <Text style={[styles.label, { marginTop: 20 }]}>이름</Text>
+          <Text style={[styles.label, { marginTop: 20 }]}>{t('name')}</Text>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="홍길동"
+            placeholder={t('nameExample')}
             placeholderTextColor={Colors.textSecondary}
           />
 
-          <Text style={styles.label}>휴대폰 번호</Text>
+          <Text style={styles.label}>{t('phone')}</Text>
           <TextInput
             style={styles.input}
             value={phone}
@@ -261,29 +261,29 @@ export default function RegisterScreen() {
             keyboardType="phone-pad"
           />
 
-          <Text style={styles.label}>비밀번호</Text>
+          <Text style={styles.label}>{t('password')}</Text>
           <TextInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="8자 이상, 대/소문자 + 숫자 포함"
+            placeholder={t('passwordHint')}
             placeholderTextColor={Colors.textSecondary}
             secureTextEntry
           />
 
-          <Text style={styles.label}>비밀번호 확인</Text>
+          <Text style={styles.label}>{t('confirmPassword')}</Text>
           <TextInput
             style={[styles.input, confirmPassword.length > 0 && password !== confirmPassword && styles.inputError]}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            placeholder="비밀번호 다시 입력"
+            placeholder={t('confirmPasswordPlaceholder')}
             placeholderTextColor={Colors.textSecondary}
             secureTextEntry
           />
         </View>
 
         <DanceButton
-          title="회원가입 완료"
+          title={t('registerComplete')}
           onPress={handleSignUp}
           style={styles.registerBtn}
           loading={loading}

@@ -105,7 +105,7 @@ export default function RoomsScreen() {
               setIsUpdating(true);
               await deleteAccount();
             } catch (e: any) {
-              Alert.alert(t('error'), '탈퇴 처리 중 문제가 발생했습니다.');
+              Alert.alert(t('error'), t('processingError'));
             } finally {
               setIsUpdating(false);
             }
@@ -140,11 +140,11 @@ export default function RoomsScreen() {
     const access = checkProAccess('room_count');
     if (!access.canAccess) {
       return Alert.alert(
-        '방 생성 제한',
-        `Free 플랜은 최대 ${access.limit}개까지 방을 만들 수 있습니다.\n무제한으로 방을 만들고 싶으신가요?`,
+        t('roomLimitTitle'),
+        `${t('freePlanLimit')} ${access.limit} ${t('roomsLimit')}\n${t('unlimitedRooms')}`,
         [
-          { text: '취소', style: 'cancel' },
-          { text: '멤버십 보기', onPress: () => router.push('/subscription') }
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
         ]
       );
     }
@@ -201,11 +201,13 @@ export default function RoomsScreen() {
       <View style={styles.titleRow}>
         <Text style={[styles.title, { color: theme.text }]}>{t('myRooms')}</Text>
         <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity style={[styles.actionBtn, { marginRight: 10, backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
-            <Ionicons name="enter-outline" size={24} color={theme.background} />
+          <TouchableOpacity style={[styles.actionIconButton, { marginRight: 8, backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
+            <Ionicons name="enter-outline" size={20} color={theme.background} />
+            <Text style={[styles.actionIconText, { color: theme.background }]}>{t('join')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={handleCreateRoom}>
-            <Ionicons name="add" size={24} color={theme.background} />
+          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.primary }]} onPress={handleCreateRoom}>
+            <Ionicons name="add" size={20} color={theme.background} />
+            <Text style={[styles.actionIconText, { color: theme.background }]}>{t('create')}</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -13,7 +13,7 @@ export default function CreateRoomScreen() {
   const [name, setName] = useState('');
   const [passcode, setPasscode] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const { createRoom } = useAppContext();
+  const { createRoom, t } = useAppContext();
   const router = useRouter();
 
   const pickImage = async () => {
@@ -31,22 +31,18 @@ export default function CreateRoomScreen() {
 
   const handleCreate = async () => {
     if (!name.trim() || !passcode.trim()) {
-      Alert.alert('오류', '방 이름과 비밀번호를 모두 입력해주세요.');
+      Alert.alert(t('error'), t('roomNameRequired'));
       return;
     }
     
-    // 💡 이미지 업로드 중임을 알리기 위해 로딩 상태 추가 가능 (현재는 createRoom 내부에서 처리)
     try {
-      // 1. 방 생성 로직 실행
       const room = await createRoom(name, passcode, imageUri || undefined);
-      
-      // 2. 생성 성공 시 해당 방으로 즉시 이동 (목록을 거치지 않음)
       console.log('[CreateRoom] Success, navigating to room:', room.id);
       router.replace(`/room/${room.id}` as any);
       
     } catch (error: any) {
       console.error('[CreateRoom] Error:', error.message);
-      Alert.alert('오류', `방 생성 중 문제가 발생했습니다.\n${error.message}`);
+      Alert.alert(t('error'), `${t('roomCreationError')}\n${error.message}`);
     }
   };
 
@@ -54,37 +50,37 @@ export default function CreateRoomScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <StyledBackButton />
-        <Text style={styles.headerTitle}>NEW CREW</Text>
+        <Text style={styles.headerTitle}>{t('roomCreationTitle')}</Text>
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.label}>크루 이미지</Text>
+        <Text style={styles.label}>{t('roomImage')}</Text>
         <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.selectedImage} />
           ) : (
             <View style={styles.imagePlaceholder}>
               <Ionicons name="camera" size={40} color={Colors.textSecondary} />
-              <Text style={styles.imagePlaceholderText}>팀 로고 선택</Text>
+              <Text style={styles.imagePlaceholderText}>{t('imagePlaceholderText')}</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.label}>우리 팀 이름</Text>
+        <Text style={styles.label}>{t('roomNameLabel')}</Text>
         <TextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="예: LAON B-Boy Crew"
+          placeholder={t('roomNamePlaceholder')}
           placeholderTextColor={Colors.textSecondary}
         />
 
-        <Text style={styles.label}>입장 비밀번호</Text>
+        <Text style={styles.label}>{t('passcodeLabel')}</Text>
         <TextInput
           style={styles.input}
           value={passcode}
           onChangeText={setPasscode}
-          placeholder="팀원들과 공유할 코드"
+          placeholder={t('passcodePlaceholder')}
           placeholderTextColor={Colors.textSecondary}
           secureTextEntry
           keyboardType="number-pad"
@@ -93,12 +89,12 @@ export default function CreateRoomScreen() {
 
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            팀원들이 이 비밀번호를 통해 안전하게 참여할 수 있습니다.
+            {t('passcodeInfo')}
           </Text>
         </View>
 
         <DanceButton 
-          title="크루룸 생성하기" 
+          title={t('createRoomBtn')} 
           onPress={handleCreate}
           style={styles.button}
         />
