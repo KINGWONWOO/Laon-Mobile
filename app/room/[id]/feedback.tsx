@@ -11,6 +11,7 @@ import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
+import { FormationPiPPlayer } from '../../../components/ui/FormationPiPPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import { createTranslator } from '../../../constants/translations';
@@ -102,6 +103,7 @@ export default function FeedbackScreen() {
   const SUB_INIT_H = Math.round(SUB_INIT_W * (9 / 16));
   const subPosX = useSharedValue(SCREEN_WIDTH - SUB_INIT_W - 16);
   const subPosY = useSharedValue(70);
+  const currentTimeMsSV = useSharedValue(0); // shared with FormationPiPPlayer for sync
   const savedPosX = useSharedValue(SCREEN_WIDTH - SUB_INIT_W - 16);
   const savedPosY = useSharedValue(70);
   const subW = useSharedValue(SUB_INIT_W);
@@ -118,11 +120,14 @@ export default function FeedbackScreen() {
     return formations.find(f => f.id === fId);
   }, [selectedVideo, formations]);
 
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+
   // formationTime ref로 최신값 유지 (interval 클로저에서 사용)
   const handleFormationTimeUpdate = useCallback((ms: number) => {
     formationTimeRef.current = ms;
     setFormationTime(ms);
-  }, []);
+    currentTimeMsSV.value = ms; // keep PiP in sync
+  }, [currentTimeMsSV]);
 
   const player = useVideoPlayer(cachedVideoUrl || '', p => {
     p.loop = true;
@@ -137,9 +142,9 @@ export default function FeedbackScreen() {
     if (cachedChoreographyUrl) p.play();
   });
 
-  // 안무 영상과 동선 오디오 간 드리프트 보정 (2초마다)
+  // 안무 영상 드리프트 보정: swapped일 때만 (non-swapped는 FormationPiPPlayer가 처리)
   useEffect(() => {
-    if (!isFormation || !isFormationPlaying || !subPlayer || !cachedChoreographyUrl) return;
+    if (!isFormation || !isFormationPlaying || !subPlayer || !cachedChoreographyUrl || !isSwapped) return;
     const interval = setInterval(() => {
       const drift = Math.abs(subPlayer.currentTime * 1000 - formationTimeRef.current);
       if (drift > 800) {
@@ -147,7 +152,7 @@ export default function FeedbackScreen() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl]);
+  }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl, isSwapped]);
   useEffect(() => {
     if (cachedVideoUrl && player) {
       player.replace(cachedVideoUrl);
@@ -171,7 +176,10 @@ export default function FeedbackScreen() {
       interval = setInterval(() => {
         try {
           if (player && typeof player.currentTime === 'number') {
-            setVideoTime(Math.floor(player.currentTime * 1000));
+            const ms = Math.floor(player.currentTime * 1000);
+            setVideoTime(ms);
+            currentTimeMsSV.value = ms;
+            setIsVideoPlaying(!!player.playing);
             if (player.duration > 0 && videoDuration === 0) {
               setVideoDuration(player.duration);
             }
@@ -374,10 +382,11 @@ export default function FeedbackScreen() {
     if (isFormation) {
       setFormationTime(ms);
       setFormationSeekMs(ms);
-      if (subPlayer && cachedChoreographyUrl) subPlayer.currentTime = ms / 1000;
+      // subPlayer only controls choreography when swapped to main; FormationPiPPlayer handles !isSwapped
+      if (isSwapped && subPlayer && cachedChoreographyUrl) subPlayer.currentTime = ms / 1000;
     } else {
       if (player) player.currentTime = ms / 1000;
-      if (subPlayer) subPlayer.currentTime = ms / 1000;
+      if (isSwapped && subPlayer) subPlayer.currentTime = ms / 1000;
     }
   };
 
@@ -390,17 +399,18 @@ export default function FeedbackScreen() {
     resetControlsTimer();
     if (isFormation) {
       setIsFormationPlaying(!isFormationPlaying);
-      if (subPlayer) {
+      // subPlayer (expo-video) only needed when swapped; FormationPiPPlayer handles !isSwapped
+      if (isSwapped && subPlayer) {
         if (!isFormationPlaying) subPlayer.play();
         else subPlayer.pause();
       }
     } else {
       if (player.playing) {
         player.pause();
-        if (subPlayer) subPlayer.pause();
+        if (isSwapped && subPlayer) subPlayer.pause();
       } else {
         player.play();
-        if (subPlayer) subPlayer.play();
+        if (isSwapped && subPlayer) subPlayer.play();
       }
     }
   };
@@ -553,33 +563,37 @@ export default function FeedbackScreen() {
     const renderSubContent = () => {
       if (!hasChoreography) return null;
 
+      // Non-swapped: choreography video floats as PiP → use FormationPiPPlayer (react-native-video)
+      if (!isSwapped && cachedChoreographyUrl) {
+        return (
+          <FormationPiPPlayer
+            videoUrl={cachedChoreographyUrl}
+            currentTimeMs={currentTimeMsSV}
+            isPlaying={isFormation ? isFormationPlaying : isVideoPlaying}
+            onClose={() => {}}
+            initialX={subPosX.value}
+            initialY={subPosY.value}
+          />
+        );
+      }
+
+      // Swapped: show formation or main video in the draggable sub container
       return (
         <GestureDetector gesture={subGesture}>
           <Animated.View style={[subAnimStyle, Shadows.medium]}>
-            {isSwapped ? (
-              isFormation ? (
-                <FormationPlayer
-                  formation={selectedFormation!}
-                  currentTimeMs={formationTime}
-                  isPlaying={isFormationPlaying}
-                  hidePip={true}
-                  noAudio={true}
-                  containerWidth={subContainerW}
-                />
-              ) : (
-                <VideoView
-                  style={{ flex: 1 }}
-                  player={player}
-                  contentFit="contain"
-                  fullscreenOptions={{ enable: false }}
-                  nativeControls={false}
-                  surfaceType="textureView"
-                />
-              )
+            {isFormation ? (
+              <FormationPlayer
+                formation={selectedFormation!}
+                currentTimeMs={formationTime}
+                isPlaying={isFormationPlaying}
+                hidePip={true}
+                noAudio={true}
+                containerWidth={subContainerW}
+              />
             ) : (
               <VideoView
                 style={{ flex: 1 }}
-                player={subPlayer}
+                player={player}
                 contentFit="contain"
                 fullscreenOptions={{ enable: false }}
                 nativeControls={false}

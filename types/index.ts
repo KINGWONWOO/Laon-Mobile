@@ -179,6 +179,8 @@ export type FormationData = {
 export type VideoSettings = {
   videoUrl?: string;
   pipPosition: { x: number, y: number };
+  pipScale?: number;
+  syncOffset?: number;
 };
 
 export type FormationSettings = {

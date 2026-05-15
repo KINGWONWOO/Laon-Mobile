@@ -577,6 +577,9 @@ const ko: TranslationDict = {
   fileSaveSuccess: '파일이 저장되었습니다.',
   fileSaveFailed: '파일 저장 실패',
   videoFeatureNote: '영상 추가 기능은 현재 개발 중입니다. 조금만 기다려주세요!',
+  videoReplaceOrRemove: '영상을 교체하거나 제거하시겠습니까?',
+  replaceVideo: '영상 교체',
+  removeVideo: '영상 제거',
 
   // Additional for Schedule/Vote
   availableMembers: '가능 인원',
@@ -1181,6 +1184,9 @@ const en: TranslationDict = {
   fileSaveSuccess: 'File has been saved.',
   fileSaveFailed: 'File save failed',
   videoFeatureNote: 'Video add feature is under development. Please wait!',
+  videoReplaceOrRemove: 'Do you want to replace or remove the video?',
+  replaceVideo: 'Replace Video',
+  removeVideo: 'Remove Video',
 
   // Additional for Schedule/Vote
   availableMembers: 'Available Members',
@@ -1785,6 +1791,9 @@ const es: TranslationDict = {
   fileSaveSuccess: 'El archivo ha sido guardado.',
   fileSaveFailed: 'Error al guardar el archivo',
   videoFeatureNote: 'La función de agregar video está actualmente en desarrollo. ¡Por favor, espera un poco!',
+  videoReplaceOrRemove: '¿Deseas reemplazar o eliminar el video?',
+  replaceVideo: 'Reemplazar video',
+  removeVideo: 'Eliminar video',
 
   // Additional for Schedule/Vote
   availableMembers: 'Miembros disponibles',
@@ -2389,6 +2398,9 @@ const id: TranslationDict = {
   fileSaveSuccess: 'File telah disimpan.',
   fileSaveFailed: 'Gagal menyimpan file',
   videoFeatureNote: 'Fitur tambah video sedang dalam pengembangan. Mohon tunggu!',
+  videoReplaceOrRemove: 'Apakah Anda ingin mengganti atau menghapus video?',
+  replaceVideo: 'Ganti Video',
+  removeVideo: 'Hapus Video',
 
   // Additional for Schedule/Vote
   availableMembers: 'Anggota yang tersedia',
@@ -2993,6 +3005,9 @@ const ja: TranslationDict = {
   fileSaveSuccess: 'ファイルが保存されました。',
   fileSaveFailed: 'ファイルの保存に失敗しました。',
   videoFeatureNote: '動画追加機能は現在開発中です。もうしばらくお待ちください！',
+  videoReplaceOrRemove: '動画を置き換えますか、それとも削除しますか？',
+  replaceVideo: '動画を置き換える',
+  removeVideo: '動画を削除する',
 
   // Additional for Schedule/Vote
   availableMembers: '参加可能人数',
@@ -3597,6 +3612,9 @@ const zh: TranslationDict = {
   fileSaveSuccess: '文件已保存。',
   fileSaveFailed: '文件保存失败',
   videoFeatureNote: '添加视频功能目前正在开发中。请稍候！',
+  videoReplaceOrRemove: '您想替换还是删除视频？',
+  replaceVideo: '替换视频',
+  removeVideo: '删除视频',
 
   // Additional for Schedule/Vote
   availableMembers: '可用成员',
@@ -4201,6 +4219,9 @@ const th: TranslationDict = {
   fileSaveSuccess: 'บันทึกไฟล์แล้ว',
   fileSaveFailed: 'บันทึกไฟล์ล้มเหลว',
   videoFeatureNote: 'ฟีเจอร์เพิ่มวิดีโอกำลังอยู่ระหว่างการพัฒนา กรุณารอสักครู่!',
+  videoReplaceOrRemove: 'คุณต้องการเปลี่ยนหรือลบวิดีโอหรือไม่?',
+  replaceVideo: 'เปลี่ยนวิดีโอ',
+  removeVideo: 'ลบวิดีโอ',
 
   // Additional for Schedule/Vote
   availableMembers: 'สมาชิกที่ว่าง',
