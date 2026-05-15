@@ -8,7 +8,7 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, w
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { FormationPiPPlayer } from '../../../../components/ui/FormationPiPPlayer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { WebView } from 'react-native-webview';
@@ -42,37 +42,26 @@ const PlaybackTimeDisplay = React.memo(function PlaybackTimeDisplay({ currentTim
   return <Text style={[styles.timeText, { color: theme.text }]}>{timeStr}</Text>;
 });
 
-const PlayButton = React.memo(function PlayButton({ player, videoPlayer, theme, isPlayingSV }: { player: any, videoPlayer: any, theme: any, isPlayingSV: SharedValue<boolean> }) {
+const PlayButton = React.memo(function PlayButton({ player, theme, isPlayingSV }: { player: any, theme: any, isPlayingSV: SharedValue<boolean> }) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   useAnimatedReaction(
     () => isPlayingSV.value,
-    (playing) => {
-      runOnJS(setIsPlaying)(playing);
-    }
+    (playing) => { runOnJS(setIsPlaying)(playing); }
   );
 
   const togglePlay = () => {
     try {
       if (!player) return;
-      if (player.playing) {
-        player.pause();
-        if (videoPlayer) videoPlayer.pause();
-      } else {
-        player.play();
-        if (videoPlayer) videoPlayer.play();
-      }
-    } catch (e) {
-      console.warn('PlayButton Error:', e);
-    }
+      // player.playing은 stale할 수 있으므로 SharedValue 기준으로 판단
+      if (isPlaying) player.pause();
+      else player.play();
+    } catch (e) {}
   };
 
   return (
-    <TouchableOpacity
-      onPress={togglePlay}
-      style={[styles.playBtn, { backgroundColor: theme.primary }]}
-    >
-      <Ionicons name={isPlaying ? "pause" : "play"} size={32} color={theme.background} />
+    <TouchableOpacity onPress={togglePlay} style={[styles.playBtn, { backgroundColor: theme.primary }]}>
+      <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color={theme.background} />
     </TouchableOpacity>
   );
 });
@@ -230,124 +219,6 @@ const TransitionXLines = ({ height, durationMs, pxPerSecSV, theme }: any) => {
     </>
   );
 };
-
-const DraggableVideo = React.memo(function DraggableVideo({ videoPlayer, x, y, scale, onClose }: { videoPlayer: any, x: any, y: any, scale: any, onClose: () => void }) {
-  const { theme } = useAppContext();
-  const [showControls, setShowControls] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
-  const [videoDurationPip, setVideoDurationPip] = useState(0);
-  const startX = useSharedValue(0);
-  const startY = useSharedValue(0);
-  const startScale = useSharedValue(1);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!videoPlayer) return;
-
-    const syncCurrentTime = () => {
-      const ct = videoPlayer.currentTime;
-      const dur = videoPlayer.duration;
-      if (typeof ct === 'number' && ct >= 0) setVideoCurrentTime(ct);
-      if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
-    };
-
-    const timeSub = videoPlayer.addListener('timeUpdate', (payload: any) => {
-      const ct = payload?.currentTime ?? videoPlayer.currentTime;
-      const dur = videoPlayer.duration;
-      if (typeof ct === 'number' && ct >= 0) setVideoCurrentTime(ct);
-      if (typeof dur === 'number' && dur > 0) setVideoDurationPip(dur);
-    });
-
-    const statusSub = videoPlayer.addListener('statusChange', () => {
-      syncCurrentTime();
-    });
-
-    const playingSub = videoPlayer.addListener('playingChange', () => {
-      syncCurrentTime();
-    });
-
-    syncCurrentTime();
-
-    return () => {
-      timeSub.remove();
-      statusSub.remove();
-      playingSub.remove();
-    };
-  }, [videoPlayer]);
-
-  useEffect(() => () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); }, []);
-
-  const showAndAutoHide = useCallback(() => {
-    setShowControls(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-  }, []);
-
-  const pan = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .activeOffsetY([-20, 20])
-    .onStart(() => { 'worklet'; startX.value = x.value; startY.value = y.value; })
-    .onUpdate((e) => { 'worklet'; x.value = startX.value + e.translationX; y.value = startY.value + e.translationY; });
-
-  const pinch = Gesture.Pinch()
-    .onStart(() => { 'worklet'; startScale.value = scale.value; })
-    .onUpdate((e) => { 'worklet'; scale.value = Math.max(0.5, Math.min(3, startScale.value * e.scale)); });
-
-  const tap = Gesture.Tap()
-    .runOnJS(true)
-    .maxDistance(10)
-    .enabled(!showControls)
-    .onEnd(() => showAndAutoHide());
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: scale.value }]
-  }));
-
-  if (!videoPlayer) return null;
-
-  if (isMinimized) {
-    return (
-      <GestureDetector gesture={Gesture.Simultaneous(pan, pinch)}>
-        <Animated.View style={[styles.pipContainerMin, animatedStyle, { borderColor: theme.border, backgroundColor: theme.card }]}>
-          <TouchableOpacity style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }} onPress={() => setIsMinimized(false)}>
-            <Ionicons name="videocam" size={18} color={theme.text} />
-          </TouchableOpacity>
-        </Animated.View>
-      </GestureDetector>
-    );
-  }
-
-  const progress = videoDurationPip > 0 ? videoCurrentTime / videoDurationPip : 0;
-
-  return (
-    <GestureDetector gesture={Gesture.Simultaneous(Gesture.Simultaneous(pan, pinch), tap)}>
-      <Animated.View style={[styles.pipContainer, animatedStyle, { borderColor: theme.border }]}>
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <VideoView player={videoPlayer} style={styles.pipVideo} allowsFullscreen={false} allowsPictureInPicture={false} nativeControls={false} contentFit="contain" />
-        </View>
-        {showControls && (
-          <View style={[StyleSheet.absoluteFillObject, styles.pipOverlay]} pointerEvents="box-none">
-            <View style={styles.pipTopRow}>
-              <TouchableOpacity style={styles.pipBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={14} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.pipBtn} onPress={() => { setIsMinimized(true); setShowControls(false); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="remove" size={14} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.pipBottomSpacer} />
-            <View style={styles.pipSeekRow}>
-              <View style={styles.pipSeekTrack}>
-                <View style={[styles.pipSeekFill, { width: `${progress * 100}%` as any }]} />
-              </View>
-            </View>
-          </View>
-        )}
-      </Animated.View>
-    </GestureDetector>
-  );
-});
 
 const ResizeHandle = React.memo(function ResizeHandle({ direction, localTs, localDur, minTs, maxTs, pxPerSecSV, onCommit, isVisible, movePanRef }: any) {
   const { theme } = useAppContext();
@@ -655,9 +526,16 @@ export default function FormationEditorScreen() {
   const [timeline, setTimeline] = useState<TimelineEntry[]>(formation?.data?.timeline || []);
   const [audioUrl, setAudioUrl] = useState<string>(formation?.audioUrl || '');
   const [videoUrl, setVideoUrl] = useState<string>(formation?.videoSettings?.videoUrl || '');
-  const pipX = useSharedValue(formation?.videoSettings?.pipPosition?.x ?? width - 170);
-  const pipY = useSharedValue(formation?.videoSettings?.pipPosition?.y ?? 60);
-  const pipScale = useSharedValue(1);
+  const pipX = useSharedValue(formation?.videoSettings?.pipPosition?.x ?? width - 220);
+  const pipY = useSharedValue(formation?.videoSettings?.pipPosition?.y ?? 100);
+  const pipScale = useSharedValue(formation?.videoSettings?.pipScale ?? 1);
+  // Reanimated: SharedValue.value를 render 중 읽으면 경고 발생.
+  // initialX/Y/Scale은 마운트 시 1회만 필요하므로 useState로 캡처.
+  const [pipInitial] = useState(() => ({
+    x: formation?.videoSettings?.pipPosition?.x ?? width - 220,
+    y: formation?.videoSettings?.pipPosition?.y ?? 100,
+    scale: formation?.videoSettings?.pipScale ?? 1,
+  }));
 
   const [settings, setSettings] = useState<FormationSettings>(() => {
     const base = formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 };
@@ -706,7 +584,7 @@ export default function FormationEditorScreen() {
   const compressionResolverRef = useRef<((uri: string) => void) | null>(null);
   const compressionRejecterRef = useRef<((err: any) => void) | null>(null);
   const lastSeekTimeRef = useRef(0);
-  const [syncOffset, setSyncOffset] = useState(0);
+  const [syncOffset, setSyncOffset] = useState(formation?.videoSettings?.syncOffset || 0);
   const webViewRef = useRef<WebView>(null);
   const webViewReadyRef = useRef(false);
 
@@ -739,24 +617,19 @@ export default function FormationEditorScreen() {
   const isPlayerPlayingSV = useSharedValue(false);
   const isUserScrollingSV = useSharedValue(false);
   const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
+  const seekFreezeUntilRef = useRef(0);
 
-  const player = useAudioPlayer(audioUrl);
-  // Removed useAudioPlayerStatus(player) from main component to prevent full re-renders!
-  const effectiveDuration = player.duration || 60; // Fallback to 60s if not loaded yet
-
-  const videoPlayer = useVideoPlayer(videoUrl || null, (p) => {
-    p.loop = false;
-    p.muted = true;
-  });
+  const player = useAudioPlayer(audioUrl, { updateInterval: 100 });
+  const playerStatus = useAudioPlayerStatus(player);
+  const effectiveDuration = player.duration || 60;
 
   const seekAll = useCallback((timeSec: number) => {
     const timeMs = timeSec * 1000;
     cancelAnimation(currentTimeMs);
     currentTimeMs.value = timeMs;
-    
+    seekFreezeUntilRef.current = Date.now() + 300;
     player.seekTo(timeSec);
-    if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, timeSec + syncOffset);
-  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs]);
+  }, [player, currentTimeMs]);
 
   const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
   
@@ -1188,59 +1061,58 @@ export default function FormationEditorScreen() {
 
   const stageAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }] }));
 
-  // [Unified Playback Engine] 
-  // 시각적 부드러움을 위해 60fps로 재생바를 업데이트하되, 
-  // 비디오 동기화 등 무거운 로직은 쓰로틀링(Throttling)하여 성능 유지
+  // playbackStatusUpdate 이벤트(100ms)로 playing/currentTime을 캐시하고
+  // rAF(60fps)에서 보간해 currentTimeMs를 매끄럽게 업데이트
   useEffect(() => {
-    let animationFrameId: number;
-    let wasPlaying = false;
+    let raf: number;
     let isActive = true;
-    let lastSyncTime = 0;
-    
-    const updatePlaybackState = () => {
-      if (!isActive) return;
-      try {
-        if (!player) {
-          animationFrameId = requestAnimationFrame(updatePlaybackState);
-          return;
-        }
+    let cachedPlaying = false;
+    let cachedCurrentTime = 0;
+    let lastStatusTs = 0;
+    let statusEventCount = 0;
+    let lastDiagSecAudio = -1;
 
-        const isPlaying = player.playing;
-        isPlayerPlayingSV.value = isPlaying;
-        
-        const currentAudioTime = player.currentTime;
-        
-        // 재생바는 매 프레임 업데이트 (부드러운 움직임)
-        if (!isUserScrollingSV.value) {
-          currentTimeMs.value = currentAudioTime * 1000;
-        }
-
-        // 비디오 동기화 및 무거운 체크는 약 100ms마다 수행
-        const now = Date.now();
-        if (now - lastSyncTime > 100 || (isPlaying && !wasPlaying) || (!isPlaying && wasPlaying)) {
-          lastSyncTime = now;
-          if (videoPlayer && videoUrl) {
-            const targetTime = currentAudioTime + syncOffset;
-            if (Math.abs(videoPlayer.currentTime - targetTime) > 0.2) {
-              videoPlayer.currentTime = Math.max(0, targetTime);
-            }
-            if (isPlaying && !wasPlaying) videoPlayer.play();
-            else if (!isPlaying && wasPlaying) videoPlayer.pause();
-          }
-          wasPlaying = isPlaying;
-        }
-      } catch (e) {
-        // Silent catch for released player
+    const statusSub = player.addListener('playbackStatusUpdate', (status: any) => {
+      cachedPlaying = status.playing;
+      cachedCurrentTime = status.currentTime;
+      lastStatusTs = Date.now();
+      statusEventCount++;
+      // 첫 이벤트 및 재생 상태 전환 시 로그
+      if (statusEventCount === 1) {
+        console.log('[Formation-Audio] First playbackStatusUpdate:', JSON.stringify(status));
       }
-      animationFrameId = requestAnimationFrame(updatePlaybackState);
+    });
+
+    const tick = () => {
+      if (!isActive) return;
+      isPlayerPlayingSV.value = cachedPlaying;
+      if (!isUserScrollingSV.value && Date.now() > seekFreezeUntilRef.current) {
+        const elapsed = cachedPlaying ? (Date.now() - lastStatusTs) / 1000 : 0;
+        currentTimeMs.value = (cachedCurrentTime + elapsed) * 1000;
+      }
+
+      // 1초마다 오디오-SharedValue 동기 진단 로그
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec !== lastDiagSecAudio) {
+        lastDiagSecAudio = nowSec;
+        console.log(
+          `[Formation-Audio] cachedPlaying=${cachedPlaying}  cachedCurrentTime=${cachedCurrentTime.toFixed(2)}s` +
+          `  currentTimeMs.value=${currentTimeMs.value.toFixed(0)}  statusEvents=${statusEventCount}` +
+          `  isUserScrolling=${isUserScrollingSV.value}  freezeUntil=${seekFreezeUntilRef.current > Date.now() ? 'YES' : 'no'}`
+        );
+        statusEventCount = 0; // 초당 이벤트 수 카운트 리셋
+      }
+
+      raf = requestAnimationFrame(tick);
     };
 
-    animationFrameId = requestAnimationFrame(updatePlaybackState);
+    raf = requestAnimationFrame(tick);
     return () => {
       isActive = false;
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(raf);
+      statusSub.remove();
     };
-  }, [player, videoPlayer, videoUrl, syncOffset]);
+  }, [player]);
 
   useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value, pps: pxPerSecSV.value }), (data) => {
     if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * data.pps, 0, false); }
@@ -1253,28 +1125,21 @@ export default function FormationEditorScreen() {
       cancelAnimation(currentTimeMs);
       currentTimeMs.value = newTimeMs;
       const timeSec = newTimeMs / 1000;
-      
+
       const now = Date.now();
-      if (now - lastSeekTimeRef.current > 100) { // Throttle seekTo to 10fps during scroll
+      if (now - lastSeekTimeRef.current > 100) {
         lastSeekTimeRef.current = now;
-        runOnJS((t: number) => {
-          try {
-            if (player) player.seekTo(t);
-            if (videoPlayer && videoUrl) videoPlayer.currentTime = Math.max(0, t + syncOffset);
-          } catch (err) {}
-        })(timeSec);
+        seekFreezeUntilRef.current = now + 300;
+        try { player.seekTo(timeSec); } catch (_) {}
       }
     }
-  }, [player, videoPlayer, videoUrl, syncOffset, currentTimeMs, pxPerSecSV]);
+  }, [player, currentTimeMs, pxPerSecSV]);
 
   const onScrollEnd = (e: any) => {
+    const finalTimeMs = (e.nativeEvent.contentOffset.x / pxPerSecSV.value) * 1000;
+    seekFreezeUntilRef.current = Date.now() + 300;
+    currentTimeMs.value = finalTimeMs;
     isUserScrollingSV.value = false;
-    const isPlaying = isPlayerPlayingSV.value;
-    if (isPlaying) {
-      const time = (e.nativeEvent.contentOffset.x / pxPerSecSV.value) * 1000;
-      const remaining = (effectiveDuration * 1000) - time;
-      currentTimeMs.value = withTiming(effectiveDuration * 1000, { duration: Math.max(0, remaining), easing: Easing.linear });
-    }
   };
 
   useAnimatedReaction(() => ({ scenes, mode, activeId: activeSceneId }), (data) => {
@@ -1490,23 +1355,44 @@ export default function FormationEditorScreen() {
   }, []);
 
   const handleSyncAdjust = useCallback((delta: number) => {
-    const next = parseFloat((syncOffset + delta).toFixed(1));
-    setSyncOffset(next);
-    if (videoPlayer && videoUrl) {
-      // Shift video by delta instead of relying on currentTimeMs.value (may be stale)
-      videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime + delta);
-    }
-  }, [syncOffset, videoPlayer, videoUrl]);
+    setSyncOffset(prev => parseFloat((prev + delta).toFixed(1)));
+  }, []);
 
   const handleAddVideo = async () => {
-    Alert.alert(t('notification'), t('videoFeatureNote'));
+    if (videoUrl) {
+      Alert.alert(t('addVideo'), t('videoReplaceOrRemove'), [
+        { text: t('removeVideo'), style: 'destructive', onPress: () => setVideoUrl('') },
+        { text: t('replaceVideo'), onPress: pickVideo },
+        { text: t('cancel'), style: 'cancel' },
+      ]);
+      return;
+    }
+    pickVideo();
+  };
+
+  const pickVideo = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
+      if (res.canceled || !res.assets || res.assets.length === 0) return;
+
+      const asset = res.assets[0];
+      const uri = asset.uri;
+      const finalUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+
+      setVideoUrl(finalUri);
+      pipX.value = width - 220;
+      pipY.value = 100;
+      pipScale.value = 1;
+    } catch (e: any) {
+      Alert.alert(t('error'), e.message);
+    }
   };
 
   const handleSave = async () => { 
     try { 
       await updateFormation(formationId!, { 
         audioUrl, 
-        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value }, pipScale: pipScale.value, syncOffset } : undefined,
         settings, 
         data: { dancers, scenes, timeline } 
       }); 
@@ -1523,7 +1409,7 @@ export default function FormationEditorScreen() {
       const data = {
         title: formation?.title,
         audioUrl,
-        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value }, pipScale: pipScale.value, syncOffset } : undefined,
         settings,
         data: { dancers, scenes, timeline }
       };
@@ -1556,7 +1442,7 @@ export default function FormationEditorScreen() {
       setIsExporting(true);
       await publishFormationAsFeedback(id!, formationId!, publishTitle, { 
         audioUrl,
-        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value } } : undefined,
+        videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value }, pipScale: pipScale.value, syncOffset } : undefined,
         settings, 
         data: { dancers, scenes, timeline } 
       }, choreographyUrl);
@@ -1641,13 +1527,23 @@ export default function FormationEditorScreen() {
 
   return (
     <GestureHandlerRootView style={[styles.container, { backgroundColor: theme.background }]}>
-      {videoUrl && (
-        <DraggableVideo
-          videoPlayer={videoPlayer}
-          x={pipX} y={pipY} scale={pipScale}
+      {videoUrl ? (
+        <FormationPiPPlayer
+          videoUrl={videoUrl}
+          currentTimeMs={currentTimeMs}
+          isPlaying={playerStatus.playing}
+          syncOffset={syncOffset}
           onClose={() => setVideoUrl('')}
+          initialX={pipInitial.x}
+          initialY={pipInitial.y}
+          initialScale={pipInitial.scale}
+          onPositionChange={(x, y, s) => {
+            pipX.value = x;
+            pipY.value = y;
+            pipScale.value = s;
+          }}
         />
-      )}
+      ) : null}
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={[styles.modeToggle, { backgroundColor: theme.card }]}>
@@ -1831,7 +1727,6 @@ export default function FormationEditorScreen() {
               <View style={{ width: 70, alignItems: 'center', justifyContent: 'center' }}>
                 <PlayButton
                   player={player}
-                  videoPlayer={videoPlayer}
                   theme={theme}
                   isPlayingSV={isPlayerPlayingSV}
                 />
@@ -2124,35 +2019,4 @@ const styles = StyleSheet.create({
   toast: { position: 'absolute', top: 120, left: '10%', right: '10%', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', zIndex: 999, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
   toastText: { marginLeft: 10, fontWeight: 'bold', fontSize: 14 },
   analysisLoader: { position: 'absolute', top: 120, alignSelf: 'center', padding: 15, borderRadius: 12, alignItems: 'center', zIndex: 1000 },
-  pipContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 160,
-    height: 90,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    backgroundColor: '#000',
-    zIndex: 1000
-  },
-  pipContainerMin: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    zIndex: 1000,
-  },
-  pipVideo: { flex: 1 },
-  pipOverlay: { backgroundColor: 'rgba(0,0,0,0.55)' },
-  pipTopRow: { position: 'absolute', top: 5, left: 5, right: 5, flexDirection: 'row', justifyContent: 'space-between' },
-  pipBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-  pipSeekRow: { position: 'absolute', bottom: 10, left: 10, right: 10, height: 6, justifyContent: 'center' },
-  pipBottomSpacer: { flex: 1 },
-  pipSeekTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 1.5, overflow: 'hidden' },
-  pipSeekFill: { height: '100%', backgroundColor: '#FFD700' },
 });

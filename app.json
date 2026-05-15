@@ -32,7 +32,8 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/LaonIcon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true
     },
@@ -76,7 +77,8 @@
           "androidAppId": "ca-app-pub-4292623789702109~5725434154",
           "iosAppId": "ca-app-pub-4292623789702109~5725434154"
         }
-      ]
+      ],
+      "react-native-video"
     ],
     "experiments": {
       "typedRoutes": true,
