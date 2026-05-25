@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Ionicons } from '@expo/vector-icons';
+import { ensureStandardMP4 } from '../../../utils/convertMP4';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
@@ -43,6 +44,7 @@ export default function FeedbackScreen() {
   const [newComment, setNewComment] = useState('');
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [conversionProgress, setConversionProgress] = useState(0);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
@@ -311,12 +313,30 @@ export default function FeedbackScreen() {
       );
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], allowsEditing: true, quality: 1 });
+    const result = await ImagePicker.launchImageLibraryAsync({ 
+      mediaTypes: ['videos'], 
+      allowsEditing: true, 
+      quality: 1,
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720, // 용량 축소를 위해 720p로 제한
+    });
     if (!result.canceled && result.assets && result.assets.length > 0) {
       if (!videoTitle.trim()) return Alert.alert(t('errorTitle'), '영상 제목을 입력해주세요.');
+      
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 200 * 1024 * 1024) {
+        Alert.alert(t('errorTitle'), '파일 용량이 너무 큽니다 (200MB 제한).');
+        return;
+      }
+
       setIsLoading(true);
+      setConversionProgress(0);
       try {
-        const videoUri = result.assets[0].uri;
+        const rawUri = result.assets[0].uri;
+        // fMP4 변환
+        const videoUri = await ensureStandardMP4(rawUri, (ratio) => {
+          setConversionProgress(Math.floor(ratio * 100));
+        });
+        
         const fileName = `${Date.now()}.mp4`;
         const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
         await addVideo(id || '', publicUrl, videoTitle);
@@ -1058,7 +1078,23 @@ export default function FeedbackScreen() {
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
             <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>{t('videoUploadTitle')}</Text>
             <TextInput style={[styles.titleInput, { color: theme.text, backgroundColor: theme.background, borderColor: theme.border }]} placeholder={t('videoTitleInput')} placeholderTextColor={theme.textSecondary} value={videoTitle} onChangeText={setVideoTitle} />
-            {isLoading ? <ActivityIndicator size="large" color={theme.primary} /> : <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, {backgroundColor: theme.primary}, Shadows.glow]}><Text style={{fontWeight: '800', color: '#fff', fontSize: 16}}>{t('selectFromGallery')}</Text></TouchableOpacity>}
+            {isLoading ? (
+              <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.primary} />
+                {conversionProgress > 0 && conversionProgress < 100 && (
+                  <Text style={{ color: theme.primary, marginTop: 10, fontWeight: 'bold' }}>
+                    {conversionProgress}%
+                  </Text>
+                )}
+                {conversionProgress >= 100 && (
+                   <Text style={{ color: theme.textSecondary, marginTop: 10, fontSize: 12 }}>{t('posting')}</Text>
+                )}
+              </View>
+            ) : (
+              <TouchableOpacity onPress={handlePickVideo} style={[styles.pickBtn, { backgroundColor: theme.primary }, Shadows.glow]}>
+                <Text style={{ fontWeight: '800', color: '#fff', fontSize: 16 }}>{t('selectFromGallery')}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
           </View>
         </View>

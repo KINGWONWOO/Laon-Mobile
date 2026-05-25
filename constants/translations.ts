@@ -628,6 +628,8 @@ const ko: TranslationDict = {
   extractComplete: '추출 완료!',
   newExtraction: '새로 추출하기',
   copySuffix: '복사본',
+  convertingVideo: '영상을 변환 중입니다...',
+  conversionDesc: 'fMP4 형식을 표준 MP4로 변환하여\n탐색 성능을 최적화하고 있습니다.',
 
   // Formation Guide
   guideStep1Title: '1. 댄서 추가 및 편집',
@@ -1235,6 +1237,8 @@ const en: TranslationDict = {
   extractComplete: 'Extraction complete!',
   newExtraction: 'New Extraction',
   copySuffix: '(Copy)',
+  convertingVideo: 'Converting video...',
+  conversionDesc: 'Converting fMP4 to standard MP4\nto optimize seeking performance.',
 
   // Formation Guide
   guideStep1Title: '1. Add & Edit Dancers',

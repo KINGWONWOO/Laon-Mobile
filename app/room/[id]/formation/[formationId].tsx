@@ -10,10 +10,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { FormationPiPPlayer } from '../../../../components/ui/FormationPiPPlayer';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
 import { OptionModal } from '../../../../components/ui/RoomComponents';
 import { storageService } from '../../../../services/storageService';
+import { ensureStandardMP4 } from '../../../../utils/convertMP4';
 
 const { width } = Dimensions.get('window');
 const BASE_PX_PER_SEC = 60;
@@ -1370,20 +1371,52 @@ export default function FormationEditorScreen() {
     pickVideo();
   };
 
+  const [isConvertingVideo, setIsConvertingVideo] = useState(false);
+  const [videoConversionProgress, setVideoConversionProgress] = useState(0);
+
   const pickVideo = async () => {
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
-      if (res.canceled || !res.assets || res.assets.length === 0) return;
+      // 1. pip 영상 선택 및 2. 축소 진행 (720p 제한)
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: true,
+        quality: 1,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+      });
 
-      const asset = res.assets[0];
-      const uri = asset.uri;
-      const finalUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-      setVideoUrl(finalUri);
-      pipX.value = width - 220;
-      pipY.value = 100;
-      pipScale.value = 1;
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+
+      // 3. 용량이 너무 큰가 체크 (변환 시 메모리 부족 방지)
+      if (asset.fileSize && asset.fileSize > 200 * 1024 * 1024) {
+        Alert.alert(t('error'), '파일 용량이 너무 큽니다 (200MB 제한).');
+        return;
+      }
+
+      // 4. 변환이 필요한가? & 5. 변환 진행
+      setIsConvertingVideo(true);
+      setVideoConversionProgress(0);
+      
+      // UI 렌더링을 위해 약간의 지연 후 변환 시작
+      setTimeout(async () => {
+        try {
+          const finalUri = await ensureStandardMP4(fileUri, (ratio) => {
+            setVideoConversionProgress(Math.floor(ratio * 100));
+          });
+          setVideoUrl(finalUri);
+          pipX.value = width - 220;
+          pipY.value = 100;
+          pipScale.value = 1;
+        } catch (e: any) {
+          Alert.alert(t('error'), e.message);
+        } finally {
+          setIsConvertingVideo(false);
+        }
+      }, 100);
     } catch (e: any) {
+      setIsConvertingVideo(false);
       Alert.alert(t('error'), e.message);
     }
   };
@@ -1707,7 +1740,7 @@ export default function FormationEditorScreen() {
             </View>
             <View style={{ height: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
               <View style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall}><Ionicons name="videocam" size={24} color={theme.textSecondary} /><Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('addVideo')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddVideo} style={styles.toolBtnSmall} disabled={isConvertingVideo}>{isConvertingVideo ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="videocam" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{isConvertingVideo ? '변환 중...' : t('addVideo')}</Text></TouchableOpacity>
                 <TouchableOpacity onPress={handleChangeSong} style={styles.toolBtnSmall} disabled={isChangingSong}>{isChangingSong ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="musical-notes" size={24} color={theme.textSecondary} />}<Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>{t('changeSong')}</Text></TouchableOpacity>
                 {videoUrl && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 6, height: 36, borderWidth: 1, borderColor: theme.border }}>
@@ -1930,6 +1963,17 @@ export default function FormationEditorScreen() {
     return part;
   })}
 </Text><View style={{flexDirection:'row', justifyContent:'space-between'}}><TouchableOpacity onPress={() => setGuideIndex(prev => Math.max(0, prev-1))}><Text style={{color:theme.text}}>{t('prev')}</Text></TouchableOpacity><TouchableOpacity onPress={() => { if(guideIndex < GUIDE_IMAGES.length - 1) setGuideIndex(prev=>prev+1); else setShowGuide(false); }}><Text style={{color:theme.primary, fontWeight: 'bold'}}>{guideIndex === GUIDE_IMAGES.length - 1 ? t('close') : t('next')}</Text></TouchableOpacity></View></View></Pressable></Modal>
+      {isConvertingVideo && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }]}>
+          <View style={[styles.menu, { alignItems: 'center', padding: 30, backgroundColor: theme.card }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ color: theme.text, marginTop: 15, fontWeight: 'bold' }}>{t('convertingVideo') || '영상을 변환 중입니다...'}</Text>
+            <Text style={{ color: theme.primary, marginTop: 5, fontSize: 18, fontWeight: '900' }}>{videoConversionProgress}%</Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 10, fontSize: 12, textAlign: 'center' }}>{t('conversionDesc') || 'fMP4 형식을 표준 MP4로 변환하여\n탐색 성능을 최적화하고 있습니다.'}</Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 20, fontSize: 10 }}>대용량 파일의 경우 수 분이 소요될 수 있습니다.</Text>
+          </View>
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }

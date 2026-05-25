@@ -6,6 +6,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureStandardMP4 } from '../../../utils/convertMP4';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
@@ -85,15 +86,22 @@ export default function ArchiveScreen() {
       quality: 0.5,
       allowsEditing: true,
       videoMaxDuration: 60,
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
       const type = asset.type === 'video' ? 'video' : 'image';
+      
+      let finalUri = asset.uri;
+      if (type === 'video') {
+        finalUri = await ensureStandardMP4(asset.uri);
+      }
+
       if (type === 'video' && asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
         return Alert.alert(t('videoSizeLimitTitle'), t('videoSizeLimit'));
       }
-      setSelectedContent({ uri: asset.uri, type });
+      setSelectedContent({ uri: finalUri, type });
     }
   };
 
