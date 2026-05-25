@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, Text } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import Animated, {
   useSharedValue,
@@ -16,9 +17,9 @@ const { width: WINDOW_WIDTH } = Dimensions.get('window');
 const L = (...a: any[]) => console.log('[PiP]', ...a);
 
 const DRIFT_PLAY_S  = 0.5;
-const DRIFT_SCRUB_S = 0.8;
-const SEEK_COOLDOWN = 600;  // ms — seek 최소 간격
-const SETTLE_MS     = 8000; // ms — seek 후 드리프트 보정 대기 시간 (large GOP 대응)
+const DRIFT_SCRUB_S = 0.05; // 0.1s 클릭에 즉시 반응하도록 축소
+const SEEK_COOLDOWN = 150;  // 연타 대응을 위해 간격 축소
+const SETTLE_MS     = 2000; // 변환된 MP4는 반응이 빠르므로 대기 시간 단축
 
 interface Props {
   videoUrl: string;
@@ -160,6 +161,13 @@ export const FormationPiPPlayer = React.memo(({
     return () => sub.remove();
   }, [player, syncOffset, seekTo]);
 
+  // 싱크 오프셋 변경 시 즉시 반영
+  useEffect(() => {
+    if (!videoLoaded.current || isPlayingRef.current) return;
+    const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
+    seekTo(targetSec, 'sync-adjust');
+  }, [syncOffset, seekTo]);
+
   // 재생/정지 전환 + 스크럽 프리뷰
   useEffect(() => {
     const interval = setInterval(() => {
@@ -222,8 +230,6 @@ export const FormationPiPPlayer = React.memo(({
 
   const tap = Gesture.Tap().onEnd(() => runOnJS(toggleControls)());
 
-  const gesture = Gesture.Exclusive(Gesture.Simultaneous(drag, pinch), tap);
-
   const aStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: posX.value }, { translateY: posY.value }, { scale: scaleV.value }],
   }));
@@ -241,16 +247,18 @@ export const FormationPiPPlayer = React.memo(({
   }
 
   return (
-    <GestureDetector gesture={gesture}>
+    <GestureDetector gesture={Gesture.Simultaneous(drag, pinch)}>
       <Animated.View style={[styles.container, aStyle]}>
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <VideoView
-            player={player}
-            style={styles.video}
-            contentFit="contain"
-            nativeControls={false}
-          />
-        </View>
+        <GestureDetector gesture={tap}>
+          <View style={StyleSheet.absoluteFillObject}>
+            <VideoView
+              player={player}
+              style={styles.video}
+              contentFit="contain"
+              nativeControls={false}
+            />
+          </View>
+        </GestureDetector>
         {isConverting && (
           <View style={[styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
             <ActivityIndicator size="small" color="white" />
