@@ -18,6 +18,8 @@ interface FormationPlayerProps {
   playbackRate?: number;
   noAudio?: boolean;
   hidePip?: boolean;
+  hideLabels?: boolean;
+  forceDarkMode?: boolean;
   containerWidth?: number;
   externalVideoPlayer?: any;
 }
@@ -80,9 +82,21 @@ const DancerNode = ({ dancer, timeline, scenes, currentTimeMs, stageWidth, stage
 export default function FormationPlayer({
   formation, currentTimeMs, seekToMs, onTimeUpdate, onDurationDetected,
   isPlaying = false, playbackRate = 1, noAudio = false, hidePip = false,
+  hideLabels = false, forceDarkMode = false,
   containerWidth, externalVideoPlayer
 }: FormationPlayerProps) {
-  const { theme } = useAppContext();
+  const { theme: appTheme, t } = useAppContext();
+
+  // 피드백 업로드/시청 시 다크모드 강제 적용 대응
+  const isDark = forceDarkMode || appTheme.isDark;
+  const theme = {
+    background: isDark ? '#0A0A0A' : '#F5F5F5',
+    card: isDark ? '#1A1A1A' : '#FFFFFF',
+    text: isDark ? '#FFFFFF' : '#000000',
+    textSecondary: isDark ? '#AAAAAA' : '#666666',
+    border: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+    primary: appTheme.primary,
+  };
 
   const dancers = formation?.data?.dancers || [];
   const scenes = formation?.data?.scenes || [];
@@ -165,7 +179,7 @@ export default function FormationPlayer({
   const gridOpacity = isCompact ? 0.3 : 0.4;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.isDark ? '#0A0A0A' : '#F5F5F5' }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       {videoSettings?.videoUrl && !hidePip && !isCompact && (
         <View style={[styles.pipContainer, { left: videoSettings.pipPosition.x, top: videoSettings.pipPosition.y }]}>
           <VideoView
@@ -179,18 +193,15 @@ export default function FormationPlayer({
         </View>
       )}
       <View style={styles.stageWrapper}>
-        {!isCompact && (
-          <View style={[styles.directionLabelBox, {
-            top: -35,
-            backgroundColor: stageDirection === 'top' ? 'rgba(255, 51, 102, 0.2)' : (theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')
-          }]}>
-            <Text style={[styles.directionLabelText, { color: stageDirection === 'top' ? '#FF3366' : theme.textSecondary, fontSize: 10, fontWeight: '900' }]}>
-              {stageDirection === 'top' ? '▼ FRONT (AUDIENCE)' : '▲ BACK'}
+        {!hideLabels && (
+          <View style={{ position: 'absolute', top: -45, left: 0, right: 0, alignItems: 'center' }}>
+            <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center', opacity: 0.8 }]}>
+              {stageDirection === 'top' ? t('front') : t('backDir')}
             </Text>
           </View>
         )}
 
-        <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, borderColor: theme.border }]}>
+        <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, backgroundColor: theme.card, borderColor: theme.border }]}>
           {/* Grid lines */}
           <View style={StyleSheet.absoluteFill}>
             {Array.from({ length: gridRows + 1 }).map((_, i) => (
@@ -200,11 +211,16 @@ export default function FormationPlayer({
               <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / gridCols) * 100}%`, backgroundColor: theme.border, opacity: gridOpacity }]} />
             ))}
           </View>
+          
+          {/* Center Crosshair (Editor style) */}
+          <View style={{ position: 'absolute', top: '50%', left: '50%', width: 24, height: 2, backgroundColor: theme.primary, marginLeft: -12, marginTop: -1, opacity: 0.8, borderRadius: 1, zIndex: 1 }} />
+          <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 24, backgroundColor: theme.primary, marginLeft: -1, marginTop: -12, opacity: 0.8, borderRadius: 1, zIndex: 1 }} />
+
           {/* Side wing areas */}
           {sideWingWidth > 0 && (
             <>
-              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: wingPct, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', zIndex: 1 }} />
-              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: wingPct, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', zIndex: 1 }} />
+              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: wingPct, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', zIndex: 1 }} />
+              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: wingPct, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', zIndex: 1 }} />
             </>
           )}
           {/* Dancers */}
@@ -223,13 +239,10 @@ export default function FormationPlayer({
           ))}
         </View>
 
-        {!isCompact && (
-          <View style={[styles.directionLabelBox, {
-            bottom: -35,
-            backgroundColor: stageDirection === 'bottom' ? 'rgba(255, 51, 102, 0.2)' : (theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)')
-          }]}>
-            <Text style={[styles.directionLabelText, { color: stageDirection === 'bottom' ? '#FF3366' : theme.textSecondary, fontSize: 10, fontWeight: '900' }]}>
-              {stageDirection === 'bottom' ? '▲ FRONT (AUDIENCE)' : '▼ BACK'}
+        {!hideLabels && (
+          <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignItems: 'center' }}>
+            <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center', opacity: 0.8 }]}>
+              {stageDirection === 'bottom' ? t('front') : t('backDir')}
             </Text>
           </View>
         )}
@@ -246,6 +259,7 @@ const styles = StyleSheet.create({
   directionLabelText: { fontSize: 9, fontWeight: 'bold', letterSpacing: 2 },
   gridH: { position: 'absolute', left: 0, right: 0, height: 1 },
   gridV: { position: 'absolute', top: 0, bottom: 0, width: 1 },
+  centerLine: { position: 'absolute', top: 0, bottom: 0, width: 1.5, zIndex: 1 },
   dancerNode: { position: 'absolute', alignItems: 'center' },
   dancerCircle: { justifyContent: 'center', alignItems: 'center' },
   dancerInitial: { color: '#FFF', fontWeight: 'bold' },

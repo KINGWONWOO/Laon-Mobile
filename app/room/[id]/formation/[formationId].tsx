@@ -563,6 +563,7 @@ export default function FormationEditorScreen() {
   const [isChangingSong, setIsChangingSong] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [publishTitle, setPublishTitle] = useState('');
+  const [includeChoreography, setIncludeChoreography] = useState(true);
   const [selectedMirrorType, setSelectedMirrorType] = useState<'horizontal' | 'vertical' | 'both'>('horizontal');
   const [sceneModalMode, setSceneModalMode] = useState<'add' | 'rename'>('add');
   const [targetSceneId, setTargetSceneId] = useState<string | null>(null);
@@ -1467,17 +1468,16 @@ export default function FormationEditorScreen() {
 
   const handlePublish = async () => {
     if (!publishTitle.trim()) { Alert.alert(t('notification'), t('enterPublishTitle')); return; }
-    
-    // TODO: 안무 영상 추가 기능 구현 전까지 비활성화
-    const choreographyUrl = undefined;
+
+    const choreographyUrl = includeChoreography ? videoUrl : undefined;
 
     try {
       setIsExporting(true);
-      await publishFormationAsFeedback(id!, formationId!, publishTitle, { 
+      await publishFormationAsFeedback(id!, formationId!, publishTitle, {
         audioUrl,
         videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value }, pipScale: pipScale.value, syncOffset } : undefined,
-        settings, 
-        data: { dancers, scenes, timeline } 
+        settings,
+        data: { dancers, scenes, timeline }
       }, choreographyUrl);
       setShowPublishModal(false); setShowExportModal(false);
       Alert.alert(t('success'), t('formationPublished'));
@@ -1487,7 +1487,6 @@ export default function FormationEditorScreen() {
       setIsExporting(false);
     }
   };
-
   const copyActiveScene = () => {
     if (!activeSceneId) return;
     pushHistory();
@@ -1813,7 +1812,69 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showPublishModal} transparent animationType="fade" onRequestClose={() => setShowPublishModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalBg}><View style={[styles.menu, { backgroundColor: theme.card }]}><Text style={[styles.menuTitle, { color: theme.text }]}>{t('publishFeedback')}</Text><Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>{t('publishTitleLabel')}</Text><TextInput style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={publishTitle} onChangeText={setPublishTitle} placeholder={t('publishTitlePlaceholder')} placeholderTextColor={theme.textSecondary} autoFocus /><View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 10 }}><TouchableOpacity onPress={() => setShowPublishModal(false)}><Text style={{ color: theme.textSecondary }}>{t('cancel')}</Text></TouchableOpacity><TouchableOpacity onPress={handlePublish} disabled={isExporting}>{isExporting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('post')}</Text>}</TouchableOpacity></View></View></View>
+          <View style={styles.modalBg}>
+            <View style={[styles.menu, { backgroundColor: theme.card }]}>
+              <Text style={[styles.menuTitle, { color: theme.text }]}>{t('publishFeedback')}</Text>
+              
+              <Text style={{ color: theme.textSecondary, marginBottom: 10, fontSize: 12 }}>{t('publishTitleLabel')}</Text>
+              <TextInput 
+                style={[styles.sheetInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} 
+                value={publishTitle} 
+                onChangeText={setPublishTitle} 
+                placeholder={t('publishTitlePlaceholder')} 
+                placeholderTextColor={theme.textSecondary} 
+                autoFocus 
+              />
+
+              {videoUrl && (
+                <View style={{ marginTop: 20 }}>
+                  <Text style={{ color: theme.text, fontSize: 14, fontWeight: 'bold', marginBottom: 10 }}>{t('includeChoreographyVideo')}</Text>
+                  <TouchableOpacity 
+                    onPress={() => setIncludeChoreography(!includeChoreography)}
+                    style={[
+                      styles.toggleBtn, 
+                      { 
+                        backgroundColor: includeChoreography ? theme.primary : theme.background,
+                        borderColor: includeChoreography ? theme.primary : theme.border,
+                        borderWidth: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 12,
+                        borderRadius: 12
+                      }
+                    ]}
+                  >
+                    <Ionicons 
+                      name={includeChoreography ? "checkbox" : "square-outline"} 
+                      size={20} 
+                      color={includeChoreography ? "#FFF" : theme.textSecondary} 
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={{ color: includeChoreography ? "#FFF" : theme.textSecondary, fontWeight: 'bold' }}>
+                      {includeChoreography ? (t('includingChoreography') || '안무 영상 포함됨') : (t('excludeChoreography') || '대형만 업로드')}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
+                    {t('includeChoreographyDescShort') || '체크 시 대형과 안무 영상을 동시에 볼 수 있는 듀얼 플레이어로 게시됩니다.'}
+                  </Text>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 25 }}>
+                <TouchableOpacity onPress={() => setShowPublishModal(false)}>
+                  <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>{t('cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handlePublish} disabled={isExporting}>
+                  {isExporting ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <Text style={{ color: theme.primary, fontWeight: '900', fontSize: 16 }}>{t('post')}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 

@@ -67,6 +67,7 @@ export default function FeedbackScreen() {
   const [enableFloatingComments, setEnableFloatingComments] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [showSpeedPicker, setShowSpeedPicker] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   const speedOptions = Array.from({ length: 8 }, (_, i) => Math.round((0.25 + i * 0.25) * 100) / 100);
 
@@ -339,7 +340,27 @@ export default function FeedbackScreen() {
         
         const fileName = `${Date.now()}.mp4`;
         const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
-        await addVideo(id || '', publicUrl, videoTitle);
+
+        // 대형 영상인 경우 PiP 안무 영상 포함 여부 확인
+        let choreographyUrl: string | undefined = undefined;
+        const currentFormation = formations.find(f => f.roomId === id && !f.isLocal); // 최근 저장된 대형
+        if (currentFormation?.videoSettings?.videoUrl) {
+          const includePip = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              t('includePipTitle'),
+              t('includePipMsg'),
+              [
+                { text: t('uploadOnlyFormation'), onPress: () => resolve(false), style: 'cancel' },
+                { text: t('includeChoreographyVideo'), onPress: () => resolve(true) }
+              ]
+            );
+          });
+          if (includePip) {
+            choreographyUrl = currentFormation.videoSettings.videoUrl;
+          }
+        }
+
+        await addVideo(id || '', publicUrl, videoTitle, true, choreographyUrl);
         setShowAddModal(false);
         setVideoTitle('');
       } catch (error: any) { Alert.alert('업로드 실패', error.message); } finally { setIsLoading(false); }
@@ -533,7 +554,7 @@ export default function FeedbackScreen() {
 
       if (isFormation) {
         return selectedFormation ? (
-          <View style={[{ flex: 1 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
+          <View style={[{ flex: 1, padding: 20 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
             <FormationPlayer
               formation={selectedFormation}
               currentTimeMs={formationTime}
@@ -542,7 +563,9 @@ export default function FeedbackScreen() {
               onDurationDetected={setFormationDuration}
               isPlaying={isFormationPlaying}
               playbackRate={playbackRate}
+              containerWidth={SCREEN_WIDTH - 80}
               hidePip={true}
+              forceDarkMode={true}
             />
             {isMirrorMode && (
               <View style={[styles.mirrorIndicator, { left: insets.left + 20, transform: [{ scaleX: -1 }] }]}>
@@ -590,6 +613,7 @@ export default function FeedbackScreen() {
             videoUrl={cachedChoreographyUrl}
             currentTimeMs={currentTimeMsSV}
             isPlaying={isFormation ? isFormationPlaying : isVideoPlaying}
+            syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
             onClose={() => {}}
             initialX={subPosX.value}
             initialY={subPosY.value}
@@ -637,6 +661,30 @@ export default function FeedbackScreen() {
       seekTo(ratio * totalDuration * 1000);
     };
 
+    const scrubGesture = Gesture.Pan()
+      .minDistance(0)
+      .onBegin((e) => {
+        'worklet';
+        runOnJS(setIsScrubbing)(true);
+        runOnJS(resetControlsTimer)();
+        const totalDuration = isFormation ? formationDuration : videoDuration;
+        if (totalDuration <= 0 || barWidth <= 0) return;
+        const ratio = Math.max(0, Math.min(1, e.x / barWidth));
+        runOnJS(seekTo)(ratio * totalDuration * 1000);
+      })
+      .onUpdate((e) => {
+        'worklet';
+        const totalDuration = isFormation ? formationDuration : videoDuration;
+        if (totalDuration <= 0 || barWidth <= 0) return;
+        const ratio = Math.max(0, Math.min(1, e.x / barWidth));
+        runOnJS(seekTo)(ratio * totalDuration * 1000);
+      })
+      .onEnd(() => {
+        'worklet';
+        runOnJS(setIsScrubbing)(false);
+        runOnJS(resetControlsTimer)();
+      });
+
     const renderCustomControls = () => {
       const totalDuration = isFormation ? formationDuration : videoDuration;
       const progress = totalDuration > 0 ? currentPlaybackTime / 1000 / totalDuration : 0;
@@ -683,14 +731,24 @@ export default function FeedbackScreen() {
 
           <View style={styles.progressSection}>
             <Text style={styles.timeText}>{formatTime(currentPlaybackTime)}</Text>
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.progressBarBg}
-              onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-              onPress={handleSeek}
-            >
-              <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
-            </TouchableOpacity>
+            <GestureDetector gesture={scrubGesture}>
+              <View 
+                style={styles.progressBarTouchable}
+                onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+              >
+                <View style={[styles.progressBarBg, isScrubbing && { height: 6, borderRadius: 3 }]}>
+                  <View style={[styles.progressBarFill, { width: `${progress * 100}%`, backgroundColor: theme.primary }]} />
+                  <View style={[
+                    styles.progressKnob, 
+                    { 
+                      left: `${progress * 100}%`, 
+                      backgroundColor: '#FFF',
+                      transform: [{ scale: isScrubbing ? 1.5 : 1 }]
+                    }
+                  ]} />
+                </View>
+              </View>
+            </GestureDetector>
             <Text style={styles.timeText}>{formatTime(totalDuration * 1000)}</Text>
           </View>
         </View>
@@ -1174,8 +1232,10 @@ const styles = StyleSheet.create({
   customBottomControls: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 20, gap: 15 },
   mainPlayBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   progressSection: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  progressBarBg: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
+  progressBarTouchable: { flex: 1, height: 40, justifyContent: 'center' },
+  progressBarBg: { width: '100%', height: 4, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 2 },
+  progressKnob: { position: 'absolute', width: 12, height: 12, borderRadius: 6, top: -4, marginLeft: -6, zIndex: 10 },
   timeText: { color: '#fff', fontSize: 11, fontWeight: '600', width: 35 },
   mirrorBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', marginRight: 16 },
   mirrorBtnText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
