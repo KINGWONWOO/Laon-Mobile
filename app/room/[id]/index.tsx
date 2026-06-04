@@ -37,6 +37,8 @@ export default function RoomMainScreen() {
   const [roomName, setRoomName] = useState('');
   const [roomImage, setRoomImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState('');
   
   const [userNickname, setUserNickname] = useState('');
   const [userImage, setUserImage] = useState<string | null>(null);
@@ -49,16 +51,25 @@ export default function RoomMainScreen() {
   if (!room) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center', padding: 40 }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <Text style={{ marginTop: 20, color: theme.textSecondary, textAlign: 'center' }}>
-          {t('checkingInfo')}
-        </Text>
-        <TouchableOpacity 
-          style={{ marginTop: 30, padding: 15, backgroundColor: theme.primary + '22', borderRadius: 15 }}
-          onPress={() => refreshAllData()}
-        >
-          <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('sync')}</Text>
-        </TouchableOpacity>
+        {isProcessing ? (
+          <>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ marginTop: 15, color: theme.text, fontWeight: '700', textAlign: 'center' }}>{processingMessage}</Text>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ marginTop: 20, color: theme.textSecondary, textAlign: 'center' }}>
+              {t('checkingInfo')}
+            </Text>
+            <TouchableOpacity 
+              style={{ marginTop: 30, padding: 15, backgroundColor: theme.primary + '22', borderRadius: 15 }}
+              onPress={() => refreshAllData()}
+            >
+              <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('sync')}</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     );
   }
@@ -126,21 +137,45 @@ export default function RoomMainScreen() {
   };
 
   const deleteOptions = [
-    isLeader ? { 
-      label: t('deleteRoom'), 
-      destructive: true, 
-      bold: true, 
-      onPress: () => {
-        deleteRoom(id as string);
-        router.replace('/rooms');
+    isLeader ? {
+      label: t('deleteRoom'),
+      destructive: true,
+      bold: true,
+      onPress: async () => {
+        setProcessingMessage(t('deletingRoom'));
+        setIsProcessing(true);
+        try {
+          await deleteRoom(id as string);
+          Alert.alert(t('success'), t('deleteRoomSuccess'), [
+            { text: t('ok'), onPress: () => {
+                setIsProcessing(false);
+                router.replace('/rooms');
+            }}
+          ]);
+        } catch (e: any) {
+          setIsProcessing(false);
+          Alert.alert(t('error'), e.message);
+        }
       }
     } : {
       label: t('leaveRoom'),
       destructive: true,
       bold: true,
-      onPress: () => {
-        leaveRoom(id as string);
-        router.replace('/rooms');
+      onPress: async () => {
+        setProcessingMessage(t('leavingRoom'));
+        setIsProcessing(true);
+        try {
+          await leaveRoom(id as string);
+          Alert.alert(t('success'), t('leaveRoomSuccess'), [
+            { text: t('ok'), onPress: () => {
+                setIsProcessing(false);
+                router.replace('/rooms');
+            }}
+          ]);
+        } catch (e: any) {
+          setIsProcessing(false);
+          Alert.alert(t('error'), e.message);
+        }
       }
     }
   ];
@@ -368,6 +403,15 @@ export default function RoomMainScreen() {
       <View style={{ paddingHorizontal: 24 }} onLayout={e => setBannerHeight(e.nativeEvent.layout.height)}>
         <AdBanner />
       </View>
+
+      <Modal visible={isProcessing} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: theme.card, padding: 30, borderRadius: 20, alignItems: 'center', ...Shadows.soft }}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ marginTop: 15, color: theme.text, fontWeight: '700' }}>{processingMessage}</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

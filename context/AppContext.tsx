@@ -513,8 +513,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return room;
   };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };
-  const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); };
-  const leaveRoom = async (id: string) => { if (!currentUserRef.current) return; await roomService.leaveRoom(id, currentUserRef.current.id); await refreshAllData(); };
+  const deleteRoom = async (id: string) => { 
+    await roomService.deleteRoom(id); 
+    // 즉시 캐시에서 제거
+    queryClient.setQueryData(['rooms', currentUserRef.current?.id], (old: any[] | undefined) => {
+      return (old || []).filter((r: any) => r.id !== id);
+    });
+    await refreshAllData(); 
+  };
+  const leaveRoom = async (id: string) => { 
+    if (!currentUserRef.current) return; 
+    await roomService.leaveRoom(id, currentUserRef.current.id); 
+    
+    // 즉시 캐시에서 제거 (로딩 없이 바로 화면 표시 반영)
+    queryClient.setQueryData(['rooms', currentUserRef.current.id], (old: any[] | undefined) => {
+      return (old || []).filter((r: any) => r.id !== id);
+    });
+    
+    await refreshAllData(); 
+  };
   const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };
   
   const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { if (!currentUserRef.current) return; await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 공지사항', t); await refreshAllData(); };

@@ -1,6 +1,6 @@
--- 방 입장 처리를 위한 RPC 함수
+-- 방 입장 처리를 위한 RPC 함수 (v2: 더 유연한 타입 지원)
 -- RLS를 우회하여 패스코드를 확인하고 멤버십을 추가합니다.
-create or replace function public.join_room_with_passcode(p_room_id uuid, p_passcode text)
+create or replace function public.join_room_with_passcode(p_room_id text, p_passcode text)
 returns json
 language plpgsql
 security definer
@@ -9,14 +9,22 @@ as $$
 declare
   v_room record;
   v_user_id uuid;
+  v_room_uuid uuid;
 begin
   v_user_id := auth.uid();
   if v_user_id is null then
     return json_build_object('success', false, 'message', 'Authentication required');
   end if;
 
+  -- UUID 형식 확인 및 캐스팅
+  begin
+    v_room_uuid := p_room_id::uuid;
+  exception when others then
+    return json_build_object('success', false, 'message', 'Invalid Room ID format');
+  end;
+
   -- 1. 방 존재 및 패스코드 확인
-  select * into v_room from public.rooms where id = p_room_id and passcode = p_passcode;
+  select * into v_room from public.rooms where id = v_room_uuid and passcode = p_passcode;
   
   if not found then
     return json_build_object('success', false, 'message', 'Invalid ID or passcode');
@@ -24,7 +32,7 @@ begin
 
   -- 2. 멤버십 추가 (이미 있으면 무시)
   insert into public.room_members (room_id, user_id)
-  values (p_room_id, v_user_id)
+  values (v_room_uuid, v_user_id)
   on conflict (room_id, user_id) do nothing;
 
   -- 3. 성공 응답 (방 정보 포함)
