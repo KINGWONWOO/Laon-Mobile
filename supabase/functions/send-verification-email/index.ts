@@ -37,7 +37,7 @@ serve(async (req) => {
     // 6자리 인증 코드 + 세션 토큰 생성
     const code = Math.floor(100000 + Math.random() * 900000).toString()
     const sessionToken = crypto.randomUUID()
-    const expiresAt = new Date(Date.now() + 60 * 1000).toISOString() // 60초(1분)으로 변경
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000).toISOString() // 3분
 
     // 3. 테이블 삽입 (기존 코드와 상관없이 새로 삽입, check_email_code에서 최신 것만 체크함)
     // 이전 코드를 삭제해도 되고, 기록을 남겨두고 최신 것만 쓰게 해도 됩니다. 여기서는 깔끔하게 삭제 후 삽입합니다.
@@ -118,7 +118,7 @@ function buildEmailHtml(code: string) {
               <div style="background:#0E0C1A;border:2px solid #21F3A3;border-radius:16px;padding:28px;text-align:center;margin:0 0 28px;">
                 <span style="font-size:44px;font-weight:900;letter-spacing:12px;color:#21F3A3;">${code}</span>
               </div>
-              <p style="margin:0;color:#888;font-size:13px;text-align:center;">이 코드는 10분 후 만료됩니다.</p>
+              <p style="margin:0;color:#888;font-size:13px;text-align:center;">이 코드는 3분 후 만료됩니다.</p>
             </td>
           </tr>
         </table>

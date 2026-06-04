@@ -79,7 +79,7 @@ export default function RegisterScreen() {
     setSessionToken(token);
     setInputCode('');
     setCodeStep('sent');
-    setTimer(60); // 60초 타이머 시작
+    setTimer(180);
     Alert.alert(t('codeSentTitle'), t('codeSentMsg'));
   };
 
@@ -123,6 +123,8 @@ export default function RegisterScreen() {
     /[A-Z]/.test(password) &&
     /[0-9]/.test(password);
 
+  const isValidPhone = (p: string) => /^\d{11}$/.test(p.replace(/\s/g, ''));
+
   const handleSignUp = async () => {
     if (!email || !password || !name || !phone) {
       Alert.alert(t('errorTitle'), t('fillAllFields'));
@@ -130,6 +132,10 @@ export default function RegisterScreen() {
     }
     if (!isCodeVerified) {
       Alert.alert(t('errorTitle'), t('verifyEmailFirst'));
+      return;
+    }
+    if (!isValidPhone(phone)) {
+      Alert.alert(t('errorTitle'), t('invalidPhone'));
       return;
     }
     if (password !== confirmPassword) {
@@ -212,7 +218,7 @@ export default function RegisterScreen() {
             <View style={styles.codeInputSection}>
               <View style={styles.codeLabelRow}>
                 <Text style={styles.codeHint}>{t('sixDigitCodeHint')}</Text>
-                <Text style={[styles.timerText, timer < 10 && { color: '#FF4B4B' }]}>
+                <Text style={[styles.timerText, timer < 30 && { color: '#FF4B4B' }]}>
                   {timer > 0 ? formatTime(timer) : t('expired')}
                 </Text>
               </View>
@@ -255,23 +261,32 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             value={phone}
-            onChangeText={setPhone}
-            placeholder="010-1234-5678"
+            onChangeText={t => setPhone(t.replace(/[^0-9]/g, '').slice(0, 11))}
+            placeholder={t('phonePlaceholder')}
             placeholderTextColor={Colors.textSecondary}
-            keyboardType="phone-pad"
+            keyboardType="number-pad"
+            maxLength={11}
           />
 
           <Text style={styles.label}>{t('password')}</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { marginBottom: 10 }]}
             value={password}
             onChangeText={setPassword}
             placeholder={t('passwordHint')}
             placeholderTextColor={Colors.textSecondary}
             secureTextEntry
           />
+          {password.length > 0 && (
+            <View style={styles.pwRules}>
+              <PwRule ok={password.length >= 8} label={t('passwordTooShort')} />
+              <PwRule ok={/[a-z]/.test(password)} label={t('passwordNeedsLower')} />
+              <PwRule ok={/[A-Z]/.test(password)} label={t('passwordNeedsUpper')} />
+              <PwRule ok={/[0-9]/.test(password)} label={t('passwordNeedsNumber')} />
+            </View>
+          )}
 
-          <Text style={styles.label}>{t('confirmPassword')}</Text>
+          <Text style={[styles.label, { marginTop: 10 }]}>{t('confirmPassword')}</Text>
           <TextInput
             style={[styles.input, confirmPassword.length > 0 && password !== confirmPassword && styles.inputError]}
             value={confirmPassword}
@@ -341,4 +356,5 @@ const styles = StyleSheet.create({
   codeHint: { color: Colors.textSecondary, fontSize: 12 },
   timerText: { color: Colors.primary, fontSize: 13, fontWeight: 'bold' },
   registerBtn: { width: '100%', height: 60, borderRadius: 30 },
+  pwRules: { marginBottom: 16, paddingLeft: 4 },
 });

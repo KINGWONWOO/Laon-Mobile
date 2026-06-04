@@ -202,6 +202,48 @@ export const authService = {
     return await supabase.auth.resetPasswordForEmail(email, { redirectTo: Linking.createURL('/reset-password') });
   },
 
+  sendResetCode: async (email: string, language: string = 'ko') => {
+    try {
+      const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const response = await fetch(`${projectUrl}/functions/v1/send-reset-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey || '',
+          'Authorization': `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ email, language }),
+      });
+      const result = await response.json();
+      if (!response.ok) return { error: new Error(result.error || JSON.stringify(result)) };
+      return { sessionToken: result.sessionToken as string, error: null };
+    } catch (err: any) {
+      return { error: new Error(`통신 에러: ${err.message}`) };
+    }
+  },
+
+  resetPasswordWithCode: async (email: string, code: string, sessionToken: string, password: string) => {
+    try {
+      const projectUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const response = await fetch(`${projectUrl}/functions/v1/verify-and-reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey || '',
+          'Authorization': `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ email, code, sessionToken, password }),
+      });
+      const result = await response.json();
+      if (!response.ok) return { error: new Error(result.error || JSON.stringify(result)) };
+      return { error: null };
+    } catch (err: any) {
+      return { error: err };
+    }
+  },
+
   checkEmailAvailable: async (email: string) => {
     const { data, error } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
     if (error) return { available: false, error };

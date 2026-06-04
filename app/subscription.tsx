@@ -196,16 +196,6 @@ export default function SubscriptionScreen() {
           </View>
         )}
 
-        {!isPro && (
-          <View style={[styles.trialBanner, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}>
-            <Ionicons name="gift" size={24} color={theme.primary} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={[styles.trialTitle, { color: theme.primary }]}>{t('trialEventTitle')}</Text>
-              <Text style={[styles.trialDesc, { color: theme.textSecondary }]}>{t('trialEventDesc')}</Text>
-            </View>
-          </View>
-        )}
-
         <PlanCard
           title={t('proCardTitle')}
           price="₩3,900"
@@ -228,10 +218,6 @@ export default function SubscriptionScreen() {
           <View style={styles.faqItem}>
             <Text style={[styles.faqQ, { color: theme.text }]}>{t('faq1Q')}</Text>
             <Text style={[styles.faqA, { color: theme.textSecondary }]}>{t('faq1A')}</Text>
-          </View>
-          <View style={styles.faqItem}>
-            <Text style={[styles.faqQ, { color: theme.text }]}>{t('faq2Q')}</Text>
-            <Text style={[styles.faqA, { color: theme.textSecondary }]}>{t('faq2A')}</Text>
           </View>
         </View>
 
