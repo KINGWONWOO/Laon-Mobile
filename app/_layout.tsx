@@ -98,6 +98,7 @@ function RootLayoutNav() {
         <Stack.Screen name="index" />
         <Stack.Screen name="rooms" />
         <Stack.Screen name="room/[id]" />
+        <Stack.Screen name="invite" />
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="legal/privacy" />
         <Stack.Screen name="legal/terms" />
