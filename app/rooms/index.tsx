@@ -42,6 +42,7 @@ export default function RoomsScreen() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'other'>('bug');
   const [feedbackContent, setFeedbackContent] = useState('');
+  const [bannerHeight, setBannerHeight] = useState(0);
 
   const originalTheme = useRef({
     type: themeType,
@@ -240,7 +241,7 @@ export default function RoomsScreen() {
       />
 
       <TouchableOpacity
-        style={[styles.feedbackFab, { backgroundColor: theme.primary }]}
+        style={[styles.feedbackFab, { backgroundColor: theme.primary, bottom: isPro ? 90 : bannerHeight + 12 }]}
         onPress={() => setShowFeedbackModal(true)}
         activeOpacity={0.85}
       >
@@ -371,7 +372,10 @@ export default function RoomsScreen() {
         </View>
       </Modal>
 
-      <View style={{ paddingBottom: Math.max(insets.bottom, 15) }}>
+      <View
+        style={{ paddingBottom: Math.max(insets.bottom, 15) }}
+        onLayout={e => setBannerHeight(e.nativeEvent.layout.height)}
+      >
         <AdBanner />
       </View>
     </View>

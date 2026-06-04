@@ -15,7 +15,7 @@ import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language, isPro } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -42,6 +42,7 @@ export default function RoomMainScreen() {
   const [userImage, setUserImage] = useState<string | null>(null);
 
   const [showPasscode, setShowPasscode] = useState(false);
+  const [bannerHeight, setBannerHeight] = useState(0);
 
   const myRoomProfile = getRoomUserProfile(id as string, currentUser?.id || '');
 
@@ -131,7 +132,7 @@ export default function RoomMainScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView 
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: isPro ? 20 : bannerHeight + 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         <View style={styles.headerHero}>
@@ -338,7 +339,7 @@ export default function RoomMainScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      <View style={{ paddingHorizontal: 24 }}>
+      <View style={{ paddingHorizontal: 24 }} onLayout={e => setBannerHeight(e.nativeEvent.layout.height)}>
         <AdBanner />
       </View>
     </View>
