@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../context/AppContext';
@@ -29,6 +29,7 @@ export default function RoomsScreen() {
     language,
     setLanguage,
     submitFeedback,
+    refreshAllData,
     t,
   } = useAppContext();
   const router = useRouter();
@@ -38,11 +39,21 @@ export default function RoomsScreen() {
   const [newName, setNewName] = useState(currentUser?.name || '');
   const [newImage, setNewImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'other'>('bug');
   const [feedbackContent, setFeedbackContent] = useState('');
   const [bannerHeight, setBannerHeight] = useState(0);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshAllData();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const originalTheme = useRef({
     type: themeType,
@@ -216,6 +227,9 @@ export default function RoomsScreen() {
       <FlatList
         data={rooms}
         keyExtractor={item => item.id}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} />
+        }
         renderItem={({ item }) => (
           <TouchableOpacity style={[styles.roomCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => router.push(`/room/${item.id}`)}>
             {item.imageUri && item.imageUri.trim() !== '' ? (

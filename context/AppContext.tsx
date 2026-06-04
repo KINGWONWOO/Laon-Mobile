@@ -36,6 +36,7 @@ interface AppContextType {
   joinRoom: (roomId: string, passcode: string) => Promise<any>;
   updateRoom: (roomId: string, name: string, image?: string | null) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
+  leaveRoom: (id: string) => Promise<void>;
   submitFeedback: (type: 'bug' | 'feature' | 'other', content: string) => Promise<void>;
 
   notices: Notice[];
@@ -513,6 +514,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };
   const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); };
+  const leaveRoom = async (id: string) => { if (!currentUserRef.current) return; await roomService.leaveRoom(id, currentUserRef.current.id); await refreshAllData(); };
   const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };
   
   const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { if (!currentUserRef.current) return; await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 공지사항', t); await refreshAllData(); };
@@ -668,7 +670,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     checkEmailCode: async (e: string, c: string, t: string) => authService.checkEmailCode(e, c, t),
     verifyAndSignup: async (e: string, c: string, t: string, p: string, n: string, ph: string) => authService.verifyAndSignup(e, c, t, p, n, ph),
     updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers, submitFeedback,
-    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom,
+    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom, leaveRoom,
     notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
     videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
     photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,

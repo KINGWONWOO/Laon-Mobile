@@ -15,7 +15,7 @@ import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language, isPro } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, leaveRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language, isPro } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -126,10 +126,23 @@ export default function RoomMainScreen() {
   };
 
   const deleteOptions = [
-    { label: t('deleteRoom'), destructive: true, bold: true, onPress: () => {
-      deleteRoom(id as string);
-      router.replace('/rooms');
-    }}
+    isLeader ? { 
+      label: t('deleteRoom'), 
+      destructive: true, 
+      bold: true, 
+      onPress: () => {
+        deleteRoom(id as string);
+        router.replace('/rooms');
+      }
+    } : {
+      label: t('leaveRoom'),
+      destructive: true,
+      bold: true,
+      onPress: () => {
+        leaveRoom(id as string);
+        router.replace('/rooms');
+      }
+    }
   ];
 
   const coreActions = [
@@ -261,15 +274,13 @@ export default function RoomMainScreen() {
             ))}
           </View>
 
-          {isLeader && (
-            <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
-              <Text style={styles.roomDeleteText}>{t('deleteRoom')}</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
+            <Text style={styles.roomDeleteText}>{isLeader ? t('deleteRoom') : t('leaveRoom')}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
-      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title={t('deleteRoomConfirm')} theme={theme} cancelLabel={t('cancel')} />
+      <OptionModal visible={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} options={deleteOptions} title={isLeader ? t('deleteRoomConfirm') : t('leaveRoomConfirm')} theme={theme} cancelLabel={t('cancel')} />
 
       <Modal visible={showRoomEditModal} animationType="fade" transparent onRequestClose={() => setShowRoomEditModal(false)}>
         <View style={styles.modalOverlayCenter}>

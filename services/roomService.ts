@@ -50,6 +50,15 @@ export const roomService = {
     if (error) throw error;
   },
 
+  leaveRoom: async (roomId: string, userId: string): Promise<void> => {
+    const { data, error } = await supabase.rpc('withdraw_from_room', {
+      p_room_id: roomId,
+      p_user_id: userId
+    });
+    if (error) throw error;
+    if (data && !data.success) throw new Error(data.message || 'Withdrawal failed');
+  },
+
   getRoomByIdRemote: async (roomId: string): Promise<Room | null> => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId).single();
     return data ? { ...data, leaderId: data.leader_id, imageUri: data.image_uri } as Room : null;
