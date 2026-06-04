@@ -19,7 +19,7 @@ export default function RoomMainScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
-  const room = rooms.find(r => r.id === id);
+  const room = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
   const roomNotices = useMemo(() => notices.filter(n => n.roomId === id), [notices, id]);
 
   const [showAddNotice, setShowAddAddNotice] = useState(false);
@@ -34,7 +34,7 @@ export default function RoomMainScreen() {
   const [showUserProfileModal, setShowUserProfileModal] = useState(false); 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  const [roomName, setRoomName] = useState(room?.name || '');
+  const [roomName, setRoomName] = useState('');
   const [roomImage, setRoomImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   
@@ -46,7 +46,22 @@ export default function RoomMainScreen() {
 
   const myRoomProfile = getRoomUserProfile(id as string, currentUser?.id || '');
 
-  if (!room) return <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={theme.primary} /></View>;
+  if (!room) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center', padding: 40 }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={{ marginTop: 20, color: theme.textSecondary, textAlign: 'center' }}>
+          {t('checkingInfo')}
+        </Text>
+        <TouchableOpacity 
+          style={{ marginTop: 30, padding: 15, backgroundColor: theme.primary + '22', borderRadius: 15 }}
+          onPress={() => refreshAllData()}
+        >
+          <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{t('sync')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const isLeader = room.leaderId === currentUser?.id;
   const onRefresh = async () => { setRefreshing(true); await refreshAllData(); setRefreshing(false); };

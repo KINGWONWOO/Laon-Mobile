@@ -23,11 +23,9 @@ export default function JoinRoomScreen() {
     try {
       const room = await joinRoom(roomId.trim(), passcode.trim());
       if (room) {
-        Alert.alert(t('successTitle'), t('joinSuccess').replace('{roomName}', room.name));
-        router.replace('/rooms');
-        setTimeout(() => {
-          router.push(`/room/${room.id as string}` as any);
-        }, 100);
+        Alert.alert(t('successTitle'), t('joinSuccess').replace('{roomName}', room.name), [
+          { text: t('ok'), onPress: () => router.replace(`/room/${room.id}` as any) },
+        ]);
       } else {
         Alert.alert(t('failure'), t('joinFailed'));
       }

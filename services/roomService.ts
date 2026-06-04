@@ -28,12 +28,21 @@ export const roomService = {
   },
 
   joinRoom: async (roomId: string, passcode: string, userId: string): Promise<Room | null> => {
-    const { data: room } = await supabase.from('rooms').select('*').eq('id', roomId).eq('passcode', passcode).single();
-    if (room) {
-      await supabase.from('room_members').upsert([{ room_id: roomId, user_id: userId }], { onConflict: 'room_id,user_id' });
-      return { ...room, leaderId: room.leader_id, imageUri: room.image_uri } as Room;
-    }
-    return null;
+    const { data, error } = await supabase.rpc('join_room_with_passcode', {
+      p_room_id: roomId,
+      p_passcode: passcode
+    });
+
+    if (error) throw error;
+    if (!data.success) return null;
+
+    const room = data.room;
+    return { 
+      ...room, 
+      leaderId: room.leader_id, 
+      imageUri: room.image_uri, 
+      members: [userId] 
+    } as Room;
   },
 
   deleteRoom: async (roomId: string): Promise<void> => {

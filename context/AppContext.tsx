@@ -495,7 +495,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await refreshAllData(); 
   };
   const createRoom = async (n: string, p: string, i?: string) => { if (!currentUserRef.current) return; const room = await roomService.createRoom(n, p, currentUserRef.current.id, i); await refreshAllData(); return room; };
-  const joinRoom = async (rid: string, pc: string) => { if (!currentUserRef.current) return; const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id); if (room) await refreshAllData(); return room; };
+  const joinRoom = async (rid: string, pc: string) => {
+    if (!currentUserRef.current) return;
+    const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id);
+    if (room) {
+      console.log('[AppContext] Join success, updating cache for room:', room.id);
+      // 즉시 캐시에 추가 (로딩 없이 바로 화면 표시)
+      queryClient.setQueryData(['rooms', currentUserRef.current.id], (old: any[] | undefined) => {
+        const list = old || [];
+        if (list.find((r: any) => r.id === room.id)) return list;
+        return [...list, room];
+      });
+      // 백그라운드에서 전체 데이터 갱신
+      await refreshAllData();
+    }
+    return room;
+  };
   const updateRoom = async (rid: string, n: string, i?: string | null) => { await roomService.updateRoom(rid, n, i); await refreshAllData(); };
   const deleteRoom = async (id: string) => { await roomService.deleteRoom(id); await refreshAllData(); };
   const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };

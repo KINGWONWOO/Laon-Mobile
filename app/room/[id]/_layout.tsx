@@ -48,6 +48,9 @@ export default function RoomLayout() {
           setInviteRoomInfo(remoteRoom);
           showInviteAlert(remoteRoom);
         } else {
+          // 방 멤버인데 로컬 목록에 없는 경우 (동기화 지연)
+          // 즉시 캐시 갱신 시도
+          refreshAllData();
           setRoom(remoteRoom);
           setIsCheckingJoin(false);
         }
