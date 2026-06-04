@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "305646216564",
+    "project_id": "android-f65e9",
+    "storage_bucket": "android-f65e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:305646216564:android:ea8a3290b186c6597af821",
+        "android_client_info": {
+          "package_name": "com.example.sw051503"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBstvLZtgo29TfeH0Ymxuwk0nhundmyaFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:305646216564:android:0773dc5daf298f297af821",
+        "android_client_info": {
+          "package_name": "om.laon.dancefeedback"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBstvLZtgo29TfeH0Ymxuwk0nhundmyaFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
