@@ -13,6 +13,7 @@ export default function CreateRoomScreen() {
   const [name, setName] = useState('');
   const [passcode, setPasscode] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { createRoom, t } = useAppContext();
   const router = useRouter();
 
@@ -30,11 +31,13 @@ export default function CreateRoomScreen() {
   };
 
   const handleCreate = async () => {
+    if (loading) return;
     if (!name.trim() || !passcode.trim()) {
       Alert.alert(t('error'), t('roomNameRequired'));
       return;
     }
     
+    setLoading(true);
     try {
       const room = await createRoom(name, passcode, imageUri || undefined);
       console.log('[CreateRoom] Success, navigating to room:', room.id);
@@ -43,6 +46,8 @@ export default function CreateRoomScreen() {
     } catch (error: any) {
       console.error('[CreateRoom] Error:', error.message);
       Alert.alert(t('error'), `${t('roomCreationError')}\n${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -55,7 +60,7 @@ export default function CreateRoomScreen() {
 
       <View style={styles.content}>
         <Text style={styles.label}>{t('roomImage')}</Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+        <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={loading}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.selectedImage} />
           ) : (
@@ -73,6 +78,7 @@ export default function CreateRoomScreen() {
           onChangeText={setName}
           placeholder={t('roomNamePlaceholder')}
           placeholderTextColor={Colors.textSecondary}
+          editable={!loading}
         />
 
         <Text style={styles.label}>{t('passcodeLabel')}</Text>
@@ -85,18 +91,18 @@ export default function CreateRoomScreen() {
           secureTextEntry
           keyboardType="number-pad"
           maxLength={4}
+          editable={!loading}
         />
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoText}>
-            {t('passcodeInfo')}
-          </Text>
-        </View>
+        <Text style={styles.infoText}>
+          {t('passcodeInfo')}
+        </Text>
 
         <DanceButton 
           title={t('createRoomBtn')} 
           onPress={handleCreate}
           style={styles.button}
+          loading={loading}
         />
       </View>
     </View>
@@ -170,21 +176,14 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     ...Shadows.soft,
   },
-  infoBox: {
-    backgroundColor: Colors.card,
-    padding: 18,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 40,
-    ...Shadows.soft,
-  },
   infoText: {
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
     fontWeight: '500',
     textAlign: 'center',
+    marginBottom: 40,
+    paddingHorizontal: 10,
   },
   button: {
     width: '100%',
