@@ -15,7 +15,7 @@ import { LinkingService } from '../../../services/LinkingService';
 
 export default function RoomMainScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { rooms, currentUser, notices, addNotice, deleteRoom, leaveRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, t, language, isPro } = useAppContext();
+  const { rooms, currentUser, notices, addNotice, deleteRoom, leaveRoom, theme, refreshAllData, updateRoomUserProfile, getRoomUserProfile, updateRoom, sendPushNotification, t, language, isPro } = useAppContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -309,6 +309,19 @@ export default function RoomMainScreen() {
             ))}
           </View>
 
+          {/* [임시] 알림 테스트 버튼 */}
+          <TouchableOpacity
+            style={[styles.testNotiBtn, { backgroundColor: '#FF9F43' + '22', borderColor: '#FF9F43' }]}
+            onPress={async () => {
+              if (!room.members?.length) return;
+              await sendPushNotification(room.members, '🔔 테스트 알림', `[${room.name}] 알림이 정상적으로 작동합니다!`);
+              Alert.alert('전송 완료', `${room.members.length}명에게 테스트 알림을 보냈습니다.`);
+            }}
+          >
+            <Ionicons name="notifications" size={16} color="#FF9F43" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#FF9F43', fontWeight: '700', fontSize: 14 }}>테스트 알림 보내기</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
             <Text style={styles.roomDeleteText}>{isLeader ? t('deleteRoom') : t('leaveRoom')}</Text>
           </TouchableOpacity>
@@ -454,7 +467,8 @@ const styles = StyleSheet.create({
   gridCard: { width: '48%', padding: 20, borderRadius: 28, marginBottom: 16, alignItems: 'center', ...Shadows.soft },
   gridIconCircle: { width: 48, height: 48, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   gridCardTitle: { fontSize: 14, fontWeight: '800' },
-  roomDeleteLink: { marginTop: 40, alignItems: 'center', paddingBottom: 20 },
+  testNotiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
+  roomDeleteLink: { marginTop: 16, alignItems: 'center', paddingBottom: 20 },
   roomDeleteText: { color: '#ff4444', fontSize: 13, fontWeight: '600', opacity: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   addModalMain: { flex: 1, borderTopLeftRadius: 40, borderTopRightRadius: 40, marginTop: 60 },
