@@ -10,6 +10,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { Language, SUPPORTED_LANGUAGES, createTranslator } from '../constants/translations';
+import { registerForPushNotificationsAsync } from '../services/NotificationService';
 
 interface AppContextType {
   currentUser: User | null;
@@ -86,6 +87,7 @@ interface AppContextType {
   deleteFormation: (fid: string) => Promise<void>;
   publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any, choreographyVideoUrl?: string) => Promise<void>;
 
+  sendPushNotification: (userIds: string[], title: string, body: string, data?: any) => Promise<void>;
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
   setThemeType: (type: ThemeType) => Promise<void>;
@@ -195,11 +197,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const theme = useMemo(() => getThemeColors(themeType, customColor, customBackgroundColor), [themeType, customColor, customBackgroundColor]);
 
   const sendPushNotification = async (userIds: string[], title: string, body: string, data?: any) => {
-    if (!userIds || userIds.length === 0) return;
+    if (!userIds || userIds.length === 0) {
+      console.log('[Push] sendPushNotification skipped: empty userIds');
+      return;
+    }
+    console.log('[Push] Sending notification →', { title, body, userIds, data });
     try {
-      await supabase.functions.invoke('push-notification', { body: { user_ids: userIds, title, body, data } });
+      const { data: res, error } = await supabase.functions.invoke('push-notification', {
+        body: { user_ids: userIds, title, body, data },
+      });
+      if (error) {
+        console.error('[Push] Edge function error:', error);
+        const ctx = (error as any).context;
+        if (ctx) {
+          console.error('[Push] Edge function status:', ctx.status);
+          const body = await ctx.json().catch(() => ctx.text?.());
+          console.error('[Push] Edge function response body:', JSON.stringify(body));
+        }
+      } else {
+        console.log('[Push] Edge function response:', res);
+      }
     } catch (err) {
-      console.warn('Failed to send push notification:', err);
+      console.error('[Push] sendPushNotification threw:', err);
     }
   };
 
@@ -269,6 +288,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('[Push] User detected, starting push token registration for userId:', currentUser.id);
+      registerForPushNotificationsAsync(currentUser.id).catch(err =>
+        console.error('[Push] Registration error:', err)
+      );
+    }
+  }, [currentUser?.id]);
 
   const isPro = useMemo(() => {
     if (!currentUser?.subscription) return false;
@@ -694,7 +722,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed,
     votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote, markVoteViewed,
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
-    refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
+    sendPushNotification, refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
     updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder, sendDirectReminder,
     language, setLanguage, t
   }), [

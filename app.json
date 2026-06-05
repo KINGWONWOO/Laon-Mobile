@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "om.laon.dancefeedback",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 4,
       "permissions": [
         "CAMERA",
@@ -43,6 +44,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/LaonIcon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-splash-screen",
         {

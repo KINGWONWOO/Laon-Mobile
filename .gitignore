@@ -35,8 +35,10 @@ yarn-error.*
 .env*.local
 .dev.vars
 secu.txt
-google-services.json
 GoogleService-Info.plist
+
+# Firebase Admin SDK service account keys
+*firebase-adminsdk*.json
 
 # typescript
 *.tsbuildinfo

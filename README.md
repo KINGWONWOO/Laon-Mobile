@@ -572,6 +572,16 @@ laon-dance-feedback/
 *   **원인:** `if (condition) return null;` 이후에 `useState`, `useSharedValue` 등의 Hook이 위치하여 조건에 따라 Hook 호출 수가 달라짐
 *   **해결:** 모든 Hook 호출을 조건 분기 이전으로 이동. Early return은 모든 Hook 정의 후에만 사용. `dancerPositions` 상태를 배열에서 `Record<string, SharedValue>` 객체로 리팩터링하여 길이 변화로 인한 Hook 순서 불일치 제거
 
+### 이슈 7: Android 푸시 알림 미수신 (다중 원인)
+
+*   **문제:** 앱 빌드 후 푸시 알림이 전혀 수신되지 않음. Expo Push API 응답은 `status: "ok"`임에도 기기에 알림이 오지 않음
+*   **원인 및 해결 (발견 순서):**
+    1. **`userId` 누락 버그:** `AppContext.tsx`에서 `registerForPushNotificationsAsync()`를 인자 없이 호출하여 `userId = undefined`로 실행됨 → Supabase `profiles` 테이블 업데이트 조건이 `WHERE id = undefined`가 되어 push_token이 영원히 저장되지 않음. `registerForPushNotificationsAsync(currentUser.id)`로 수정
+    2. **`expo-notifications` 플러그인 누락:** `app.json` plugins 배열에 `expo-notifications`가 없어 EAS 빌드 시 Android `build.gradle`에 Firebase 초기화 코드가 삽입되지 않음 → `Default FirebaseApp is not initialized` 에러. `app.json`에 플러그인 추가 후 재빌드
+    3. **`service_role` 권한 없음:** Edge Function에서 service role 키로 `profiles` 테이블 조회 시 `permission denied (42501)` 에러. `GRANT SELECT ON public.profiles TO service_role;` 마이그레이션으로 해결
+    4. **Android `channelId` 미지정:** Android 8+ 에서 알림 메시지에 `channelId`가 없으면 시스템이 알림을 무음으로 드랍. Expo Push 메시지에 `channelId: 'default'` 추가
+    5. **Firebase 프로젝트 불일치:** `google-services.json`의 `project_id`와 EAS에 등록한 FCM V1 서비스 계정 키의 프로젝트가 달라 FCM이 토큰을 인식하지 못함. 동일한 Firebase 프로젝트의 서비스 계정 키로 교체 후 정상 수신
+
 ### 이슈 6: Cloudflare R2 업로드 순서 오류 (공지 이미지)
 *   **문제:** 공지사항에 이미지를 첨부하면 DB에 저장된 URL이 실제 R2에 없는 경우 발생 (이미지가 표시되지 않음)
 *   **원인:** R2 업로드와 DB `INSERT`가 병렬로 실행되어 업로드가 완료되기 전에 DB에 임시 로컬 URI가 저장되는 경우 존재

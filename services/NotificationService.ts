@@ -4,59 +4,83 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 
-const isExpoGo = Constants.appOwnership === 'expo';
+export async function registerForPushNotificationsAsync(userId: string) {
+  console.log('[Push] registerForPushNotificationsAsync called, userId:', userId);
 
-export async function registerForPushNotificationsAsync() {
-  let token;
-
-  if (Platform.OS === 'web') return null;
+  if (Platform.OS === 'web') {
+    console.log('[Push] Skipped: web platform');
+    return null;
+  }
 
   if (!Device.isDevice) {
-    console.log('Must use physical device for Push Notifications');
+    console.log('[Push] Skipped: not a physical device (simulator/emulator)');
+    return null;
+  }
+
+  if (!userId) {
+    console.error('[Push] ERROR: userId is undefined or empty — token will not be saved');
     return null;
   }
 
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    console.log('[Push] Existing permission status:', existingStatus);
+
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
+      console.log('[Push] Requesting permission...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
+      console.log('[Push] Permission request result:', status);
     }
+
     if (finalStatus !== 'granted') {
+      console.warn('[Push] Permission not granted — notifications will not work');
       return null;
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    if (!projectId) throw new Error('EAS projectId not found in app config');
+    console.log('[Push] Resolved projectId:', projectId);
+    if (!projectId) {
+      console.error('[Push] ERROR: EAS projectId not found in Constants');
+      throw new Error('EAS projectId not found');
+    }
 
-    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    if (__DEV__) console.log('[Push] Device Token:', token);
+    console.log('[Push] Fetching Expo push token...');
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = tokenData.data;
+    console.log('[Push] Token received:', token);
 
-    // Save to Supabase if user is logged in
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user && token) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ push_token: token })
-        .eq('id', user.id);
-        
-      if (error) console.error('[Push] Error saving token to DB:', error);
+    console.log('[Push] Saving token to DB for userId:', userId);
+    const { data: updateData, error } = await supabase
+      .from('profiles')
+      .update({ push_token: token })
+      .eq('id', userId)
+      .select('id, push_token');
+
+    if (error) {
+      console.error('[Push] DB save failed:', JSON.stringify(error));
+    } else {
+      console.log('[Push] DB save success. Updated row:', updateData);
+      if (!updateData || updateData.length === 0) {
+        console.warn('[Push] WARNING: update returned 0 rows — userId may not exist in profiles table:', userId);
+      }
     }
 
     if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
+      console.log('[Push] Setting Android notification channel...');
+      await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FF231F7C',
       });
+      console.log('[Push] Android channel set');
     }
 
     return token;
   } catch (err: any) {
-    // 💡 Fail silently to avoid breaking the Auth flow
-    console.warn('[Push] Registration skipped:', err.message);
+    console.error('[Push] Registration threw an error:', err.message, err);
     return null;
   }
 }

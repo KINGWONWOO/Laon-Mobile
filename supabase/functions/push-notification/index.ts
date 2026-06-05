@@ -25,9 +25,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: '인증된 사용자만 호출할 수 있습니다.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    console.log('[PushFn] Service role key loaded:', !!serviceKey)
+
     const { user_ids, title, body, data } = await req.json()
+    console.log('[PushFn] Request — user_ids:', user_ids, 'title:', title, 'body:', body)
 
     if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+      console.warn('[PushFn] Rejected: no user_ids provided')
       return new Response(JSON.stringify({ error: 'No user_ids provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
@@ -36,27 +41,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // 1. 유저들의 푸시 토큰 조회
     const { data: profiles, error: dbError } = await supabase
       .from('profiles')
-      .select('push_token')
+      .select('id, push_token')
       .in('id', user_ids)
       .not('push_token', 'is', null)
 
-    if (dbError) throw dbError
+    console.log('[PushFn] DB lookup — queried ids:', user_ids.length, '/ profiles with token:', profiles?.length ?? 0)
+    if (dbError) {
+      console.error('[PushFn] DB error:', dbError)
+      throw dbError
+    }
     if (!profiles || profiles.length === 0) {
+      console.warn('[PushFn] No push tokens found for user_ids:', user_ids)
       return new Response(JSON.stringify({ success: true, message: 'No valid push tokens found' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     const tokens = profiles.map(p => p.push_token)
+    console.log('[PushFn] Sending to tokens:', tokens)
 
-    // 2. Expo Push API 호출
     const messages = tokens.map(token => ({
       to: token,
       sound: 'default',
       title: title || '라온 댄스 알림',
       body: body || '',
       data: data || {},
+      channelId: 'default',
     }))
 
     const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -70,6 +80,7 @@ serve(async (req) => {
     })
 
     const result = await expoRes.json()
+    console.log('[PushFn] Expo API response:', JSON.stringify(result))
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

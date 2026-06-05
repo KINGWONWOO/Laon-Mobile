@@ -13,7 +13,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppProvider, useAppContext } from '../context/AppContext';
 import { initSentry, withSentry } from '../services/logger';
 import * as Notifications from 'expo-notifications';
-import { registerForPushNotificationsAsync } from '../services/NotificationService';
 import { initAds } from '../services/adService';
 
 Notifications.setNotificationHandler({
@@ -45,7 +44,23 @@ function RootLayoutNav() {
 
   useEffect(() => {
     setIsMounted(true);
-    registerForPushNotificationsAsync().catch(err => console.warn('Push error:', err));
+
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('[Push] Notification Received in Foreground:', notification);
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('[Push] Notification Clicked:', response);
+      const data = response.notification.request.content.data;
+      if (data.roomId) {
+        router.push(`/room/${data.roomId}`);
+      }
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    };
   }, []);
 
   // 초기 로딩 완료 처리
