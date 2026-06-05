@@ -39,6 +39,7 @@ interface AppContextType {
   updateRoom: (roomId: string, name: string, image?: string | null) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
   leaveRoom: (id: string) => Promise<void>;
+  kickMember: (roomId: string, userId: string) => Promise<void>;
   submitFeedback: (type: 'bug' | 'feature' | 'other', content: string) => Promise<void>;
 
   notices: Notice[];
@@ -612,7 +613,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return (old || []).filter((r: any) => r.id !== id);
     });
     
-    await refreshAllData(); 
+    await refreshAllData();
+  };
+  const kickMember = async (roomId: string, userId: string) => {
+    await roomService.kickMember(roomId, userId);
+    await refreshAllData();
   };
   const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };
   
@@ -769,7 +774,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     checkEmailCode: async (e: string, c: string, t: string) => authService.checkEmailCode(e, c, t),
     verifyAndSignup: async (e: string, c: string, t: string, p: string, n: string, ph: string) => authService.verifyAndSignup(e, c, t, p, n, ph),
     updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers, submitFeedback,
-    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomDisplayUser, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom, leaveRoom,
+    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomDisplayUser, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom, leaveRoom, kickMember,
     notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
     videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
     photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,

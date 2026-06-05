@@ -59,6 +59,15 @@ export const roomService = {
     if (data && !data.success) throw new Error(data.message || 'Withdrawal failed');
   },
 
+  kickMember: async (roomId: string, userId: string): Promise<void> => {
+    const { data, error } = await supabase.rpc('kick_member_from_room', {
+      p_room_id: roomId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
+    if (data && !data.success) throw new Error(data.message || 'Kick failed');
+  },
+
   getRoomByIdRemote: async (roomId: string): Promise<Room | null> => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId).single();
     return data ? { ...data, leaderId: data.leader_id, imageUri: data.image_uri } as Room : null;

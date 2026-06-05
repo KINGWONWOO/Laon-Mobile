@@ -137,9 +137,11 @@ export default function VoteScreen() {
     finally { setIsSendingReminder(false); }
   };
 
-  const voteOptionsList = activeVote?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
+  const isVoteAuthor = activeVote?.userId === currentUser?.id;
+  const isVoteLeader = (currentRoom as any)?.leaderId === currentUser?.id;
+  const voteOptionsList = isVoteAuthor || isVoteLeader ? [
     { label: t('notifyNonResponders'), icon: 'notifications-outline', onPress: handleSendReminder },
-    { label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal },
+    ...(isVoteAuthor ? [{ label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal }] : []),
     { label: activeVote?.deadline && new Date(activeVote.deadline) < new Date() ? t('statusClosed') : t('endImmediately'), icon: 'stop-circle-outline', destructive: true, onPress: () => { Alert.alert(t('endVoteTitle'), t('endVoteConfirm'), [{ text: t('cancel'), style: 'cancel' }, { text: t('endAction'), style: 'destructive', onPress: async () => { await closeVote(selectedVoteId!); } }]); } },
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteVote }
   ] : [

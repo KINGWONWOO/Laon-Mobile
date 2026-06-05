@@ -220,12 +220,14 @@ export default function ScheduleScreen() {
     }
   };
 
-  const scheduleOptions = activeSchedule?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
+  const isScheduleAuthor = activeSchedule?.userId === currentUser?.id;
+  const isScheduleLeader = (currentRoom as any)?.leaderId === currentUser?.id;
+  const scheduleOptions = isScheduleAuthor || isScheduleLeader ? [
     { label: t('remindNotParticipants'), icon: 'notifications-outline', onPress: handleSendReminder },
-    { label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal },
-    { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? t('closedBadge') : t('closeImmediately'), 
-      icon: 'stop-circle-outline', 
-      destructive: true, 
+    ...(isScheduleAuthor ? [{ label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal }] : []),
+    { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? t('closedBadge') : t('closeImmediately'),
+      icon: 'stop-circle-outline',
+      destructive: true,
       onPress: () => {
         Alert.alert(t('closeScheduleTitle'), t('closeScheduleConfirm'), [
           { text: t('cancel'), style: 'cancel' },

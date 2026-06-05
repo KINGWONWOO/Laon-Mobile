@@ -955,7 +955,7 @@ export default function FeedbackScreen() {
                         </View>
                         <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
                       </TouchableOpacity>
-                      {item.userId === currentUser?.id && (
+                      {(item.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                         <View style={styles.commentActions}>
                           <TouchableOpacity
                             onPress={() => {
@@ -979,7 +979,7 @@ export default function FeedbackScreen() {
             visible={showCommentOptions}
             onClose={() => setShowCommentOptions(false)}
             options={[
-              {
+              ...(selectedCommentForOptions?.userId === currentUser?.id ? [{
                 label: t('edit'),
                 icon: "create-outline",
                 onPress: () => {
@@ -987,7 +987,7 @@ export default function FeedbackScreen() {
                   setEditingComment(selectedCommentForOptions);
                   setEditCommentText(selectedCommentForOptions.text);
                 },
-              },
+              }] : []),
               {
                 label: t('delete'),
                 icon: "trash-outline",
@@ -1114,7 +1114,7 @@ export default function FeedbackScreen() {
               <Text style={{color: theme.text, fontWeight: '800', fontSize: 16, letterSpacing: -0.5}} numberOfLines={1}>{item.title}</Text>
               <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUser(item.userId)?.name} • {formatDateFull(item.createdAt, language)}</Text>
             </View>
-            {item.userId === currentUser?.id && (
+            {(item.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
               <TouchableOpacity onPress={() => { setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>
                 <Ionicons name="ellipsis-vertical" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -1124,11 +1124,13 @@ export default function FeedbackScreen() {
       />
 
       <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={[
-        { label: t('titleEditTitle'), icon: 'create-outline', onPress: () => {
-          if (!selectedVideoForOptions) return;
-          setEditingVideo(selectedVideoForOptions);
-          setEditTitle(selectedVideoForOptions.title);
-        }},
+        ...(selectedVideoForOptions?.userId === currentUser?.id ? [{
+          label: t('titleEditTitle'), icon: 'create-outline', onPress: () => {
+            if (!selectedVideoForOptions) return;
+            setEditingVideo(selectedVideoForOptions);
+            setEditTitle(selectedVideoForOptions.title);
+          }
+        }] : []),
         { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
       ]} title={t('videoSettings')} theme={theme} cancelLabel={t('cancel')} />
 

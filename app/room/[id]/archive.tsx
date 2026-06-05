@@ -236,20 +236,24 @@ export default function ArchiveScreen() {
     }
   };
 
+  const isPhotoAuthor = selectedPhoto?.userId === currentUser?.id;
+  const isRoomLeader = currentRoom?.leaderId === currentUser?.id;
+
   const photoOptions = [
-    { label: t('descriptionEdit'), icon: 'create-outline', onPress: () => {
+    ...(isPhotoAuthor ? [{ label: t('descriptionEdit'), icon: 'create-outline', onPress: () => {
       setEditDesc(selectedPhoto.description || '');
       setIsEditingPhoto(true);
-    }},
+    }}] : []),
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeletePhoto(selectedPhoto) }
   ];
 
+  const isCommentAuthor = selectedCommentForModal?.userId === currentUser?.id;
   const commentOptions = [
-    { label: t('edit'), icon: 'create-outline', onPress: () => {
+    ...(isCommentAuthor ? [{ label: t('edit'), icon: 'create-outline', onPress: () => {
       if (!selectedCommentForModal) return;
       setEditingComment(selectedCommentForModal);
       setEditCommentText(selectedCommentForModal.text);
-    }},
+    }}] : []),
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => {
       if (!selectedCommentForModal) return;
       handleDeleteComment(selectedCommentForModal.id);
@@ -367,7 +371,7 @@ export default function ArchiveScreen() {
                   <View style={styles.commentHeader}>
                     <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
                     <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
-                    {comment.userId === currentUser?.id && !isEditing && (
+                    {(comment.userId === currentUser?.id || isRoomLeader) && !isEditing && (
                       <TouchableOpacity onPress={() => {
                         setSelectedCommentForModal(comment);
                         setShowCommentOptions(true);

@@ -151,25 +151,39 @@ export default function NoticeDetailScreen() {
     }
   };
 
-  const noticeOptions = notice?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
-    { label: notice.isPinned ? t('unpinNotice') : t('pinTop'), icon: 'pin-outline', onPress: async () => {
-      try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert(t('error'), e.message); }
-    }},
-    { label: t('edit'), icon: 'create-outline', onPress: () => {
-      setShowEditNotice(true);
-    }},
+  const isNoticeAuthor = notice?.userId === currentUser?.id;
+  const isLeader = currentRoom?.leaderId === currentUser?.id;
+
+  const pinOption = { label: notice.isPinned ? t('unpinNotice') : t('pinTop'), icon: 'pin-outline', onPress: async () => {
+    try { await updateNotice(notice.id, { isPinned: !notice.isPinned }); } catch (e: any) { Alert.alert(t('error'), e.message); }
+  }};
+  const noticeOptions = isNoticeAuthor ? [
+    pinOption,
+    { label: t('edit'), icon: 'create-outline', onPress: () => { setShowEditNotice(true); } },
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
+  ] : isLeader ? [
+    pinOption,
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteNotice }
   ] : [
     { label: t('report'), icon: 'warning-outline', destructive: true, onPress: () => reportContent(notice.id, 'notice') },
     { label: t('blockUser'), icon: 'ban-outline', destructive: true, onPress: () => blockUser(notice.userId) }
   ];
 
-  const commentOptions = selectedComment?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id ? [
+  const isCommentAuthor = selectedComment?.userId === currentUser?.id;
+  const commentOptions = isCommentAuthor ? [
     { label: t('edit'), icon: 'create-outline', onPress: () => {
       if (!selectedComment) return;
       setEditingCommentId(selectedComment.id);
       setEditCommentText(selectedComment.text);
     }},
+    { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => {
+      if (!selectedComment) return;
+      Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
+        { text: t('cancel') },
+        { text: t('delete'), style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
+      ]);
+    }}
+  ] : isLeader ? [
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => {
       if (!selectedComment) return;
       Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
@@ -246,7 +260,7 @@ export default function NoticeDetailScreen() {
               <View style={styles.commentHeader}>
                 <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
                 <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
-                {!isEditing && (
+                {!isEditing && (comment.userId === currentUser?.id || isLeader) && (
                   <TouchableOpacity onPress={() => { setSelectedComment(comment); setShowCommentOptions(true); }}>
                     <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
                   </TouchableOpacity>
