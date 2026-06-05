@@ -11,7 +11,8 @@ import { storageService } from '../../../../services/storageService';
 
 export default function NoticeDetailScreen() {
   const { id, noticeId } = useLocalSearchParams<{ id: string, noticeId: string }>();
-  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getUserById, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro, t, language } = useAppContext();
+  const { notices, addNoticeComment, deleteNoticeComment, updateNoticeComment, updateNotice, getRoomDisplayUser, currentUser, theme, deleteNotice, rooms, blockUser, reportContent, isPro, t, language } = useAppContext();
+  const getUser = (userId: string) => getRoomDisplayUser(id as string, userId);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -50,7 +51,7 @@ export default function NoticeDetailScreen() {
     }
   }, [notice, showEditNotice]);
 
-  const author = useMemo(() => notice ? getUserById(notice.userId) : null, [notice]);
+  const author = useMemo(() => notice ? getUser(notice.userId) : null, [notice]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
 
   if (!notice) {
@@ -237,7 +238,7 @@ export default function NoticeDetailScreen() {
           </View>
         }
         renderItem={({ item: comment }) => {
-          const cAuthor = getUserById(comment.userId);
+          const cAuthor = getUser(comment.userId);
           const isEditing = editingCommentId === comment.id;
 
           return (

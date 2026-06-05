@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Alert, RefreshControl, Image, Platform, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Alert, RefreshControl, Image, Platform, ActivityIndicator, KeyboardAvoidingView, Switch } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -42,6 +42,7 @@ export default function RoomMainScreen() {
   
   const [userNickname, setUserNickname] = useState('');
   const [userImage, setUserImage] = useState<string | null>(null);
+  const [roomProfileEnabled, setRoomProfileEnabled] = useState(false);
 
   const [showPasscode, setShowPasscode] = useState(false);
   const [bannerHeight, setBannerHeight] = useState(0);
@@ -126,7 +127,7 @@ export default function RoomMainScreen() {
     if (!userNickname.trim()) return Alert.alert(t('error'), t('nameRequired'));
     setIsUpdating(true);
     try {
-      await updateRoomUserProfile(id as string, userNickname, userImage);
+      await updateRoomUserProfile(id as string, userNickname, userImage, roomProfileEnabled);
       setShowUserProfileModal(false);
       Alert.alert(t('success'), t('profileUpdateSuccess'));
     } catch (e: any) { Alert.alert(t('failure'), e.message); } finally { setIsUpdating(false); }
@@ -210,7 +211,7 @@ export default function RoomMainScreen() {
             <View style={styles.heroTopRow}>
               <TouchableOpacity style={styles.backCircle} onPress={() => router.replace('/rooms')}><Ionicons name="chevron-back" size={24} color="#fff" /></TouchableOpacity>
               <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginRight: 8}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(null); setShowUserProfileModal(true); }}>
+                <TouchableOpacity style={[styles.smallMemberBtn, {backgroundColor: theme.primary, marginRight: 8}]} onPress={() => { setUserNickname(myRoomProfile?.name || currentUser?.name || ''); setUserImage(myRoomProfile?.profileImage || currentUser?.profileImage || null); setRoomProfileEnabled(myRoomProfile?.enabled ?? false); setShowUserProfileModal(true); }}>
                   <Ionicons name="person-circle-outline" size={16} color="#fff" />
                   <Text style={styles.smallMemberText}>{t('profileChange')}</Text>
                 </TouchableOpacity>
@@ -353,15 +354,39 @@ export default function RoomMainScreen() {
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.polishedModal, { backgroundColor: theme.card }]}>
             <Text style={[styles.polishedModalTitle, { color: theme.text }]}>{t('myProfileTitle')}</Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 20, textAlign: 'center', lineHeight: 18 }}>
-              {t('roomProfileDesc').split('\n')[0]}{"\n"}
-              <Text style={{ color: theme.primary, fontWeight: '700' }}>{room.name}</Text>{t('roomProfileDesc').split('\n')[1]}
-            </Text>
-            <TouchableOpacity style={styles.avatarPicker} onPress={async () => { const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 }); if(!res.canceled) setUserImage(res.assets[0].uri); }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 20, paddingHorizontal: 4 }}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>방 전용 프로필 사용</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 3, lineHeight: 17 }}>
+                  {roomProfileEnabled ? `이 방에서만 아래 이름·사진으로 표시됩니다.` : `전체 프로필(본명·사진)이 이 방에 그대로 표시됩니다.`}
+                </Text>
+              </View>
+              <Switch
+                value={roomProfileEnabled}
+                onValueChange={setRoomProfileEnabled}
+                trackColor={{ false: theme.border, true: theme.primary + '88' }}
+                thumbColor={roomProfileEnabled ? theme.primary : '#f4f3f4'}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.avatarPicker, !roomProfileEnabled && { opacity: 0.4 }]}
+              onPress={async () => {
+                if (!roomProfileEnabled) return;
+                const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.5 });
+                if (!res.canceled) setUserImage(res.assets[0].uri);
+              }}
+            >
               <Image source={{ uri: userImage || myRoomProfile?.profileImage || currentUser?.profileImage || 'https://placeholder.com/150' }} style={styles.avatarLarge} />
               <View style={[styles.avatarCamera, { backgroundColor: theme.primary }]}><Ionicons name="camera" size={16} color="#fff" /></View>
             </TouchableOpacity>
-            <TextInput style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }]} placeholder={t('username')} placeholderTextColor={theme.textSecondary} value={userNickname} onChangeText={setUserNickname} />
+            <TextInput
+              style={[styles.polishedInput, { color: theme.text, backgroundColor: theme.background }, !roomProfileEnabled && { opacity: 0.4 }]}
+              placeholder={t('username')}
+              placeholderTextColor={theme.textSecondary}
+              value={userNickname}
+              onChangeText={setUserNickname}
+              editable={roomProfileEnabled}
+            />
             <View style={styles.polishedModalBtns}>
               <TouchableOpacity style={styles.polishedCancel} onPress={() => setShowUserProfileModal(false)}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.polishedSave, {backgroundColor: theme.primary}]} onPress={handleUpdateUserProfile} disabled={isUpdating}>

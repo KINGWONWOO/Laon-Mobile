@@ -32,6 +32,7 @@ interface AppContextType {
   isLoadingRooms: boolean;
   users: User[];
   getUserById: (id: string) => User | undefined;
+  getRoomDisplayUser: (roomId: string, userId: string) => { name: string; profileImage: string | null } | undefined;
   getRoomByIdRemote: (id: string) => Promise<any>;
   createRoom: (name: string, passcode: string, image?: string) => Promise<any>;
   joinRoom: (roomId: string, passcode: string) => Promise<any>;
@@ -96,9 +97,9 @@ interface AppContextType {
   customBackgroundColor: string;
   setCustomBackgroundColor: (color: string) => Promise<void>;
   theme: any;
-  updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null) => Promise<void>;
-  getRoomUserProfile: (roomId: string, userId: string) => { name: string, profileImage: string | null } | null;
-  roomProfiles: Record<string, { name: string, profileImage: string | null }>;
+  updateRoomUserProfile: (roomId: string, name: string, profileImage: string | null, enabled: boolean) => Promise<void>;
+  getRoomUserProfile: (roomId: string, userId: string) => { name: string, profileImage: string | null, enabled: boolean } | null;
+  roomProfiles: Record<string, { name: string, profileImage: string | null, enabled: boolean }>;
 
   // Subscription
   isPro: boolean;
@@ -122,7 +123,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [themeType, setThemeTypeState] = useState<ThemeType>('light');
   const [customColor, setCustomColorState] = useState('#6366F1');
   const [customBackgroundColor, setCustomBackgroundColorState] = useState('#F8FAFC');
-  const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null }>>({});
+  const [roomProfiles, setRoomProfiles] = useState<Record<string, { name: string, profileImage: string | null, enabled: boolean }>>({});
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [language, setLanguageState] = useState<Language>('ko');
   const currentUserRef = useRef<User | null>(null);
@@ -185,14 +186,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await AsyncStorage.setItem('theme_custom_bg_color', color);
   };
 
-  const updateRoomUserProfile = async (roomId: string, name: string, profileImage: string | null) => {
-    const key = `${roomId}_${currentUser?.id}`;
-    const newProfiles = { ...roomProfiles, [key]: { name, profileImage } };
+  const updateRoomUserProfile = async (roomId: string, name: string, profileImage: string | null, enabled: boolean) => {
+    if (!currentUser) return;
+    let finalImage = profileImage;
+    if (profileImage && !profileImage.startsWith('http')) {
+      const fileName = `room_profile_${roomId}_${currentUser.id}_${Date.now()}.jpg`;
+      finalImage = await storageService.uploadToR2('profiles', profileImage, fileName);
+    }
+    const { error } = await supabase.from('room_profiles').upsert(
+      { room_id: roomId, user_id: currentUser.id, name, profile_image: finalImage, enabled },
+      { onConflict: 'room_id,user_id' }
+    );
+    if (error) throw error;
+    const key = `${roomId}_${currentUser.id}`;
+    const newProfiles = { ...roomProfiles, [key]: { name, profileImage: finalImage, enabled } };
     setRoomProfiles(newProfiles);
     await AsyncStorage.setItem('room_profiles', JSON.stringify(newProfiles));
+    await refreshAllData();
   };
-
-  const getRoomUserProfile = (roomId: string, userId: string) => roomProfiles[`${roomId}_${userId}`] || null;
 
   const theme = useMemo(() => getThemeColors(themeType, customColor, customBackgroundColor), [themeType, customColor, customBackgroundColor]);
 
@@ -377,6 +388,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getUserById = (id: string) => allUsers.find(u => u.id === id);
 
+  const getRoomDisplayUser = (roomId: string, userId: string) => {
+    const global = allUsers.find(u => u.id === userId);
+    const remote = (roomProfilesQuery.data || []).find(
+      (p: any) => p.room_id === roomId && p.user_id === userId
+    );
+    const local = roomProfiles[`${roomId}_${userId}`];
+    const isEnabled = remote?.enabled ?? local?.enabled ?? false;
+    if (!global && !remote && !local) return undefined;
+    if (isEnabled) {
+      return {
+        name: remote?.name || local?.name || global?.name || '',
+        profileImage: (remote?.profile_image ?? local?.profileImage) ?? global?.profileImage ?? null,
+      };
+    }
+    return {
+      name: global?.name || '',
+      profileImage: global?.profileImage ?? null,
+    };
+  };
+
+  const getRoomUserProfile = (roomId: string, userId: string) => {
+    const remote = (roomProfilesQuery.data || []).find(
+      (p: any) => p.room_id === roomId && p.user_id === userId
+    );
+    if (remote) return { name: remote.name, profileImage: remote.profile_image, enabled: remote.enabled ?? false };
+    const local = roomProfiles[`${roomId}_${userId}`];
+    if (local) return { ...local, enabled: local.enabled ?? false };
+    return null;
+  };
+
   const refreshAllData = useCallback(async () => {
     await queryClient.invalidateQueries();
   }, [queryClient]);
@@ -427,6 +468,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const { data: c = [] } = await supabase.from('notice_comments').select('*').in('notice_id', (n || []).map(x => x.id)).order('created_at', { ascending: true });
     return (n || []).map(notice => ({ ...notice, notice_comments: (c || []).filter(comment => comment.notice_id === notice.id) }));
   }, enabled: roomIds.length > 0, placeholderData: keepPreviousData });
+
+  const roomProfilesQuery = useQuery({
+    queryKey: ['room_profiles', roomIds],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('room_profiles')
+        .select('room_id, user_id, name, profile_image, enabled')
+        .in('room_id', roomIds);
+      return data || [];
+    },
+    enabled: roomIds.length > 0,
+    placeholderData: keepPreviousData
+  });
 
   const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
@@ -715,7 +769,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     checkEmailCode: async (e: string, c: string, t: string) => authService.checkEmailCode(e, c, t),
     verifyAndSignup: async (e: string, c: string, t: string, p: string, n: string, ph: string) => authService.verifyAndSignup(e, c, t, p, n, ph),
     updateUserProfile, logout, deleteAccount, blockUser, reportContent, blockedUsers, submitFeedback,
-    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom, leaveRoom,
+    rooms: roomsData, isLoadingRooms, users: allUsers, getUserById, getRoomDisplayUser, getRoomByIdRemote: roomService.getRoomByIdRemote, createRoom, joinRoom, updateRoom, deleteRoom, leaveRoom,
     notices: noticesMapped, addNotice, updateNotice, deleteNotice, addNoticeComment, updateNoticeComment, deleteNoticeComment,
     videos: videosMapped, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment,
     photos: photosMapped, addPhoto, updatePhoto, deletePhoto, addPhotoComment, updatePhotoComment, deletePhotoComment, markItemAsAccessed,
@@ -727,7 +781,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     language, setLanguage, t
   }), [
     currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,
-    themeType, customColor, customBackgroundColor, theme, roomProfiles, blockedUsers, isPro, language, t
+    themeType, customColor, customBackgroundColor, theme, roomProfiles, roomProfilesQuery.data, blockedUsers, isPro, language, t
   ]);
 
   return (

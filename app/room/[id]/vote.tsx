@@ -13,7 +13,8 @@ const { width } = Dimensions.get('window');
 
 export default function VoteScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, markVoteViewed, currentUser, theme, refreshAllData, rooms, getUserById, checkProAccess, sendProReminder, sendDirectReminder, blockUser, reportContent, isPro, t, language } = useAppContext();
+  const { votes, addVote, respondToVote, updateVote, deleteVote, closeVote, markVoteViewed, currentUser, theme, refreshAllData, rooms, getRoomDisplayUser, checkProAccess, sendProReminder, sendDirectReminder, blockUser, reportContent, isPro, t, language } = useAppContext();
+  const getUser = (userId: string) => getRoomDisplayUser(id as string, userId);
   const localeMap: Record<string, string> = { ko: 'ko-KR', en: 'en-US', es: 'es-ES', id: 'id-ID', ja: 'ja-JP', zh: 'zh-CN', th: 'th-TH' };
   const locale = localeMap[language] || 'ko-KR';
   const insets = useSafeAreaInsets();
@@ -292,7 +293,7 @@ export default function VoteScreen() {
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {members.length > 0
-                      ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUserById(vId)?.name || '?'}</Text>)
+                      ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUser(vId)?.name || '?'}</Text>)
                       : <Text style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 4, opacity: 0.5 }}>-</Text>
                     }
                   </ScrollView>
@@ -427,7 +428,7 @@ export default function VoteScreen() {
       </Modal>
 
       <Modal visible={showVoterModal} transparent animationType="fade" onRequestClose={() => setShowVoterModal(false)}>
-        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUserById(vId)?.name?.[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUserById(vId)?.name || t('unknownAuthor')}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noParticipants')}</Text>}</View></View></View>
+        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUser(vId)?.name?.[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUser(vId)?.name || t('unknownAuthor')}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noParticipants')}</Text>}</View></View></View>
       </Modal>
       <AdBanner />
     </View>

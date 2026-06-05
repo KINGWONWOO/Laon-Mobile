@@ -26,7 +26,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function FeedbackScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getUserById, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, language } = useAppContext();
+  const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getRoomDisplayUser, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, language } = useAppContext();
+  const getUser = (userId: string) => getRoomDisplayUser(id as string, userId);
 
   const t = useMemo(() => createTranslator(language || 'ko'), [language]);
 
@@ -914,7 +915,7 @@ export default function FeedbackScreen() {
                       ]}
                     >
                       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 2 }}>
-                        <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUserById(c.userId)?.name}</Text>
+                        <Text style={[styles.bubbleUser, { color: theme.primary }]}>{getUser(c.userId)?.name}</Text>
                         <Text style={[styles.bubbleTime, { color: theme.textSecondary }]}>
                           {formatTime(c.timestampMillis)}
                         </Text>
@@ -949,7 +950,7 @@ export default function FeedbackScreen() {
                         <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
                           <Text style={[styles.cTime, { color: theme.primary }]}>{formatTime(item.timestampMillis)}</Text>
                           <Text style={[styles.bubbleUser, { color: theme.text, opacity: 0.8 }]}>
-                            {getUserById(item.userId)?.name}
+                            {getUser(item.userId)?.name}
                           </Text>
                         </View>
                         <Text style={[styles.cText, { color: theme.text }]}>{item.text}</Text>
@@ -1111,7 +1112,7 @@ export default function FeedbackScreen() {
             </View>
             <View style={{marginLeft: 15, flex: 1}}>
               <Text style={{color: theme.text, fontWeight: '800', fontSize: 16, letterSpacing: -0.5}} numberOfLines={1}>{item.title}</Text>
-              <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUserById(item.userId)?.name} • {formatDateFull(item.createdAt, language)}</Text>
+              <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUser(item.userId)?.name} • {formatDateFull(item.createdAt, language)}</Text>
             </View>
             {item.userId === currentUser?.id && (
               <TouchableOpacity onPress={() => { setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>

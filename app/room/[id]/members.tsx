@@ -9,7 +9,7 @@ import AdBanner from '../../../components/ui/AdBanner';
 
 export default function MembersScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
-  const { theme, users, getRoomByIdRemote, getRoomUserProfile, currentUser, t } = useAppContext();
+  const { theme, users, getRoomByIdRemote, getRoomDisplayUser, currentUser, t } = useAppContext();
   const router = useRouter();
   
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -65,10 +65,10 @@ export default function MembersScreen() {
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => {
           const isLeader = item.id === leaderId;
-          const roomProfile = getRoomUserProfile(id as string, item.id);
-          const displayName = roomProfile?.name || item.name;
+          const displayUser = getRoomDisplayUser(id as string, item.id);
+          const displayName = displayUser?.name || item.name;
           const realName = item.name;
-          const displayImage = roomProfile?.profileImage || item.profileImage;
+          const displayImage = displayUser?.profileImage || item.profileImage;
 
           return (
             <View style={[styles.memberCard, { backgroundColor: theme.card }, Shadows.soft]}>

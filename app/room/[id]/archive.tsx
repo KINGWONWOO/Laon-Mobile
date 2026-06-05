@@ -25,10 +25,11 @@ export default function ArchiveScreen() {
   const { 
     photos, addPhoto, updatePhoto, deletePhoto, 
     addPhotoComment, updatePhotoComment, deletePhotoComment, 
-    theme, currentUser, refreshAllData, getUserById, 
+    theme, currentUser, refreshAllData, getRoomDisplayUser,
     markItemAsAccessed, rooms, checkProAccess, blockUser,
     reportContent, t, language
   } = context;
+  const getUser = (userId: string) => getRoomDisplayUser(id as string, userId);
   const isPro = context?.isPro || false;
   const insets = useSafeAreaInsets();
 
@@ -328,7 +329,7 @@ export default function ArchiveScreen() {
               <View style={styles.contentSection}>
                 <View style={styles.authorRow}>
                   {(() => {
-                    const author = getUserById(selectedPhoto?.userId);
+                    const author = getUser(selectedPhoto?.userId);
                     return author?.profileImage ? (
                       <Image source={{ uri: author.profileImage }} style={styles.authorAvatar} />
                     ) : (
@@ -338,7 +339,7 @@ export default function ArchiveScreen() {
                     );
                   })()}
                   <View>
-                    <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUserById(selectedPhoto?.userId)?.name || t('unknownAuthor')}</Text>
+                    <Text style={[styles.authorName, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{getUser(selectedPhoto?.userId)?.name || t('unknownAuthor')}</Text>
                     <Text style={[styles.dateText, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{selectedPhoto && formatDateFull(selectedPhoto.createdAt, language)}</Text>
                   </View>
                 </View>
@@ -358,7 +359,7 @@ export default function ArchiveScreen() {
               </View>
             }
             renderItem={({ item: comment }) => {
-              const cAuthor = getUserById(comment.userId);
+              const cAuthor = getUser(comment.userId);
               const isEditing = editingComment?.id === comment.id;
 
               return (
