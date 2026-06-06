@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormationPlayer from '../../../components/ui/FormationPlayer';
 import { FormationPiPPlayer } from '../../../components/ui/FormationPiPPlayer';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
+import { PopoverMenu } from '../../../components/ui/PopoverMenu';
 import { Shadows } from '../../../constants/theme';
 import { createTranslator } from '../../../constants/translations';
 import Animated, { FadeIn, FadeOut, LinearTransition, useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
@@ -57,8 +58,10 @@ export default function FeedbackScreen() {
 
   const [showVideoOptions, setShowVideoOptions] = useState(false);
   const [selectedVideoForOptions, setSelectedVideoForOptions] = useState<VideoFeedback | null>(null);
+  const [videoMenuAnchor, setVideoMenuAnchor] = useState({ x: 0, y: 0 });
   const [showCommentOptions, setShowCommentOptions] = useState(false);
   const [selectedCommentForOptions, setSelectedCommentForOptions] = useState<any>(null);
+  const [commentMenuAnchor, setCommentMenuAnchor] = useState({ x: 0, y: 0 });
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [isMirrorMode, setIsMirrorMode] = useState(false);
@@ -958,7 +961,8 @@ export default function FeedbackScreen() {
                       {(item.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                         <View style={styles.commentActions}>
                           <TouchableOpacity
-                            onPress={() => {
+                            onPress={(e) => {
+                              setCommentMenuAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
                               setSelectedCommentForOptions(item);
                               setShowCommentOptions(true);
                             }}
@@ -975,13 +979,14 @@ export default function FeedbackScreen() {
             )}
           </View>
 
-          <OptionModal
+          <PopoverMenu
             visible={showCommentOptions}
             onClose={() => setShowCommentOptions(false)}
+            anchor={commentMenuAnchor}
             options={[
               ...(selectedCommentForOptions?.userId === currentUser?.id ? [{
                 label: t('edit'),
-                icon: "create-outline",
+                icon: 'create-outline',
                 onPress: () => {
                   if (!selectedCommentForOptions) return;
                   setEditingComment(selectedCommentForOptions);
@@ -990,7 +995,7 @@ export default function FeedbackScreen() {
               }] : []),
               {
                 label: t('delete'),
-                icon: "trash-outline",
+                icon: 'trash-outline',
                 destructive: true,
                 onPress: () => {
                   if (!selectedCommentForOptions) return;
@@ -998,9 +1003,7 @@ export default function FeedbackScreen() {
                 },
               },
             ]}
-            title={t('commentSettingsTitle')}
             theme={theme}
-            cancelLabel={t('cancel')}
           />
 
           <Modal
@@ -1115,7 +1118,7 @@ export default function FeedbackScreen() {
               <Text style={{color: theme.textSecondary, fontSize: 12, fontWeight: '500', opacity: 0.7, marginTop: 4}}>{getUser(item.userId)?.name} • {formatDateFull(item.createdAt, language)}</Text>
             </View>
             {(item.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
-              <TouchableOpacity onPress={() => { setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>
+              <TouchableOpacity onPress={(e) => { setVideoMenuAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }); setSelectedVideoForOptions(item); setShowVideoOptions(true); }} style={{padding: 8}}>
                 <Ionicons name="ellipsis-vertical" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
             )}
@@ -1123,7 +1126,7 @@ export default function FeedbackScreen() {
         )}
       />
 
-      <OptionModal visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} options={[
+      <PopoverMenu visible={showVideoOptions} onClose={() => setShowVideoOptions(false)} anchor={videoMenuAnchor} options={[
         ...(selectedVideoForOptions?.userId === currentUser?.id ? [{
           label: t('titleEditTitle'), icon: 'create-outline', onPress: () => {
             if (!selectedVideoForOptions) return;
@@ -1132,7 +1135,7 @@ export default function FeedbackScreen() {
           }
         }] : []),
         { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: () => handleDeleteVideo(selectedVideoForOptions!) }
-      ]} title={t('videoSettings')} theme={theme} cancelLabel={t('cancel')} />
+      ]} theme={theme} />
 
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
         <View style={styles.modalOverlayUpload}>

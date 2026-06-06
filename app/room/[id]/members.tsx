@@ -5,7 +5,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Shadows } from '../../../constants/theme';
-import { OptionModal } from '../../../components/ui/RoomComponents';
+import { PopoverMenu } from '../../../components/ui/PopoverMenu';
 import AdBanner from '../../../components/ui/AdBanner';
 
 export default function MembersScreen() {
@@ -19,6 +19,7 @@ export default function MembersScreen() {
   const [kickingId, setKickingId] = useState<string | null>(null);
 
   const [selectedMember, setSelectedMember] = useState<{ id: string; name: string } | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
   const [showMemberOptions, setShowMemberOptions] = useState(false);
   const [showKickConfirm, setShowKickConfirm] = useState(false);
 
@@ -125,7 +126,8 @@ export default function MembersScreen() {
                 ) : (
                   <TouchableOpacity
                     style={styles.moreBtn}
-                    onPress={() => {
+                    onPress={(e) => {
+                      setMenuAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
                       setSelectedMember({ id: item.id, name: displayName });
                       setShowMemberOptions(true);
                     }}
@@ -143,24 +145,20 @@ export default function MembersScreen() {
         <AdBanner />
       </View>
 
-      {/* 멤버 옵션 모달 */}
-      <OptionModal
+      {/* 멤버 옵션 팝오버 */}
+      <PopoverMenu
         visible={showMemberOptions}
         onClose={() => setShowMemberOptions(false)}
-        title={selectedMember?.name}
+        anchor={menuAnchor}
         options={[
           {
             label: '강퇴하기',
             icon: 'person-remove-outline',
             destructive: true,
-            onPress: () => {
-              setShowMemberOptions(false);
-              setShowKickConfirm(true);
-            },
+            onPress: () => setShowKickConfirm(true),
           },
         ]}
         theme={theme}
-        cancelLabel={t('cancel')}
       />
 
       {/* 강퇴 확인 모달 */}

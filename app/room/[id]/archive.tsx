@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ensureStandardMP4 } from '../../../utils/convertMP4';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
+import { PopoverMenu } from '../../../components/ui/PopoverMenu';
 import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
@@ -71,6 +72,7 @@ export default function ArchiveScreen() {
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
   const [selectedCommentForModal, setSelectedCommentForModal] = useState<any>(null);
+  const [commentMenuAnchor, setCommentMenuAnchor] = useState({ x: 0, y: 0 });
 
   const roomPhotos = useMemo(() => photos.filter(p => p.roomId === id), [photos, id]);
   const currentRoom = useMemo(() => rooms.find(r => r.id === id), [rooms, id]);
@@ -372,7 +374,8 @@ export default function ArchiveScreen() {
                     <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
                     <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
                     {(comment.userId === currentUser?.id || isRoomLeader) && !isEditing && (
-                      <TouchableOpacity onPress={() => {
+                      <TouchableOpacity onPress={(e) => {
+                        setCommentMenuAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
                         setSelectedCommentForModal(comment);
                         setShowCommentOptions(true);
                       }}>
@@ -414,13 +417,12 @@ export default function ArchiveScreen() {
             cancelLabel={t('cancel')}
           />
 
-          <OptionModal
+          <PopoverMenu
             visible={showCommentOptions}
             onClose={() => { setShowCommentOptions(false); setSelectedCommentForModal(null); }}
             options={commentOptions}
-            title={t('commentSettingsTitle')}
+            anchor={commentMenuAnchor}
             theme={theme}
-            cancelLabel={t('cancel')}
           />
 
           <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10, backgroundColor: theme.card }]}>

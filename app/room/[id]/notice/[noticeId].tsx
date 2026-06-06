@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../../components/ui/RoomComponents';
+import { PopoverMenu } from '../../../../components/ui/PopoverMenu';
 import { Shadows } from '../../../../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { storageService } from '../../../../services/storageService';
@@ -34,6 +35,7 @@ export default function NoticeDetailScreen() {
   // Option Modal states
   const [showNoticeOptions, setShowNoticeOptions] = useState(false);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
+  const [commentMenuAnchor, setCommentMenuAnchor] = useState({ x: 0, y: 0 });
   const [selectedComment, setSelectedComment] = useState<any>(null);
 
   // Full Screen Image Viewer state
@@ -261,7 +263,7 @@ export default function NoticeDetailScreen() {
                 <Text style={[styles.commentAuthor, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{cAuthor?.name || '...'}</Text>
                 <Text style={[styles.commentDate, { color: theme.textSecondary, fontWeight: '500', opacity: 0.7 }]}>{formatDateFull(comment.createdAt, language)}</Text>
                 {!isEditing && (comment.userId === currentUser?.id || isLeader) && (
-                  <TouchableOpacity onPress={() => { setSelectedComment(comment); setShowCommentOptions(true); }}>
+                  <TouchableOpacity onPress={(e) => { setCommentMenuAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }); setSelectedComment(comment); setShowCommentOptions(true); }}>
                     <Ionicons name="ellipsis-horizontal" size={16} color={theme.textSecondary} />
                   </TouchableOpacity>
                 )}
@@ -300,13 +302,12 @@ export default function NoticeDetailScreen() {
         cancelLabel={t('cancel')}
       />
 
-      <OptionModal
+      <PopoverMenu
         visible={showCommentOptions}
         onClose={() => { setShowCommentOptions(false); setSelectedComment(null); }}
         options={commentOptions}
-        title={t('noticeCommentSettings')}
+        anchor={commentMenuAnchor}
         theme={theme}
-        cancelLabel={t('cancel')}
       />
 
       <Modal visible={showEditNotice} transparent animationType="slide" onRequestClose={() => setShowEditNotice(false)}>
