@@ -52,7 +52,7 @@ export default function RoomMainScreen() {
 
   const myRoomProfile = getRoomUserProfile(id as string, currentUser?.id || '');
 
-  const { data: roomActivities = [] } = useQuery({
+  const { data: roomActivities = [], isLoading: isLoadingActivities } = useQuery({
     queryKey: ['room_activity', id],
     queryFn: async () => {
       const { data } = await supabase
@@ -60,10 +60,11 @@ export default function RoomMainScreen() {
         .select('*')
         .eq('room_id', id)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(5);
       return data || [];
     },
     enabled: !!id,
+    staleTime: 30000,
   });
 
   if (!room) {
@@ -324,12 +325,24 @@ export default function RoomMainScreen() {
             </View>
           )}
 
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionLabel, { color: theme.primary }]}>ACTIVITY</Text>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('recentActivity')}</Text>
+          <View style={styles.noticeHeaderRow}>
+            <View>
+              <Text style={[styles.sectionLabel, { color: theme.primary }]}>ACTIVITY</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('recentActivity')}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.viewAllBtn, { borderColor: theme.border }]}
+              onPress={() => router.push(`/room/${id}/activity` as any)}
+            >
+              <Text style={[styles.viewAllText, { color: theme.textSecondary }]}>{t('allActivity')}</Text>
+            </TouchableOpacity>
           </View>
 
-          {roomActivities.length === 0 ? (
+          {isLoadingActivities ? (
+            <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card, paddingVertical: 20 }]}>
+              <ActivityIndicator size="small" color={theme.primary} />
+            </View>
+          ) : roomActivities.length === 0 ? (
             <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
               <Text style={{ color: theme.textSecondary }}>{t('noActivity')}</Text>
             </View>

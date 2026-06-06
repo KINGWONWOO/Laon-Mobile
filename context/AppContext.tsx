@@ -111,7 +111,7 @@ interface AppContextType {
   purchasePro: (durationDays?: number) => Promise<void>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
-  sendDirectReminder: (userIds: string[], title: string, body: string) => Promise<void>;
+  sendDirectReminder: (userIds: string[], notificationType: string, vars: Record<string, any>) => Promise<void>;
 
   // Language
   language: Language;
@@ -140,13 +140,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     AsyncStorage.getItem('room_profiles').then(val => { if (val) setRoomProfiles(JSON.parse(val)); });
     AsyncStorage.getItem('blocked_users').then(val => { if (val) setBlockedUsers(JSON.parse(val)); });
     AsyncStorage.getItem('app_language').then(val => {
-      if (val && SUPPORTED_LANGUAGES.includes(val as Language)) setLanguageState(val as Language);
+      if (val && SUPPORTED_LANGUAGES.includes(val as Language)) {
+        setLanguageState(val as Language);
+        // profiles.language 동기화는 currentUser 확정 후 useEffect에서 처리
+      }
     });
   }, []);
 
   const setLanguage = async (lang: Language) => {
     setLanguageState(lang);
     await AsyncStorage.setItem('app_language', lang);
+    if (currentUserRef.current) {
+      await supabase.from('profiles').update({ language: lang }).eq('id', currentUserRef.current.id);
+    }
   };
 
   const t = useCallback((key: string): string => {
@@ -235,6 +241,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (err) {
       console.error('[Push] sendPushNotification threw:', err);
+    }
+  };
+
+  const sendTypedPush = async (userIds: string[], notificationType: string, vars: Record<string, any>, data?: any) => {
+    if (!userIds || userIds.length === 0) return;
+    try {
+      const { error } = await supabase.functions.invoke('push-notification', {
+        body: { user_ids: userIds, notification_type: notificationType, vars, data },
+      });
+      if (error) console.error('[Push] sendTypedPush error:', error);
+    } catch (err) {
+      console.error('[Push] sendTypedPush threw:', err);
     }
   };
 
@@ -401,31 +419,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const rooms = queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || [];
     const room = rooms.find(r => r.id === roomId);
     if (!room) return;
-    let targetTitle = '';
+    let contentTitle = '';
     let nonResponders: string[] = [];
     if (type === 'vote') {
       const vote = votesMapped.find(v => v.id === targetId);
       if (vote) {
-        targetTitle = vote.question;
+        contentTitle = vote.question;
         const responders = Object.keys(vote.responses || {});
         nonResponders = (room.members || []).filter((mid: string) => !responders.includes(mid) && mid !== currentUser?.id);
       }
     } else {
       const sch = schedulesMapped.find(s => s.id === targetId);
       if (sch) {
-        targetTitle = sch.title;
+        contentTitle = sch.title;
         const responders = Object.keys(sch.responses || {});
         nonResponders = (room.members || []).filter((mid: string) => !responders.includes(mid) && mid !== currentUser?.id);
       }
     }
     if (nonResponders.length > 0) {
-      await sendPushNotification(nonResponders, '응답 요청', `"${targetTitle}"에 아직 참여하지 않으셨습니다. 확인 부탁드려요!`);
+      const targetPath = type === 'vote' ? `/room/${roomId}/vote` : `/room/${roomId}/schedule`;
+      await sendTypedPush(nonResponders, 'response_request', { roomName: room.name, contentTitle, subtype: type }, { targetPath, roomId });
     }
   };
 
-  const sendDirectReminder = async (userIds: string[], title: string, body: string) => {
+  const sendDirectReminder = async (userIds: string[], notificationType: string, vars: Record<string, any>) => {
     if (!isPro) throw new Error('Pro 멤버십 전용 기능입니다.');
-    if (userIds.length > 0) await sendPushNotification(userIds, title, body);
+    if (userIds.length > 0) await sendTypedPush(userIds, notificationType, vars);
   };
 
   const { data: allUsers = [] } = useQuery({
@@ -478,6 +497,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [currentUser, refreshAllData]);
+
+  // 로그인 시 앱 언어를 profiles.language에 동기화 (push 알림 언어 적용)
+  useEffect(() => {
+    if (!currentUser) return;
+    AsyncStorage.getItem('app_language').then(val => {
+      const lang = (val && SUPPORTED_LANGUAGES.includes(val as Language)) ? val : 'ko';
+      supabase.from('profiles').update({ language: lang }).eq('id', currentUser.id);
+    });
+  }, [currentUser?.id]);
 
   const { data: roomsData = [], isLoading: isLoadingRooms } = useQuery({
     queryKey: ['rooms', currentUser?.id],
@@ -740,7 +768,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const targetPath = (notice as any)?.id ? `/room/${rid}/notice/${(notice as any).id}` : `/room/${rid}`;
     if (useNoti) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
-      sendPushNotification(memberIds, `[${rName}] 새 공지`, `${currentUserRef.current.name}: ${t}`, { targetPath, roomId: rid });
+      sendTypedPush(memberIds, 'notice_new', { roomName: rName, actorName: currentUserRef.current.name, content: t }, { targetPath, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'notice_new', '새로운 공지사항', `${currentUserRef.current.name}: ${t}`, targetPath);
     }
     addRoomActivity(rid, 'notice', t);
@@ -754,7 +782,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const memberIds = (roomsData.find(r=>r.id===notice.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id);
         const rName = roomsData.find(r=>r.id===notice.roomId)?.name || '';
         const newTitle = updates.title || notice.title;
-        sendPushNotification(memberIds, `[${rName}] 공지 수정`, `${currentUserRef.current.name}: ${newTitle}`, { targetPath: `/room/${notice.roomId}/notice/${notice.id}`, roomId: notice.roomId });
+        sendTypedPush(memberIds, 'notice_edit', { roomName: rName, actorName: currentUserRef.current.name, content: newTitle }, { targetPath: `/room/${notice.roomId}/notice/${notice.id}`, roomId: notice.roomId });
         saveInAppNotifications(memberIds, notice.roomId, 'notice_new', '공지 수정됨', `${currentUserRef.current.name}: ${newTitle}`, `/room/${notice.roomId}/notice/${notice.id}`);
       }
     }
@@ -767,7 +795,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const notice = noticesMapped.find(n => n.id === nid);
     if (notice && notice.userId !== currentUserRef.current.id) {
       const rName = roomsData.find(r=>r.id===notice.roomId)?.name || '';
-      sendPushNotification([notice.userId], `[${rName}] '${notice.title}' 댓글`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${notice.roomId}/notice/${nid}`, roomId: notice.roomId });
+      sendTypedPush([notice.userId], 'notice_comment', { roomName: rName, actorName: currentUserRef.current.name, content: t, contentTitle: notice.title }, { targetPath: `/room/${notice.roomId}/notice/${nid}`, roomId: notice.roomId });
       saveInAppNotifications([notice.userId], notice.roomId, 'notice_comment', `[${notice.title}] 새 댓글`, `${currentUserRef.current.name}: ${t}`, `/room/${notice.roomId}/notice/${nid}`);
     }
     await refreshAllData();
@@ -781,7 +809,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
     if (useNoti) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
-      sendPushNotification(memberIds, `[${rName}] 새 영상 피드백`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${rid}/feedback`, roomId: rid });
+      sendTypedPush(memberIds, 'video_new', { roomName: rName, actorName: currentUserRef.current.name, content: t }, { targetPath: `/room/${rid}/feedback`, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'video_new', '새로운 피드백 영상', `${currentUserRef.current.name}: ${t}`, `/room/${rid}/feedback`);
     }
     addRoomActivity(rid, 'video', t);
@@ -795,7 +823,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const video = videosMapped.find(v => v.id === vid);
     if (video && video.userId !== currentUserRef.current.id) {
       const rName = roomsData.find(r=>r.id===video.roomId)?.name || '';
-      sendPushNotification([video.userId], `[${rName}] '${video.title}' 피드백`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${video.roomId}/feedback`, roomId: video.roomId });
+      sendTypedPush([video.userId], 'video_comment', { roomName: rName, actorName: currentUserRef.current.name, content: t, contentTitle: video.title }, { targetPath: `/room/${video.roomId}/feedback`, roomId: video.roomId });
       saveInAppNotifications([video.userId], video.roomId, 'video_comment', `[${video.title}] 새 피드백`, `${currentUserRef.current.name}: ${t}`, `/room/${video.roomId}/feedback`);
     }
     await refreshAllData();
@@ -809,7 +837,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
     if (useNoti) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
-      sendPushNotification(memberIds, `[${rName}] 새 아카이브`, `${currentUserRef.current.name}${d ? `: ${d}` : ''}`, { targetPath: `/room/${rid}/archive`, roomId: rid });
+      sendTypedPush(memberIds, 'archive_new', { roomName: rName, actorName: currentUserRef.current.name, content: d || '' }, { targetPath: `/room/${rid}/archive`, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'archive_new', '새로운 아카이브', `${currentUserRef.current.name}${d ? `: ${d}` : ''}`, `/room/${rid}/archive`);
     }
     addRoomActivity(rid, 'archive', d);
@@ -823,7 +851,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const photo = photosMapped.find(p => p.id === phid);
     if (photo && photo.userId !== currentUserRef.current.id) {
       const rName = roomsData.find(r=>r.id===photo.roomId)?.name || '';
-      sendPushNotification([photo.userId], `[${rName}] 아카이브 댓글`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${photo.roomId}/archive`, roomId: photo.roomId });
+      sendTypedPush([photo.userId], 'archive_comment', { roomName: rName, actorName: currentUserRef.current.name, content: t }, { targetPath: `/room/${photo.roomId}/archive`, roomId: photo.roomId });
       saveInAppNotifications([photo.userId], photo.roomId, 'archive_comment', '아카이브 새 댓글', `${currentUserRef.current.name}: ${t}`, `/room/${photo.roomId}/archive`);
     }
     await refreshAllData();
@@ -842,14 +870,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
     if (s.useNotification !== false) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
-      sendPushNotification(memberIds, `[${rName}] 새 투표`, `${currentUserRef.current.name}: ${q}`, { targetPath: `/room/${rid}/vote`, roomId: rid });
+      sendTypedPush(memberIds, 'vote_new', { roomName: rName, actorName: currentUserRef.current.name, content: q }, { targetPath: `/room/${rid}/vote`, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'vote_new', '새로운 투표', `${currentUserRef.current.name}: ${q}`, `/room/${rid}/vote`);
     }
     addRoomActivity(rid, 'vote', q);
     await refreshAllData();
   };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
-  const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
+  const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) { const rName = roomsData.find(r=>r.id===vote.roomId)?.name || ''; sendTypedPush((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), 'vote_closed', { roomName: rName, contentTitle: vote.question }, { targetPath: `/room/${vote.roomId}/vote`, roomId: vote.roomId }); } await refreshAllData(); };
   const respondToVote = async (vid: string, oids: string[]) => {
     if (!currentUserRef.current) return;
     const userId = currentUserRef.current.id;
@@ -910,14 +938,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
     if (useNoti) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
-      sendPushNotification(memberIds, `[${rName}] 새 일정 조율`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${rid}/schedule`, roomId: rid });
+      sendTypedPush(memberIds, 'schedule_new', { roomName: rName, actorName: currentUserRef.current.name, content: t }, { targetPath: `/room/${rid}/schedule`, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'schedule_new', '새로운 일정 조율', `${currentUserRef.current.name}: ${t}`, `/room/${rid}/schedule`);
     }
     addRoomActivity(rid, 'schedule', t);
     await refreshAllData();
   };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
-  const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
+  const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) { const rName = roomsData.find(r=>r.id===sch.roomId)?.name || ''; sendTypedPush((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), 'schedule_closed', { roomName: rName, contentTitle: sch.title }, { targetPath: `/room/${sch.roomId}/schedule`, roomId: sch.roomId }); } await refreshAllData(); };
   const respondToSchedule = async (sid: string, oids: string[]) => {
     if (!currentUserRef.current) return;
     const userId = currentUserRef.current.id;

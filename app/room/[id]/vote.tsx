@@ -193,7 +193,7 @@ export default function VoteScreen() {
       if (!isPro) return Alert.alert(t('proFeatureTitle'), t('unreadReminderProOnly'), [{ text: t('cancel'), style: 'cancel' }, { text: t('viewMembership'), onPress: () => router.push('/subscription') }]);
       setIsSendingUnreadReminder(true);
       try {
-        await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${vote.question}" ${t('unreadVoteReminder')}`);
+        await sendDirectReminder(unreadMembers, 'unread_reminder_vote', { roomName: currentRoom?.name || '', contentTitle: vote.question });
         Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), t('notificationSent'));
       } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
       finally { setIsSendingUnreadReminder(false); }

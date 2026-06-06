@@ -342,7 +342,7 @@ const ko: TranslationDict = {
   archiveCommentSettings: '댓글 설정',
 
   // Schedule screen
-  scheduleTitle: '연습 일정',
+  scheduleTitle: '일정 조율',
   scheduleHeaderSub: '언제 모일 수 있는지 표시해보아요!',
   noSchedule: '등록된 일정이 없습니다.',
   scheduleDetail: '일정 상세',
@@ -403,7 +403,7 @@ const ko: TranslationDict = {
   sat: '토',
 
   // Vote screen
-  voteTitle: '의사결정 투표',
+  voteTitle: '투표',
   voteHeaderSub: '중요한 결정은 함께 내려보아요!',
   noVote: '등록된 투표가 없습니다.',
   voteDetail: '투표 상세',
@@ -665,6 +665,7 @@ const ko: TranslationDict = {
   // Room activity feed
   recentActivity: '최근 활동',
   noActivity: '최근 활동이 없습니다.',
+  allActivity: '전체 활동',
   activityNotice: '님이 공지를 등록했습니다.',
   activityVideo: '님이 영상 피드백을 등록했습니다.',
   activitySchedule: '님이 일정 조율을 등록했습니다.',
@@ -988,7 +989,7 @@ const en: TranslationDict = {
   editCommentTitle: 'Edit Comment',
   archiveCommentSettings: 'Comment Settings',
 
-  scheduleTitle: 'Practice Schedule',
+  scheduleTitle: 'Schedule',
   scheduleHeaderSub: 'Show when you are available!',
   noSchedule: 'No schedules yet.',
   scheduleDetail: 'Schedule detail',
@@ -1048,7 +1049,7 @@ const en: TranslationDict = {
   fri: 'Fri',
   sat: 'Sat',
 
-  voteTitle: 'Decision voting',
+  voteTitle: 'Vote',
   voteHeaderSub: "Let's decide together!",
   noVote: 'No votes yet.',
   voteDetail: 'Vote detail',
@@ -1305,6 +1306,7 @@ const en: TranslationDict = {
   // Room activity feed
   recentActivity: 'Recent Activity',
   noActivity: 'No recent activity.',
+  allActivity: 'All Activity',
   activityNotice: ' posted a notice.',
   activityVideo: ' posted a video feedback.',
   activitySchedule: ' posted a schedule poll.',
@@ -1622,7 +1624,7 @@ const es: TranslationDict = {
   editCommentTitle: 'Editar comentario',
   archiveCommentSettings: 'Configuración de comentario',
 
-  scheduleTitle: 'Horario de práctica',
+  scheduleTitle: 'Horario',
   scheduleHeaderSub: '¡Muestra cuándo estás disponible!',
   noSchedule: 'No hay horarios.',
   scheduleDetail: 'Detalle del horario',
@@ -1682,7 +1684,7 @@ const es: TranslationDict = {
   fri: 'Vie',
   sat: 'Sáb',
 
-  voteTitle: 'Votación de decisiones',
+  voteTitle: 'Votación',
   voteHeaderSub: '¡Decidamos juntos!',
   noVote: 'No hay votaciones.',
   voteDetail: 'Detalle de votación',
@@ -1934,6 +1936,7 @@ const es: TranslationDict = {
   notifRoomLabel: 'Sala',
   recentActivity: 'Actividad reciente',
   noActivity: 'Sin actividad reciente.',
+  allActivity: 'Toda la actividad',
   activityNotice: ' publicó un aviso.',
   activityVideo: ' publicó un video.',
   activitySchedule: ' publicó un horario.',
@@ -2251,7 +2254,7 @@ const id: TranslationDict = {
   editCommentTitle: 'Edit Komentar',
   archiveCommentSettings: 'Pengaturan Komentar',
 
-  scheduleTitle: 'Jadwal Latihan',
+  scheduleTitle: 'Jadwal',
   scheduleHeaderSub: 'Tunjukkan kapan Anda tersedia!',
   noSchedule: 'Belum ada jadwal.',
   scheduleDetail: 'Detail jadwal',
@@ -2311,7 +2314,7 @@ const id: TranslationDict = {
   fri: 'Jum',
   sat: 'Sab',
 
-  voteTitle: 'Voting keputusan',
+  voteTitle: 'Voting',
   voteHeaderSub: 'Mari putuskan bersama!',
   noVote: 'Belum ada voting.',
   voteDetail: 'Detail voting',
@@ -2563,6 +2566,7 @@ const id: TranslationDict = {
   notifRoomLabel: 'Ruang',
   recentActivity: 'Aktivitas Terbaru',
   noActivity: 'Tidak ada aktivitas terbaru.',
+  allActivity: 'Semua Aktivitas',
   activityNotice: ' memposting pengumuman.',
   activityVideo: ' memposting video feedback.',
   activitySchedule: ' memposting jadwal.',
@@ -2880,7 +2884,7 @@ const ja: TranslationDict = {
   editCommentTitle: 'コメントを編集',
   archiveCommentSettings: 'コメント設定',
 
-  scheduleTitle: '練習スケジュール',
+  scheduleTitle: 'スケジュール',
   scheduleHeaderSub: 'いつ空いているか表示してみましょう！',
   noSchedule: 'スケジュールはありません。',
   scheduleDetail: 'スケジュール詳細',
@@ -2940,7 +2944,7 @@ const ja: TranslationDict = {
   fri: '金',
   sat: '土',
 
-  voteTitle: '意思決定投票',
+  voteTitle: '投票',
   voteHeaderSub: '大切な決定は一緒に！',
   noVote: '投票はありません。',
   voteDetail: '投票詳細',
@@ -3192,6 +3196,7 @@ const ja: TranslationDict = {
   notifRoomLabel: 'ルーム',
   recentActivity: '最近のアクティビティ',
   noActivity: '最近のアクティビティはありません。',
+  allActivity: 'すべての活動',
   activityNotice: 'さんがお知らせを投稿しました。',
   activityVideo: 'さんが動画フィードバックを投稿しました。',
   activitySchedule: 'さんがスケジュール調整を投稿しました。',
@@ -3509,7 +3514,7 @@ const zh: TranslationDict = {
   editCommentTitle: '编辑评论',
   archiveCommentSettings: '评论设置',
 
-  scheduleTitle: '练习日程',
+  scheduleTitle: '日程',
   scheduleHeaderSub: '展示您的空闲时间！',
   noSchedule: '暂无日程。',
   scheduleDetail: '日程详情',
@@ -3569,7 +3574,7 @@ const zh: TranslationDict = {
   fri: '五',
   sat: '六',
 
-  voteTitle: '决策投票',
+  voteTitle: '投票',
   voteHeaderSub: '让我们一起决定！',
   noVote: '暂无投票。',
   voteDetail: '投票详情',
@@ -3821,6 +3826,7 @@ const zh: TranslationDict = {
   notifRoomLabel: '房间',
   recentActivity: '最近活动',
   noActivity: '没有最近活动。',
+  allActivity: '所有活动',
   activityNotice: '发布了公告。',
   activityVideo: '发布了视频反馈。',
   activitySchedule: '发布了日程调整。',
@@ -4138,7 +4144,7 @@ const th: TranslationDict = {
   editCommentTitle: 'แก้ไขความคิดเห็น',
   archiveCommentSettings: 'การตั้งค่าความคิดเห็น',
 
-  scheduleTitle: 'ตารางซ้อม',
+  scheduleTitle: 'ตาราง',
   scheduleHeaderSub: 'แสดงเวลาที่คุณว่าง!',
   noSchedule: 'ยังไม่มีตาราง',
   scheduleDetail: 'รายละเอียดตาราง',
@@ -4198,7 +4204,7 @@ const th: TranslationDict = {
   fri: 'ศ.',
   sat: 'ส.',
 
-  voteTitle: 'โหวตการตัดสินใจ',
+  voteTitle: 'โหวต',
   voteHeaderSub: 'มาตัดสินใจร่วมกัน!',
   noVote: 'ยังไม่มีการโหวต',
   voteDetail: 'รายละเอียดการโหวต',
@@ -4450,6 +4456,7 @@ const th: TranslationDict = {
   notifRoomLabel: 'ห้อง',
   recentActivity: 'กิจกรรมล่าสุด',
   noActivity: 'ไม่มีกิจกรรมล่าสุด',
+  allActivity: 'กิจกรรมทั้งหมด',
   activityNotice: ' โพสต์ประกาศ',
   activityVideo: ' โพสต์วิดีโอ',
   activitySchedule: ' โพสต์ตารางเวลา',

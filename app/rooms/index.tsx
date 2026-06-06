@@ -57,6 +57,20 @@ export default function RoomsScreen() {
     markAllNotificationsRead,
     t,
   } = useAppContext();
+
+  const getNotifTypeLabel = (type: string): string => {
+    const map: Record<string, string> = {
+      notice_new:      t('notice'),
+      notice_comment:  `${t('notice')} ${t('commentLabel')}`,
+      video_new:       t('videoFeedback'),
+      video_comment:   `${t('videoFeedback')} ${t('commentLabel')}`,
+      archive_new:     t('archiveMenuTitle'),
+      archive_comment: `${t('archiveMenuTitle')} ${t('commentLabel')}`,
+      vote_new:        t('voteTitle'),
+      schedule_new:    t('scheduleTitle'),
+    };
+    return map[type] || t('notification');
+  };
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -348,7 +362,7 @@ export default function RoomsScreen() {
                           <Text style={[styles.notifRoomName, { color: theme.primary }]} numberOfLines={1}>{notif.roomName}</Text>
                           <Text style={[styles.notifTime, { color: theme.textSecondary }]}>{formatNotifTime(notif.createdAt)}</Text>
                         </View>
-                        <Text style={[styles.notifItemTitle, { color: theme.text }]} numberOfLines={1}>{notif.title}</Text>
+                        <Text style={[styles.notifItemTitle, { color: theme.text }]} numberOfLines={1}>{getNotifTypeLabel(notif.type)}</Text>
                         <Text style={[styles.notifItemBody, { color: theme.textSecondary }]} numberOfLines={1}>{notif.body}</Text>
                       </View>
                       {!notif.isRead && <View style={[styles.notifUnreadDot, { backgroundColor: theme.primary }]} />}

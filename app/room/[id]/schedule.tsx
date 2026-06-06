@@ -389,7 +389,7 @@ export default function ScheduleScreen() {
       if (!isPro) return Alert.alert(t('proFeatureTitle'), t('unreadReminderProOnly'), [{ text: t('cancel'), style: 'cancel' }, { text: t('viewMembership'), onPress: () => router.push('/subscription') }]);
       setIsSendingUnreadReminder(true);
       try {
-        await sendDirectReminder(unreadMembers, t('sendUnreadReminder').replace(' (PRO)', ''), `"${schedule.title}" 일정 조율을 아직 확인하지 않으셨어요!`);
+        await sendDirectReminder(unreadMembers, 'unread_reminder_schedule', { roomName: currentRoom?.name || '', contentTitle: schedule.title });
         Alert.alert(t('sendUnreadReminder').replace(' (PRO)', ''), t('notificationSent'));
       } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
       finally { setIsSendingUnreadReminder(false); }
