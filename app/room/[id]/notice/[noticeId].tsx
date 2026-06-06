@@ -25,7 +25,7 @@ export default function NoticeDetailScreen() {
   const [editNoticeTitle, setEditNoticeTitle] = useState('');
   const [editNoticeContent, setEditNoticeContent] = useState('');
   const [editNoticeImages, setEditNoticeImages] = useState<string[]>([]);
-  const [useNotification, setUseNotification] = useState(true);
+  const [useNotification, setUseNotification] = useState(false);
   const [isUpdatingNotice, setIsUpdatingNotice] = useState(false);
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export default function NoticeDetailScreen() {
       setEditNoticeTitle(notice.title);
       setEditNoticeContent(notice.content);
       setEditNoticeImages(notice.imageUrls || []);
-      setUseNotification(notice.useNotification !== false);
+      setUseNotification(notice.useNotification === true);
     }
   }, [notice, showEditNotice]);
 

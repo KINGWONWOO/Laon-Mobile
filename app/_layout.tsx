@@ -52,7 +52,9 @@ function RootLayoutNav() {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('[Push] Notification Clicked:', response);
       const data = response.notification.request.content.data;
-      if (data.roomId) {
+      if (data?.targetPath) {
+        router.push(data.targetPath as any);
+      } else if (data?.roomId) {
         router.push(`/room/${data.roomId}`);
       }
     });

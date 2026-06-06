@@ -655,6 +655,24 @@ const ko: TranslationDict = {
   guideStep4Desc: "배치된 대형 블록을 클릭하면 **길이 조절 및 이동**이 가능하며, 한번 더 클릭하면 **복사 및 삭제**를 할 수 있습니다. 이 모드에서도 **댄서들의 위치를 자유롭게 변경**할 수 있습니다.",
   guideStep5Title: '5. 저장 및 내보내기',
   guideStep5Desc: "작업 중에는 **상단의 '저장' 버튼을 눌러 자주 저장**하는 것이 안전합니다. '내보내기' 버튼을 통해 파일로 저장하거나 동료들에게 피드백을 발행할 수 있습니다.",
+
+  // In-app notifications
+  notificationsTitle: '알림',
+  noNotifications: '알림이 없습니다',
+  markAllRead: '전체 읽음',
+  notifRoomLabel: '방',
+
+  // Room activity feed
+  recentActivity: '최근 활동',
+  noActivity: '최근 활동이 없습니다.',
+  activityNotice: '님이 공지를 등록했습니다.',
+  activityVideo: '님이 영상 피드백을 등록했습니다.',
+  activitySchedule: '님이 일정 조율을 등록했습니다.',
+  activityVote: '님이 투표를 등록했습니다.',
+  activityArchive: '님이 아카이브를 등록했습니다.',
+  activityMemberJoin: '님이 방에 참여했습니다.',
+  activityMemberLeave: '님이 방을 떠났습니다.',
+  homeFeed: '홈 피드',
 };
 
 const en: TranslationDict = {
@@ -1277,6 +1295,24 @@ const en: TranslationDict = {
   guideStep4Desc: "Click a placed formation block to **adjust length or move it**, and click again to **copy or delete**. You can also **freely change dancer positions** in this mode.",
   guideStep5Title: '5. Save & Export',
   guideStep5Desc: "It is safe to **save frequently by clicking the 'Save' button at the top** while working. You can save as a file or publish feedback for teammates via the 'Export' button.",
+
+  // In-app notifications
+  notificationsTitle: 'Notifications',
+  noNotifications: 'No notifications',
+  markAllRead: 'Mark all read',
+  notifRoomLabel: 'Room',
+
+  // Room activity feed
+  recentActivity: 'Recent Activity',
+  noActivity: 'No recent activity.',
+  activityNotice: ' posted a notice.',
+  activityVideo: ' posted a video feedback.',
+  activitySchedule: ' posted a schedule poll.',
+  activityVote: ' posted a vote.',
+  activityArchive: ' posted an archive.',
+  activityMemberJoin: ' joined the room.',
+  activityMemberLeave: ' left the room.',
+  homeFeed: 'Home Feed',
 };
 
 const es: TranslationDict = {
@@ -1891,6 +1927,21 @@ const es: TranslationDict = {
   guideStep4Desc: "Haz clic en un bloque de formación colocado para **ajustar la longitud o moverlo**, y haz clic de nuevo para **copiar o eliminar**. También puedes **cambiar libremente las posiciones de los bailarines** en este modo.",
   guideStep5Title: '5. Guardar y exportar',
   guideStep5Desc: "Es seguro **guardar frecuentemente haciendo clic en el botón 'Guardar' en la parte superior** mientras trabajas. Puedes guardar como un archivo o publicar feedback para tus compañeros a través del botón 'Exportar'.",
+
+  notificationsTitle: 'Notificaciones',
+  noNotifications: 'Sin notificaciones',
+  markAllRead: 'Marcar todo leído',
+  notifRoomLabel: 'Sala',
+  recentActivity: 'Actividad reciente',
+  noActivity: 'Sin actividad reciente.',
+  activityNotice: ' publicó un aviso.',
+  activityVideo: ' publicó un video.',
+  activitySchedule: ' publicó un horario.',
+  activityVote: ' publicó una votación.',
+  activityArchive: ' publicó un archivo.',
+  activityMemberJoin: ' se unió a la sala.',
+  activityMemberLeave: ' salió de la sala.',
+  homeFeed: 'Feed de Inicio',
 };
 
 const id: TranslationDict = {
@@ -2505,6 +2556,21 @@ const id: TranslationDict = {
   guideStep4Desc: "Klik blok formasi yang ditempatkan untuk **menyesuaikan panjang atau memindahkannya**, dan klik lagi untuk **menyalin atau menghapus**. Anda juga dapat **bebas mengubah posisi penari** dalam mode ini.",
   guideStep5Title: '5. Simpan & Ekspor',
   guideStep5Desc: "Aman untuk **sering menyimpan dengan mengklik tombol 'Simpan' di bagian atas** saat bekerja. Anda dapat menyimpan sebagai file atau memublikasikan feedback untuk rekan tim melalui tombol 'Ekspor'.",
+
+  notificationsTitle: 'Notifikasi',
+  noNotifications: 'Tidak ada notifikasi',
+  markAllRead: 'Tandai semua dibaca',
+  notifRoomLabel: 'Ruang',
+  recentActivity: 'Aktivitas Terbaru',
+  noActivity: 'Tidak ada aktivitas terbaru.',
+  activityNotice: ' memposting pengumuman.',
+  activityVideo: ' memposting video feedback.',
+  activitySchedule: ' memposting jadwal.',
+  activityVote: ' memposting voting.',
+  activityArchive: ' memposting arsip.',
+  activityMemberJoin: ' bergabung ke ruang.',
+  activityMemberLeave: ' keluar dari ruang.',
+  homeFeed: 'Feed Beranda',
 };
 
 const ja: TranslationDict = {
@@ -3119,6 +3185,21 @@ const ja: TranslationDict = {
   guideStep4Desc: "配置された隊形ブロックをクリックすると**長さ調節や移動**が可能で、もう一度クリックすると**コピーや削除**ができます。このモードでも**ダンサーの位置を自由に変更**できます。",
   guideStep5Title: '5. 保存と書き出し',
   guideStep5Desc: "作業中は**上部の「保存」ボタンを押してこまめに保存**するのが安全です。「エクスポート」ボタンからファイルとして保存したり、仲間にフィードバックを公開したりできます。",
+
+  notificationsTitle: '通知',
+  noNotifications: '通知はありません',
+  markAllRead: 'すべて既読',
+  notifRoomLabel: 'ルーム',
+  recentActivity: '最近のアクティビティ',
+  noActivity: '最近のアクティビティはありません。',
+  activityNotice: 'さんがお知らせを投稿しました。',
+  activityVideo: 'さんが動画フィードバックを投稿しました。',
+  activitySchedule: 'さんがスケジュール調整を投稿しました。',
+  activityVote: 'さんが投票を投稿しました。',
+  activityArchive: 'さんがアーカイブを投稿しました。',
+  activityMemberJoin: 'さんがルームに参加しました。',
+  activityMemberLeave: 'さんがルームを退出しました。',
+  homeFeed: 'ホームフィード',
 };
 
 const zh: TranslationDict = {
@@ -3733,6 +3814,21 @@ const zh: TranslationDict = {
   guideStep4Desc: "点击已布置的队形块可以**调整长度或移动**，再次点击可以**复制或删除**。在此模式下也可以**自由更改舞者的位置**。",
   guideStep5Title: '5. 保存和导出',
   guideStep5Desc: "建议在工作时**点击上方的“保存”按钮频繁保存**以确保安全。可以通过“导出”按钮保存为文件或向队友发布反馈。",
+
+  notificationsTitle: '通知',
+  noNotifications: '没有通知',
+  markAllRead: '全部已读',
+  notifRoomLabel: '房间',
+  recentActivity: '最近活动',
+  noActivity: '没有最近活动。',
+  activityNotice: '发布了公告。',
+  activityVideo: '发布了视频反馈。',
+  activitySchedule: '发布了日程调整。',
+  activityVote: '发布了投票。',
+  activityArchive: '发布了档案。',
+  activityMemberJoin: '加入了房间。',
+  activityMemberLeave: '离开了房间。',
+  homeFeed: '主页动态',
 };
 
 const th: TranslationDict = {
@@ -4347,6 +4443,21 @@ const th: TranslationDict = {
   guideStep4Desc: "คลิกที่บล็อกรูปแบบที่จัดวางแล้วเพื่อ **ปรับความยาวหรือย้าย** และคลิกอีกครั้งเพื่อ **คัดลอกหรือลบ** คุณยังสามารถ **เปลี่ยนตำแหน่งนักเต้นได้อย่างอิสระ** ในโหมดนี้",
   guideStep5Title: '5. บันทึกและส่งออก',
   guideStep5Desc: "เพื่อความปลอดภัยควร **กดปุ่ม 'บันทึก' ด้านบนบ่อยๆ** ขณะทำงาน คุณสามารถบันทึกเป็นไฟล์หรือเผยแพร่ฟีดแบ็กให้เพื่อนร่วมทีมได้ผ่านปุ่ม 'ส่งออก'",
+
+  notificationsTitle: 'การแจ้งเตือน',
+  noNotifications: 'ไม่มีการแจ้งเตือน',
+  markAllRead: 'ทำเครื่องหมายอ่านทั้งหมด',
+  notifRoomLabel: 'ห้อง',
+  recentActivity: 'กิจกรรมล่าสุด',
+  noActivity: 'ไม่มีกิจกรรมล่าสุด',
+  activityNotice: ' โพสต์ประกาศ',
+  activityVideo: ' โพสต์วิดีโอ',
+  activitySchedule: ' โพสต์ตารางเวลา',
+  activityVote: ' โพสต์โหวต',
+  activityArchive: ' โพสต์คลังข้อมูล',
+  activityMemberJoin: ' เข้าร่วมห้อง',
+  activityMemberLeave: ' ออกจากห้อง',
+  homeFeed: 'ฟีดหน้าหลัก',
 };
 
 export const translations: Record<Language, TranslationDict> = { ko, en, es, id, ja, zh, th };

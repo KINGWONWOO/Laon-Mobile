@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useMemo, useRef } from 'react';
-import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, UserSubscription } from '../types';
+import { User, Room, Notice, VideoFeedback, Photo, Schedule, Vote, ThemeType, Formation, UserSubscription, InAppNotification, RoomActivity } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { roomService } from '../services/roomService';
@@ -90,6 +90,10 @@ interface AppContextType {
   publishFormationAsFeedback: (roomId: string, formationId: string, title: string, currentData?: any, choreographyVideoUrl?: string) => Promise<void>;
 
   sendPushNotification: (userIds: string[], title: string, body: string, data?: any) => Promise<void>;
+  inAppNotifications: InAppNotification[];
+  unreadNotificationCount: number;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
   refreshAllData: () => Promise<void>;
   themeType: ThemeType;
   setThemeType: (type: ThemeType) => Promise<void>;
@@ -231,6 +235,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (err) {
       console.error('[Push] sendPushNotification threw:', err);
+    }
+  };
+
+  const saveInAppNotifications = async (
+    userIds: string[],
+    roomId: string,
+    type: string,
+    title: string,
+    body: string,
+    targetPath?: string
+  ) => {
+    if (!userIds.length) return;
+    const room = roomsData.find(r => r.id === roomId);
+    const roomName = room?.name || '';
+    try {
+      await supabase.from('notifications').insert(
+        userIds.map(uid => ({
+          user_id: uid,
+          room_id: roomId,
+          room_name: roomName,
+          type,
+          title,
+          body,
+          target_path: targetPath || null,
+          is_read: false,
+        }))
+      );
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    } catch (e) {
+      console.error('[InAppNotif] Save error:', e);
+    }
+  };
+
+  const addRoomActivity = async (roomId: string, type: string, contentTitle?: string) => {
+    if (!currentUserRef.current) return;
+    try {
+      await supabase.from('room_activity').insert({
+        room_id: roomId,
+        type,
+        actor_id: currentUserRef.current.id,
+        actor_name: currentUserRef.current.name,
+        content_title: contentTitle || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ['room_activity', roomId] });
+    } catch (e) {
+      console.error('[Activity] Save error:', e);
     }
   };
 
@@ -483,6 +533,54 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     placeholderData: keepPreviousData
   });
 
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications', currentUser?.id],
+    queryFn: async () => {
+      if (!currentUser) return [];
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      return data || [];
+    },
+    enabled: !!currentUser,
+    placeholderData: keepPreviousData
+  });
+
+  const inAppNotifications: InAppNotification[] = (notificationsQuery.data || []).map((n: any) => ({
+    id: n.id,
+    userId: n.user_id,
+    roomId: n.room_id,
+    roomName: n.room_name,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    targetPath: n.target_path,
+    isRead: n.is_read,
+    createdAt: new Date(n.created_at).getTime(),
+  }));
+
+  const unreadNotificationCount = inAppNotifications.filter(n => !n.isRead).length;
+
+  const markNotificationRead = async (id: string) => {
+    queryClient.setQueryData(['notifications', currentUser?.id], (old: any[]) =>
+      (old || []).map((n: any) => n.id === id ? { ...n, is_read: true } : n)
+    );
+    supabase.from('notifications').update({ is_read: true }).eq('id', id).then(() => {});
+  };
+
+  const markAllNotificationsRead = async () => {
+    queryClient.setQueryData(['notifications', currentUser?.id], (old: any[]) =>
+      (old || []).map((n: any) => ({ ...n, is_read: true }))
+    );
+    if (currentUser) {
+      supabase.from('notifications').update({ is_read: true })
+        .eq('user_id', currentUser.id).eq('is_read', false).then(() => {});
+    }
+  };
+
   const formationsQuery = useQuery({ queryKey: ['formations', roomIds], queryFn: async () => {
     const { data: remote } = await supabase.from('formations').select('*').in('room_id', roomIds).order('created_at', { ascending: false });
     const localRaw = await AsyncStorage.getItem('local_formations');
@@ -584,13 +682,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id);
     if (room) {
       console.log('[AppContext] Join success, updating cache for room:', room.id);
-      // 즉시 캐시에 추가 (로딩 없이 바로 화면 표시)
       queryClient.setQueryData(['rooms', currentUserRef.current.id], (old: any[] | undefined) => {
         const list = old || [];
         if (list.find((r: any) => r.id === room.id)) return list;
         return [...list, room];
       });
-      // 백그라운드에서 전체 데이터 갱신
+      addRoomActivity(rid, 'member_join');
       await refreshAllData();
     }
     return room;
@@ -604,59 +701,152 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
     await refreshAllData(); 
   };
-  const leaveRoom = async (id: string) => { 
-    if (!currentUserRef.current) return; 
-    await roomService.leaveRoom(id, currentUserRef.current.id); 
-    
-    // 즉시 캐시에서 제거 (로딩 없이 바로 화면 표시 반영)
+  const leaveRoom = async (id: string) => {
+    if (!currentUserRef.current) return;
+    await addRoomActivity(id, 'member_leave');
+    await roomService.leaveRoom(id, currentUserRef.current.id);
     queryClient.setQueryData(['rooms', currentUserRef.current.id], (old: any[] | undefined) => {
       return (old || []).filter((r: any) => r.id !== id);
     });
-    
     await refreshAllData();
   };
   const kickMember = async (roomId: string, userId: string) => {
+    const kickedUser = allUsers.find(u => u.id === userId);
+    if (kickedUser) {
+      await supabase.from('room_activity').insert({
+        room_id: roomId,
+        type: 'member_leave',
+        actor_id: userId,
+        actor_name: kickedUser.name,
+        content_title: null,
+      }).then(() => queryClient.invalidateQueries({ queryKey: ['room_activity', roomId] }));
+    }
     await roomService.kickMember(roomId, userId);
     await refreshAllData();
   };
   const submitFeedback = async (type: 'bug' | 'feature' | 'other', content: string) => { if (!currentUserRef.current) throw new Error(t('loginRequired')); await contentService.submitFeedback(currentUserRef.current.id, type, content); };
   
-  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => { if (!currentUserRef.current) return; await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 공지사항', t); await refreshAllData(); };
-  const updateNotice = async (id: string, updates: Partial<Notice>) => { await contentService.updateNotice(id, { title: updates.title, content: updates.content, is_pinned: updates.isPinned, image_urls: updates.imageUrls }); await refreshAllData(); };
+  const addNotice = async (rid: string, t: string, c: string, p = false, imgs: string[] = [], useNoti = true) => {
+    if (!currentUserRef.current) return;
+    const { data: notice } = await contentService.addNotice(rid, currentUserRef.current.id, t, c, p, imgs, useNoti);
+    // Optimistic update: inject new notice into cache immediately so it appears without waiting for refetch
+    if (notice) {
+      queryClient.setQueryData(['notices', roomIds], (old: any[] | undefined) => [
+        ...(old || []),
+        { ...notice, notice_comments: [] },
+      ]);
+    }
+    const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
+    const targetPath = (notice as any)?.id ? `/room/${rid}/notice/${(notice as any).id}` : `/room/${rid}`;
+    if (useNoti) {
+      const rName = roomsData.find(r=>r.id===rid)?.name || '';
+      sendPushNotification(memberIds, `[${rName}] 새 공지`, `${currentUserRef.current.name}: ${t}`, { targetPath, roomId: rid });
+      saveInAppNotifications(memberIds, rid, 'notice_new', '새로운 공지사항', `${currentUserRef.current.name}: ${t}`, targetPath);
+    }
+    addRoomActivity(rid, 'notice', t);
+    await refreshAllData();
+  };
+  const updateNotice = async (id: string, updates: Partial<Notice>) => {
+    await contentService.updateNotice(id, { title: updates.title, content: updates.content, is_pinned: updates.isPinned, image_urls: updates.imageUrls });
+    if (updates.useNotification && currentUserRef.current) {
+      const notice = noticesMapped.find(n => n.id === id);
+      if (notice) {
+        const memberIds = (roomsData.find(r=>r.id===notice.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id);
+        const rName = roomsData.find(r=>r.id===notice.roomId)?.name || '';
+        const newTitle = updates.title || notice.title;
+        sendPushNotification(memberIds, `[${rName}] 공지 수정`, `${currentUserRef.current.name}: ${newTitle}`, { targetPath: `/room/${notice.roomId}/notice/${notice.id}`, roomId: notice.roomId });
+        saveInAppNotifications(memberIds, notice.roomId, 'notice_new', '공지 수정됨', `${currentUserRef.current.name}: ${newTitle}`, `/room/${notice.roomId}/notice/${notice.id}`);
+      }
+    }
+    await refreshAllData();
+  };
   const deleteNotice = async (id: string) => { await contentService.deleteNotice(id); await refreshAllData(); };
-  const addNoticeComment = async (nid: string, t: string, pid?: string) => { if (!currentUserRef.current) return; await contentService.addNoticeComment(nid, currentUserRef.current.id, t, pid); const notice = noticesMapped.find(n => n.id === nid); if (notice && notice.userId !== currentUserRef.current.id) sendPushNotification([notice.userId], '공지에 새로운 댓글', t); await refreshAllData(); };
+  const addNoticeComment = async (nid: string, t: string, pid?: string) => {
+    if (!currentUserRef.current) return;
+    await contentService.addNoticeComment(nid, currentUserRef.current.id, t, pid);
+    const notice = noticesMapped.find(n => n.id === nid);
+    if (notice && notice.userId !== currentUserRef.current.id) {
+      const rName = roomsData.find(r=>r.id===notice.roomId)?.name || '';
+      sendPushNotification([notice.userId], `[${rName}] '${notice.title}' 댓글`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${notice.roomId}/notice/${nid}`, roomId: notice.roomId });
+      saveInAppNotifications([notice.userId], notice.roomId, 'notice_comment', `[${notice.title}] 새 댓글`, `${currentUserRef.current.name}: ${t}`, `/room/${notice.roomId}/notice/${nid}`);
+    }
+    await refreshAllData();
+  };
   const updateNoticeComment = async (id: string, t: string) => { await contentService.updateNoticeComment(id, t); await refreshAllData(); };
   const deleteNoticeComment = async (id: string) => { await contentService.deleteNoticeComment(id); await refreshAllData(); };
 
-  const addVideo = async (rid: string, url: string, t: string, useNoti = true, choreographyUrl?: string) => { 
-    if (!currentUserRef.current) return; 
-    await contentService.addVideo(rid, currentUserRef.current.id, url, t, useNoti, choreographyUrl); 
-    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 피드백 영상', t); 
-    await refreshAllData(); 
+  const addVideo = async (rid: string, url: string, t: string, useNoti = true, choreographyUrl?: string) => {
+    if (!currentUserRef.current) return;
+    await contentService.addVideo(rid, currentUserRef.current.id, url, t, useNoti, choreographyUrl);
+    const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
+    if (useNoti) {
+      const rName = roomsData.find(r=>r.id===rid)?.name || '';
+      sendPushNotification(memberIds, `[${rName}] 새 영상 피드백`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${rid}/feedback`, roomId: rid });
+      saveInAppNotifications(memberIds, rid, 'video_new', '새로운 피드백 영상', `${currentUserRef.current.name}: ${t}`, `/room/${rid}/feedback`);
+    }
+    addRoomActivity(rid, 'video', t);
+    await refreshAllData();
   };
   const updateVideo = async (id: string, t: string) => { await contentService.updateVideo(id, t); await refreshAllData(); };
   const deleteVideo = async (id: string) => { await contentService.deleteVideo(id); await refreshAllData(); };
-  const addComment = async (vid: string, t: string, ts: number, pid?: string) => { if (!currentUserRef.current) return; await contentService.addVideoComment(vid, currentUserRef.current.id, t, ts, pid); const video = videosMapped.find(v => v.id === vid); if (video && video.userId !== currentUserRef.current.id) sendPushNotification([video.userId], '영상에 새로운 피드백', t); await refreshAllData(); };
+  const addComment = async (vid: string, t: string, ts: number, pid?: string) => {
+    if (!currentUserRef.current) return;
+    await contentService.addVideoComment(vid, currentUserRef.current.id, t, ts, pid);
+    const video = videosMapped.find(v => v.id === vid);
+    if (video && video.userId !== currentUserRef.current.id) {
+      const rName = roomsData.find(r=>r.id===video.roomId)?.name || '';
+      sendPushNotification([video.userId], `[${rName}] '${video.title}' 피드백`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${video.roomId}/feedback`, roomId: video.roomId });
+      saveInAppNotifications([video.userId], video.roomId, 'video_comment', `[${video.title}] 새 피드백`, `${currentUserRef.current.name}: ${t}`, `/room/${video.roomId}/feedback`);
+    }
+    await refreshAllData();
+  };
   const updateComment = async (id: string, t: string) => { await contentService.updateVideoComment(id, t); await refreshAllData(); };
   const deleteComment = async (id: string) => { await contentService.deleteVideoComment(id); await refreshAllData(); };
 
-  const addPhoto = async (rid: string, url: string, d?: string, useNoti = true) => { if (!currentUserRef.current) return; await storageService.uploadToGallery(rid, currentUserRef.current.id, url, d); if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 아카이브', d || '새로운 사진'); await refreshAllData(); };
+  const addPhoto = async (rid: string, url: string, d?: string, useNoti = true) => {
+    if (!currentUserRef.current) return;
+    await storageService.uploadToGallery(rid, currentUserRef.current.id, url, d);
+    const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
+    if (useNoti) {
+      const rName = roomsData.find(r=>r.id===rid)?.name || '';
+      sendPushNotification(memberIds, `[${rName}] 새 아카이브`, `${currentUserRef.current.name}${d ? `: ${d}` : ''}`, { targetPath: `/room/${rid}/archive`, roomId: rid });
+      saveInAppNotifications(memberIds, rid, 'archive_new', '새로운 아카이브', `${currentUserRef.current.name}${d ? `: ${d}` : ''}`, `/room/${rid}/archive`);
+    }
+    addRoomActivity(rid, 'archive', d);
+    await refreshAllData();
+  };
   const updatePhoto = async (id: string, d: string) => { await contentService.updatePhoto(id, d); await refreshAllData(); };
   const deletePhoto = async (id: string) => { await contentService.deletePhoto(id); await refreshAllData(); };
-  const addPhotoComment = async (phid: string, t: string, pid?: string) => { if (!currentUserRef.current) return; await contentService.addPhotoComment(phid, currentUserRef.current.id, t, pid); const photo = photosMapped.find(p => p.id === phid); if (photo && photo.userId !== currentUserRef.current.id) sendPushNotification([photo.userId], '아카이브에 새로운 댓글', t); await refreshAllData(); };
+  const addPhotoComment = async (phid: string, t: string, pid?: string) => {
+    if (!currentUserRef.current) return;
+    await contentService.addPhotoComment(phid, currentUserRef.current.id, t, pid);
+    const photo = photosMapped.find(p => p.id === phid);
+    if (photo && photo.userId !== currentUserRef.current.id) {
+      const rName = roomsData.find(r=>r.id===photo.roomId)?.name || '';
+      sendPushNotification([photo.userId], `[${rName}] 아카이브 댓글`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${photo.roomId}/archive`, roomId: photo.roomId });
+      saveInAppNotifications([photo.userId], photo.roomId, 'archive_comment', '아카이브 새 댓글', `${currentUserRef.current.name}: ${t}`, `/room/${photo.roomId}/archive`);
+    }
+    await refreshAllData();
+  };
   const updatePhotoComment = async (id: string, t: string) => { await contentService.updatePhotoComment(id, t); await refreshAllData(); };
   const deletePhotoComment = async (id: string) => { await contentService.deletePhotoComment(id); await refreshAllData(); };
 
-  const addVote = async (rid: string, q: string, opts: string[], s: any) => { 
+  const addVote = async (rid: string, q: string, opts: string[], s: any) => {
     if (!currentUserRef.current) return;
-    const { data: v, error } = await contentService.addVote(rid, currentUserRef.current.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes); 
+    const { data: v, error } = await contentService.addVote(rid, currentUserRef.current.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes);
     if (error) throw error;
     if (v) {
       const { error: oError } = await contentService.addVoteOptions(v.id, opts);
       if (oError) throw oError;
     }
-    if (s.useNotification !== false) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 투표', q); 
-    await refreshAllData(); 
+    const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
+    if (s.useNotification !== false) {
+      const rName = roomsData.find(r=>r.id===rid)?.name || '';
+      sendPushNotification(memberIds, `[${rName}] 새 투표`, `${currentUserRef.current.name}: ${q}`, { targetPath: `/room/${rid}/vote`, roomId: rid });
+      saveInAppNotifications(memberIds, rid, 'vote_new', '새로운 투표', `${currentUserRef.current.name}: ${q}`, `/room/${rid}/vote`);
+    }
+    addRoomActivity(rid, 'vote', q);
+    await refreshAllData();
   };
   const updateVote = async (id: string, updates: Partial<Vote>) => { await contentService.updateVote(id, { question: updates.question, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeVote = async (id: string) => { await updateVote(id, { deadline: Date.now() }); const vote = votesMapped.find(v => v.id === id); if (vote) sendPushNotification((roomsData.find(r=>r.id===vote.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '투표 종료', `"${vote.question}" 투표가 종료되었습니다.`); await refreshAllData(); };
@@ -709,16 +899,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     contentService.markScheduleViewed(sid, uid).catch(() => {});
   };
 
-  const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => { 
+  const addSchedule = async (rid: string, t: string, opts: string[], useNoti = true, dl?: number, reminderMinutes?: number) => {
     if (!currentUserRef.current) return;
-    const { data: s, error } = await contentService.addSchedule(rid, currentUserRef.current.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes); 
+    const { data: s, error } = await contentService.addSchedule(rid, currentUserRef.current.id, t, useNoti, dl ? new Date(dl).toISOString() : undefined, reminderMinutes);
     if (error) throw error;
     if (s) {
       const { error: oError } = await contentService.addScheduleOptions(s.id, opts);
       if (oError) throw oError;
     }
-    if (useNoti) sendPushNotification((roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id), '새로운 일정 조율', t); 
-    await refreshAllData(); 
+    const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
+    if (useNoti) {
+      const rName = roomsData.find(r=>r.id===rid)?.name || '';
+      sendPushNotification(memberIds, `[${rName}] 새 일정 조율`, `${currentUserRef.current.name}: ${t}`, { targetPath: `/room/${rid}/schedule`, roomId: rid });
+      saveInAppNotifications(memberIds, rid, 'schedule_new', '새로운 일정 조율', `${currentUserRef.current.name}: ${t}`, `/room/${rid}/schedule`);
+    }
+    addRoomActivity(rid, 'schedule', t);
+    await refreshAllData();
   };
   const updateSchedule = async (id: string, updates: Partial<Schedule>) => { await contentService.updateSchedule(id, { title: updates.title, deadline: updates.deadline ? new Date(updates.deadline).toISOString() : undefined, use_notification: updates.useNotification, reminder_before: updates.reminderMinutes }); await refreshAllData(); };
   const closeSchedule = async (id: string) => { await updateSchedule(id, { deadline: Date.now() }); const sch = schedulesMapped.find(s => s.id === id); if (sch) sendPushNotification((roomsData.find(r=>r.id===sch.roomId)?.members || []).filter(uid=>uid!==currentUserRef.current?.id), '일정 조율 종료', `"${sch.title}" 일정 조율이 종료되었습니다.`); await refreshAllData(); };
@@ -781,11 +977,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     schedules: schedulesMapped, addSchedule, updateSchedule, respondToSchedule, deleteSchedule, closeSchedule, markScheduleViewed,
     votes: votesMapped, addVote, updateVote, respondToVote, deleteVote, closeVote, markVoteViewed,
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
-    sendPushNotification, refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
+    sendPushNotification, inAppNotifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
     updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder, sendDirectReminder,
     language, setLanguage, t
   }), [
     currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,
+    inAppNotifications, unreadNotificationCount,
     themeType, customColor, customBackgroundColor, theme, roomProfiles, roomProfilesQuery.data, blockedUsers, isPro, language, t
   ]);
 

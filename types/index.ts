@@ -141,6 +141,29 @@ export type Alarm = {
   viewedBy: string[]; // User IDs who viewed the alarm
 };
 
+export type InAppNotification = {
+  id: string;
+  userId: string;
+  roomId: string | null;
+  roomName: string;
+  type: string;
+  title: string;
+  body: string;
+  targetPath?: string | null;
+  isRead: boolean;
+  createdAt: number;
+};
+
+export type RoomActivity = {
+  id: string;
+  roomId: string;
+  type: string;
+  actorId: string | null;
+  actorName: string;
+  contentTitle: string | null;
+  createdAt: number;
+};
+
 export type ThemeType = 'light' | 'dark' | 'pink' | 'shiba';
 
 // --- Formation Management Types ---

@@ -7,8 +7,29 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import AdBanner from '../../components/ui/AdBanner';
 import { Shadows } from '../../constants/theme';
-import { supabase } from '../../lib/supabase';
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../../constants/translations';
+
+function formatNotifTime(ts: number): string {
+  const now = new Date();
+  const d = new Date(ts);
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (now.toDateString() === d.toDateString()) return hm;
+  const yesterday = new Date(now.getTime() - 86400000);
+  if (yesterday.toDateString() === d.toDateString()) return `어제 ${hm}`;
+  return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${hm}`;
+}
+
+const NOTIF_TYPE_ICON: Record<string, { icon: string; color: string }> = {
+  notice_new:     { icon: 'megaphone',           color: '#FF6B6B' },
+  notice_comment: { icon: 'chatbubble',          color: '#FF6B6B' },
+  video_new:      { icon: 'videocam',            color: '#5E5CE6' },
+  video_comment:  { icon: 'chatbubble-ellipses', color: '#5E5CE6' },
+  schedule_new:   { icon: 'calendar',            color: '#FF9F43' },
+  vote_new:       { icon: 'checkbox',            color: '#A06CD5' },
+  archive_new:    { icon: 'images',              color: '#4ECDC4' },
+  archive_comment:{ icon: 'chatbubble',          color: '#4ECDC4' },
+};
+
 
 export default function RoomsScreen() {
   const {
@@ -30,6 +51,10 @@ export default function RoomsScreen() {
     setLanguage,
     submitFeedback,
     refreshAllData,
+    inAppNotifications,
+    unreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
     t,
   } = useAppContext();
   const router = useRouter();
@@ -41,6 +66,7 @@ export default function RoomsScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature' | 'other'>('bug');
   const [feedbackContent, setFeedbackContent] = useState('');
@@ -199,22 +225,28 @@ export default function RoomsScreen() {
         </View>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.border + '33' }]} onPress={handleOpenSettings}>
-            <Ionicons name="settings-outline" size={20} color={theme.text} />
-            <Text style={[styles.actionIconText, { color: theme.text }]}>{t('settings')}</Text>
+          <TouchableOpacity style={[styles.iconOnlyBtn, { backgroundColor: theme.border + '33', marginRight: 6 }]} onPress={() => setShowNotificationsModal(true)}>
+            <Ionicons name="notifications-outline" size={20} color={theme.text} />
+            {unreadNotificationCount > 0 && (
+              <View style={[styles.notifBadge, { backgroundColor: theme.error }]}>
+                <Text style={styles.notifBadgeText}>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.error + '22', marginLeft: 8 }]} onPress={logout}>
+          <TouchableOpacity style={[styles.iconOnlyBtn, { backgroundColor: theme.border + '33', marginRight: 6 }]} onPress={handleOpenSettings}>
+            <Ionicons name="settings-outline" size={20} color={theme.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.iconOnlyBtn, { backgroundColor: theme.error + '22' }]} onPress={logout}>
             <Ionicons name="log-out-outline" size={20} color={theme.error} />
-            <Text style={[styles.actionIconText, { color: theme.error }]}>{t('logout')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.titleRow}>
         <Text style={[styles.title, { color: theme.text }]}>{t('myRooms')}</Text>
-        <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity style={[styles.actionIconButton, { marginRight: 8, backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
-            <Ionicons name="enter-outline" size={20} color={theme.background} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/rooms/join')}>
+            <Ionicons name="enter-outline" size={18} color={theme.background} />
             <Text style={[styles.actionIconText, { color: theme.background }]}>{t('join')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionIconButton, { backgroundColor: theme.primary }]} onPress={handleCreateRoom}>
@@ -262,6 +294,72 @@ export default function RoomsScreen() {
         <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.background} />
         <Text style={[styles.feedbackFabText, { color: theme.background }]}>{t('feedbackFab')}</Text>
       </TouchableOpacity>
+
+      <Modal visible={showNotificationsModal} animationType="fade" transparent onRequestClose={() => setShowNotificationsModal(false)}>
+        <View style={styles.centeredModalOverlay}>
+          <View style={[styles.notifDialog, { backgroundColor: theme.card }]}>
+            <View style={styles.notifHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.notifTitle, { color: theme.text }]}>{t('notificationsTitle')}</Text>
+                {unreadNotificationCount > 0 && (
+                  <View style={[styles.notifCountPill, { backgroundColor: theme.error }]}>
+                    <Text style={styles.notifCountPillText}>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {unreadNotificationCount > 0 && (
+                  <TouchableOpacity onPress={markAllNotificationsRead}>
+                    <Text style={[styles.notifMarkAll, { color: theme.primary }]}>{t('markAllRead')}</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowNotificationsModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {inAppNotifications.length === 0 ? (
+              <View style={styles.notifEmpty}>
+                <Ionicons name="notifications-off-outline" size={48} color={theme.border} />
+                <Text style={[styles.notifEmptyText, { color: theme.textSecondary }]}>{t('noNotifications')}</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 350 }}>
+                {inAppNotifications.map(notif => {
+                  const meta = NOTIF_TYPE_ICON[notif.type] || { icon: 'notifications', color: theme.primary };
+                  return (
+                    <TouchableOpacity
+                      key={notif.id}
+                      style={[styles.notifItem, { opacity: notif.isRead ? 0.55 : 1, borderBottomColor: theme.border }]}
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        markNotificationRead(notif.id);
+                        if (notif.targetPath) {
+                          setShowNotificationsModal(false);
+                          router.push(notif.targetPath as any);
+                        }
+                      }}
+                    >
+                      <View style={[styles.notifIconCircle, { backgroundColor: meta.color + '18' }]}>
+                        <Ionicons name={meta.icon as any} size={20} color={meta.color} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={[styles.notifRoomName, { color: theme.primary }]} numberOfLines={1}>{notif.roomName}</Text>
+                          <Text style={[styles.notifTime, { color: theme.textSecondary }]}>{formatNotifTime(notif.createdAt)}</Text>
+                        </View>
+                        <Text style={[styles.notifItemTitle, { color: theme.text }]} numberOfLines={1}>{notif.title}</Text>
+                        <Text style={[styles.notifItemBody, { color: theme.textSecondary }]} numberOfLines={1}>{notif.body}</Text>
+                      </View>
+                      {!notif.isRead && <View style={[styles.notifUnreadDot, { backgroundColor: theme.primary }]} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showFeedbackModal} animationType="slide" transparent onRequestClose={() => setShowFeedbackModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.feedbackOverlay}>
@@ -456,4 +554,24 @@ const styles = StyleSheet.create({
   feedbackInput: { borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 14, height: 120, marginBottom: 16 },
   feedbackSubmitBtn: { padding: 16, borderRadius: 14, alignItems: 'center' },
   feedbackSubmitText: { fontWeight: 'bold', fontSize: 15 },
+
+  iconOnlyBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  centeredModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  notifDialog: { width: '100%', borderRadius: 24, paddingTop: 20, overflow: 'hidden' },
+  notifBadge: { position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  notifBadgeText: { color: '#fff', fontSize: 9, fontWeight: '900' },
+  notifCountPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
+  notifCountPillText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  notifHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  notifTitle: { fontSize: 18, fontWeight: '800' },
+  notifMarkAll: { fontSize: 13, fontWeight: '700' },
+  notifEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  notifEmptyText: { marginTop: 12, fontSize: 14 },
+  notifItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  notifIconCircle: { width: 40, height: 40, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  notifRoomName: { fontSize: 11, fontWeight: '800', marginBottom: 2 },
+  notifItemTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  notifItemBody: { fontSize: 12 },
+  notifTime: { fontSize: 11 },
+  notifUnreadDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 8 },
 });

@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase';
 export const contentService = {
   // --- Notices ---
   addNotice: async (rid: string, uid: string, t: string, c: string, p: boolean, imgs: string[], useNoti: boolean) => {
-    return await supabase.from('notices').insert([{ 
-      room_id: rid, user_id: uid, title: t, content: c, is_pinned: p, image_urls: imgs, use_notification: useNoti 
-    }]);
+    return await supabase.from('notices').insert([{
+      room_id: rid, user_id: uid, title: t, content: c, is_pinned: p, image_urls: imgs, use_notification: useNoti
+    }]).select().single();
   },
   updateNotice: async (id: string, updates: { title?: string, content?: string, is_pinned?: boolean, image_urls?: string[] }) => {
     return await supabase.from('notices').update(updates).eq('id', id);

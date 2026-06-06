@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ScrollView, Alert, RefreshControl, Image, Platform, ActivityIndicator, KeyboardAvoidingView, Switch } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +28,7 @@ export default function RoomMainScreen() {
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [noticeUseNoti, setNoticeUseNoti] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -48,6 +51,20 @@ export default function RoomMainScreen() {
   const [bannerHeight, setBannerHeight] = useState(0);
 
   const myRoomProfile = getRoomUserProfile(id as string, currentUser?.id || '');
+
+  const { data: roomActivities = [] } = useQuery({
+    queryKey: ['room_activity', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('room_activity')
+        .select('*')
+        .eq('room_id', id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      return data || [];
+    },
+    enabled: !!id,
+  });
 
   if (!room) {
     return (
@@ -108,8 +125,8 @@ export default function RoomMainScreen() {
           return storageService.uploadToR2(`notices/${id}`, uri, fileName);
         })
       );
-      await addNotice(id as string, noticeTitle, noticeContent, false, uploadedUrls);
-      setNoticeTitle(''); setNoticeContent(''); setSelectedImages([]); setShowAddAddNotice(false);
+      await addNotice(id as string, noticeTitle, noticeContent, false, uploadedUrls, noticeUseNoti);
+      setNoticeTitle(''); setNoticeContent(''); setSelectedImages([]); setNoticeUseNoti(false); setShowAddAddNotice(false);
     } catch (e: any) { Alert.alert(t('error'), e.message); } finally { setIsSubmitting(false); }
   };
 
@@ -180,6 +197,26 @@ export default function RoomMainScreen() {
       }
     }
   ];
+
+  const ACTIVITY_META: Record<string, { icon: string; color: string; suffix: (lang: string) => string }> = {
+    notice:       { icon: 'megaphone',   color: '#FF6B6B', suffix: () => t('activityNotice') },
+    video:        { icon: 'videocam',    color: '#5E5CE6', suffix: () => t('activityVideo') },
+    schedule:     { icon: 'calendar',    color: '#FF9F43', suffix: () => t('activitySchedule') },
+    vote:         { icon: 'checkbox',    color: '#A06CD5', suffix: () => t('activityVote') },
+    archive:      { icon: 'images',      color: '#4ECDC4', suffix: () => t('activityArchive') },
+    member_join:  { icon: 'person-add',  color: '#45B7D1', suffix: () => t('activityMemberJoin') },
+    member_leave: { icon: 'person-remove', color: '#888', suffix: () => t('activityMemberLeave') },
+  };
+
+  const formatActivityTime = (ts: string) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    if (now.toDateString() === d.toDateString()) return hm;
+    const yesterday = new Date(now.getTime() - 86400000);
+    if (yesterday.toDateString() === d.toDateString()) return `어제 ${hm}`;
+    return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${hm}`;
+  };
 
   const coreActions = [
     { title: t('scheduleMenuTitle'), icon: 'calendar', path: `/room/${id}/schedule`, color: '#FF6B6B', desc: t('scheduleMenuDesc') },
@@ -266,9 +303,17 @@ export default function RoomMainScreen() {
               <Text style={[styles.sectionLabel, { color: theme.primary }]}>NOTICE</Text>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('notice')}</Text>
             </View>
-            <TouchableOpacity style={[styles.addNoticeSmallBtn, {backgroundColor: theme.primary}]} onPress={() => setShowAddAddNotice(true)}>
-              <Ionicons name="add" size={24} color="#fff" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.viewAllBtn, { borderColor: theme.border }]}
+                onPress={() => router.push(`/room/${id}/notices`)}
+              >
+                <Text style={[styles.viewAllText, { color: theme.textSecondary }]}>{t('allNotices')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.addNoticeSmallBtn, {backgroundColor: theme.primary}]} onPress={() => setShowAddAddNotice(true)}>
+                <Ionicons name="add" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {roomNotices.length > 0 ? roomNotices.slice(0, 3).map(notice => (
@@ -276,6 +321,38 @@ export default function RoomMainScreen() {
           )) : (
             <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
               <Text style={{ color: theme.textSecondary }}>{t('noNotice')}</Text>
+            </View>
+          )}
+
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionLabel, { color: theme.primary }]}>ACTIVITY</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('recentActivity')}</Text>
+          </View>
+
+          {roomActivities.length === 0 ? (
+            <View style={[styles.emptyNoticeBox, { backgroundColor: theme.card }]}>
+              <Text style={{ color: theme.textSecondary }}>{t('noActivity')}</Text>
+            </View>
+          ) : (
+            <View style={[styles.activityList, { backgroundColor: theme.card }]}>
+              {roomActivities.map((item: any, idx: number) => {
+                const meta = ACTIVITY_META[item.type] || { icon: 'ellipse', color: theme.primary, suffix: () => '' };
+                return (
+                  <View key={item.id} style={[styles.activityItem, idx < roomActivities.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}>
+                    <View style={[styles.activityIcon, { backgroundColor: meta.color + '15' }]}>
+                      <Ionicons name={meta.icon as any} size={16} color={meta.color} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={[styles.activityText, { color: theme.text }]} numberOfLines={2}>
+                        <Text style={{ fontWeight: '800' }}>{item.actor_name}</Text>
+                        {meta.suffix(language)}
+                        {item.content_title ? <Text style={{ color: theme.textSecondary }}>{` '${item.content_title}'`}</Text> : null}
+                      </Text>
+                    </View>
+                    <Text style={[styles.activityTime, { color: theme.textSecondary }]}>{formatActivityTime(item.created_at)}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
 
@@ -404,7 +481,9 @@ export default function RoomMainScreen() {
               <View style={styles.modalTopBar}>
                 <TouchableOpacity onPress={() => setShowAddAddNotice(false)}><Text style={{color: theme.textSecondary, fontWeight: '600'}}>{t('cancel')}</Text></TouchableOpacity>
                 <Text style={[styles.modalTitleHeader, {color: theme.text}]}>{t('addNoticeTitle')}</Text>
-                <TouchableOpacity onPress={handleAddNotice} disabled={isSubmitting}><Text style={{color: theme.primary, fontWeight: '800'}}>{t('ok')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddNotice} disabled={isSubmitting} style={{ minWidth: 44, alignItems: 'center' }}>
+                  {isSubmitting ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight: '800'}}>{t('ok')}</Text>}
+                </TouchableOpacity>
               </View>
               <ScrollView style={{flex: 1, padding: 24}}>
                 <TextInput style={[styles.fancyTitleInput, { color: theme.text }]} placeholder={t('noticeTitle')} placeholderTextColor={theme.textSecondary + '80'} value={noticeTitle} onChangeText={setNoticeTitle} />
@@ -432,6 +511,10 @@ export default function RoomMainScreen() {
                       <View key={idx} style={styles.imageThumbWrapper}><Image source={{ uri }} style={styles.imageThumb} /><TouchableOpacity style={styles.removeThumbBtn} onPress={() => setSelectedImages(selectedImages.filter((_, i) => i !== idx))}><Ionicons name="close" size={14} color="#fff" /></TouchableOpacity></View>
                     ))}
                   </ScrollView>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 8, paddingHorizontal: 4 }}>
+                  <Text style={{ color: theme.text, fontSize: 15, fontWeight: '700' }}>{t('sendPushNotification')}</Text>
+                  <Switch value={noticeUseNoti} onValueChange={setNoticeUseNoti} trackColor={{ true: theme.primary }} thumbColor="#fff" />
                 </View>
               </ScrollView>
             </View>
@@ -481,6 +564,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.8 },
   noticeHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, marginBottom: 16 },
   addNoticeSmallBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', ...Shadows.soft },
+  viewAllBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12, borderWidth: 1 },
+  viewAllText: { fontSize: 12, fontWeight: '700' },
   emptyNoticeBox: { padding: 30, borderRadius: 28, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#ddd' },
   coreGrid: { gap: 12 },
   coreCard: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 28, ...Shadows.soft },
@@ -492,6 +577,11 @@ const styles = StyleSheet.create({
   gridCard: { width: '48%', padding: 20, borderRadius: 28, marginBottom: 16, alignItems: 'center', ...Shadows.soft },
   gridIconCircle: { width: 48, height: 48, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   gridCardTitle: { fontSize: 14, fontWeight: '800' },
+  activityList: { borderRadius: 20, overflow: 'hidden', marginBottom: 4 },
+  activityItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  activityIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  activityText: { fontSize: 13, lineHeight: 18 },
+  activityTime: { fontSize: 11, marginLeft: 8, flexShrink: 0 },
   testNotiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
   roomDeleteLink: { marginTop: 16, alignItems: 'center', paddingBottom: 20 },
   roomDeleteText: { color: '#ff4444', fontSize: 13, fontWeight: '600', opacity: 0.5 },
@@ -515,5 +605,5 @@ const styles = StyleSheet.create({
   polishedInput: { width: '100%', padding: 18, borderRadius: 20, fontSize: 16, fontWeight: '600', marginBottom: 24 },
   polishedModalBtns: { flexDirection: 'row', width: '100%', justifyContent: 'space-between' },
   polishedCancel: { flex: 0.45, padding: 18, alignItems: 'center' },
-  polishedSave: { flex: 0.5, padding: 18, borderRadius: 20, alignItems: 'center', ...Shadows.soft }
+  polishedSave: { flex: 0.5, padding: 18, borderRadius: 20, alignItems: 'center', ...Shadows.soft },
 });
