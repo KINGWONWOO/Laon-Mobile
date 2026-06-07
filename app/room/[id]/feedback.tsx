@@ -306,7 +306,7 @@ export default function FeedbackScreen() {
   }, [showCommentInput]);
 
   const handlePickVideo = async () => {
-    const access = checkProAccess('feedback_limit');
+    const access = checkProAccess('feedback_limit', id as string);
     if (!access.canAccess && roomVideos.length >= (access.limit || 10)) {
       return Alert.alert(
         t('videoUploadLimitTitle'),
@@ -1088,9 +1088,14 @@ export default function FeedbackScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={{alignItems: 'center'}}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>{t('videoFeedback')}</Text>
-          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomVideos.length} / {isPro ? '100' : '10'}</Text>
+          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomVideos.length} / {(isPro || currentRoom?.leaderIsPro) ? '100' : '10'}</Text>
         </View>
         <TouchableOpacity onPress={() => setShowAddModal(true)}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
+      </View>
+
+      <View style={[styles.autoDeleteBanner, { backgroundColor: theme.isDark ? 'rgba(255,180,0,0.12)' : 'rgba(255,160,0,0.1)' }]}>
+        <Ionicons name="time-outline" size={13} color="#E6A000" />
+        <Text style={styles.autoDeleteBannerText}>{t('inactiveAutoDeleteWarning')}</Text>
       </View>
 
       <View style={styles.filterBar}>
@@ -1188,6 +1193,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 15, borderBottomWidth: 0.5 },
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
+  autoDeleteBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 10, marginBottom: 0, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  autoDeleteBannerText: { fontSize: 11, color: '#E6A000', fontWeight: '700', marginLeft: 6, flex: 1 },
   filterBar: { flexDirection: 'row', padding: 15, paddingHorizontal: 20 },
   filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10, ...Shadows.soft },
   filterText: { fontSize: 13, fontWeight: '800' },

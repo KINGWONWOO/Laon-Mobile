@@ -11,11 +11,20 @@ export const roomService = {
     const rIds = membership?.map(m => m.room_id) || [];
     if (rIds.length === 0) return [];
     const { data: rooms } = await supabase.from('rooms').select('*, room_members(user_id)').in('id', rIds);
+    const leaderIds = [...new Set((rooms || []).map(r => r.leader_id))];
+    const { data: leaderProfiles } = await supabase.from('profiles').select('id, subscription_tier, subscription_expiry').in('id', leaderIds);
+    const isLeaderPro = (leaderId: string) => {
+      const p = (leaderProfiles || []).find(p => p.id === leaderId);
+      if (!p || p.subscription_tier !== 'pro') return false;
+      if (p.subscription_expiry && new Date(p.subscription_expiry).getTime() < Date.now()) return false;
+      return true;
+    };
     return (rooms || []).map(r => ({
       ...r,
       leaderId: r.leader_id,
       imageUri: r.image_uri,
-      members: (r.room_members || []).map((rm: any) => rm.user_id)
+      members: (r.room_members || []).map((rm: any) => rm.user_id),
+      leaderIsPro: isLeaderPro(r.leader_id),
     })) as Room[];
   },
 

@@ -112,7 +112,7 @@ export default function ArchiveScreen() {
   const handleUpload = async () => {
     if (!selectedContent || !description.trim()) return;
 
-    const access = checkProAccess('archive_limit');
+    const access = checkProAccess('archive_limit', id as string);
     if (!access.canAccess && roomPhotos.length >= (access.limit || 20)) {
       return Alert.alert(
         t('archiveLimitExceeded'),
@@ -291,9 +291,14 @@ export default function ArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={{alignItems: 'center'}}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>{t('archiveTitle')}</Text>
-          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomPhotos.length} / {isPro ? '∞' : '20'}</Text>
+          <Text style={{fontSize: 10, color: theme.textSecondary, fontWeight: '700'}}>{roomPhotos.length} / {(isPro || currentRoom?.leaderIsPro) ? '∞' : '20'}</Text>
         </View>
         <TouchableOpacity onPress={() => { setShowAddModal(true); setSelectedContent(null); setDescription(''); }}><Ionicons name="add" size={30} color={theme.primary} /></TouchableOpacity>
+      </View>
+
+      <View style={[styles.autoDeleteBanner, { backgroundColor: theme.isDark ? 'rgba(255,180,0,0.12)' : 'rgba(255,160,0,0.1)' }]}>
+        <Ionicons name="time-outline" size={13} color="#E6A000" />
+        <Text style={styles.autoDeleteBannerText}>{t('inactiveAutoDeleteWarning')}</Text>
       </View>
 
       <FlatList
@@ -608,5 +613,7 @@ const styles = StyleSheet.create({
   removePreview: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12 },
   pickButtonsRow: { flexDirection: 'row', gap: 15 },
   pickTypeBtn: { flex: 1, height: 100, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#888' },
-  videoBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, padding: 4 }
+  videoBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, padding: 4 },
+  autoDeleteBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 10, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  autoDeleteBannerText: { fontSize: 11, color: '#E6A000', fontWeight: '700', marginLeft: 6, flex: 1 },
 });

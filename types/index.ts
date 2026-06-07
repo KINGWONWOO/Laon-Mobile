@@ -21,6 +21,7 @@ export type Room = {
   imageUri?: string;
   leaderId: string;
   members: string[]; // User IDs
+  leaderIsPro?: boolean;
 };
 
 export type NoticeComment = {

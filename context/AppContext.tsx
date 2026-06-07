@@ -109,7 +109,7 @@ interface AppContextType {
   // Subscription
   isPro: boolean;
   purchasePro: (durationDays?: number) => Promise<void>;
-  checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => { canAccess: boolean, limit?: number, current?: number };
+  checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder', roomId?: string) => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
   sendDirectReminder: (userIds: string[], notificationType: string, vars: Record<string, any>) => Promise<void>;
 
@@ -399,16 +399,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     await fetchMyProfile(currentUserRef.current.id);
   };
 
-  const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder') => {
+  const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder', roomId?: string) => {
     if (isPro) return { canAccess: true };
+    const room = roomId ? (queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || []).find((r: any) => r.id === roomId) : null;
+    const roomLeaderIsPro = room?.leaderIsPro === true;
     switch (type) {
       case 'room_count': {
         const count = (queryClient.getQueryData(['rooms', currentUser?.id]) as any[] || []).length;
         return { canAccess: count < 3, limit: 3, current: count };
       }
-      case 'archive_limit': return { canAccess: false, limit: 20 };
+      case 'archive_limit': return roomLeaderIsPro ? { canAccess: true } : { canAccess: false, limit: 20 };
+      case 'feedback_limit': return roomLeaderIsPro ? { canAccess: true } : { canAccess: false, limit: 10 };
       case 'formation': return { canAccess: false };
-      case 'feedback_limit': return { canAccess: false, limit: 10 };
       case 'reminder': return { canAccess: false };
       default: return { canAccess: true };
     }

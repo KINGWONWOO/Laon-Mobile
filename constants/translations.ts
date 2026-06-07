@@ -318,6 +318,7 @@ const ko: TranslationDict = {
   savingUnavailable: '이 기기에서는 저장 기능을 사용할 수 없습니다.',
 
   // Archive screen
+  inactiveAutoDeleteWarning: '마지막 열람 후 30일이 지난 파일은 자동으로 삭제됩니다.',
   archiveTitle: '팀 아카이브',
   archiveDetailTitle: '아카이브 상세',
   archiveUploadTitle: '팀 아카이브 업로드',
@@ -968,6 +969,7 @@ const en: TranslationDict = {
   permissionRequired: 'Gallery permission is required. Please allow it in settings.',
   savingUnavailable: 'Saving is not available on this device.',
 
+  inactiveAutoDeleteWarning: 'Files not accessed for 30 days will be automatically deleted.',
   archiveTitle: 'Team archive',
   archiveDetailTitle: 'Archive detail',
   archiveUploadTitle: 'Upload to archive',
@@ -1605,6 +1607,7 @@ const es: TranslationDict = {
   permissionRequired: 'Se requiere permiso de galería. Habilítalo en ajustes.',
   savingUnavailable: 'Guardar no está disponible en este dispositivo.',
 
+  inactiveAutoDeleteWarning: 'Los archivos sin acceso durante 30 días se eliminarán automáticamente.',
   archiveTitle: 'Archivo del equipo',
   archiveDetailTitle: 'Detalle del archivo',
   archiveUploadTitle: 'Subir al archivo',
@@ -2237,6 +2240,7 @@ const id: TranslationDict = {
   permissionRequired: 'Izin galeri diperlukan. Aktifkan di pengaturan.',
   savingUnavailable: 'Penyimpanan tidak tersedia di perangkat ini.',
 
+  inactiveAutoDeleteWarning: 'File yang tidak diakses selama 30 hari akan dihapus secara otomatis.',
   archiveTitle: 'Arsip tim',
   archiveDetailTitle: 'Detail arsip',
   archiveUploadTitle: 'Unggah ke arsip',
@@ -2869,6 +2873,7 @@ const ja: TranslationDict = {
   permissionRequired: 'ギャラリーへのアクセス許可が必要です。設定で許可してください。',
   savingUnavailable: 'このデバイスでは保存機能は使用できません。',
 
+  inactiveAutoDeleteWarning: '最終アクセスから30日が経過したファイルは自動的に削除されます。',
   archiveTitle: 'チームアーカイブ',
   archiveDetailTitle: 'アーカイブ詳細',
   archiveUploadTitle: 'アーカイブにアップロード',
@@ -3501,6 +3506,7 @@ const zh: TranslationDict = {
   permissionRequired: '需要相册权限，请在设置中允许。',
   savingUnavailable: '此设备不支持保存功能。',
 
+  inactiveAutoDeleteWarning: '30天未访问的文件将被自动删除。',
   archiveTitle: '团队档案',
   archiveDetailTitle: '档案详情',
   archiveUploadTitle: '上传到档案',
@@ -4133,6 +4139,7 @@ const th: TranslationDict = {
   permissionRequired: 'ต้องการสิทธิ์แกลเลอรี กรุณาอนุญาตในการตั้งค่า',
   savingUnavailable: 'ไม่สามารถบันทึกได้บนอุปกรณ์นี้',
 
+  inactiveAutoDeleteWarning: 'ไฟล์ที่ไม่ได้เข้าถึงเป็นเวลา 30 วันจะถูกลบโดยอัตโนมัติ',
   archiveTitle: 'คลังทีม',
   archiveDetailTitle: 'รายละเอียดคลัง',
   archiveUploadTitle: 'อัปโหลดไปยังคลัง',
