@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView, Animated as RNAnimated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView, Image, Animated as RNAnimated } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -213,7 +213,6 @@ export default function ScheduleScreen() {
   const isScheduleAuthor = activeSchedule?.userId === currentUser?.id;
   const isScheduleLeader = (currentRoom as any)?.leaderId === currentUser?.id;
   const scheduleOptions = isScheduleAuthor || isScheduleLeader ? [
-    { label: t('remindNotParticipants'), icon: 'notifications-outline', onPress: handleSendReminder },
     ...(isScheduleAuthor ? [{ label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal }] : []),
     { label: activeSchedule?.deadline && new Date(activeSchedule.deadline) < new Date() ? t('closedBadge') : t('closeImmediately'),
       icon: 'stop-circle-outline',
@@ -417,7 +416,7 @@ export default function ScheduleScreen() {
             {/* ─── Unified availability grid (When2meet-style) ─── */}
             <View style={[styles.sectionHeaderRow, { marginBottom: 8 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('timePreference')} / {t('participationStatus')}</Text>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('timePreference')}</Text>
                 <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '700', marginTop: 3 }}>
                   {participants.length} / {allMembers.length}명 응답
                 </Text>
@@ -532,7 +531,9 @@ export default function ScheduleScreen() {
             {/* Legend */}
             <View style={styles.gridLegend}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { borderWidth: 2, borderColor: theme.primary, backgroundColor: theme.primary + '28' }]} />
+                <View style={[styles.legendDot, { borderWidth: 2, borderColor: theme.primary, backgroundColor: theme.primary + 'C0', alignItems: 'center', justifyContent: 'center' }]}>
+                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#fff' }} />
+                </View>
                 <Text style={[styles.legendText, { color: theme.textSecondary }]}>내 선택</Text>
               </View>
               <View style={styles.legendItem}>
@@ -673,7 +674,7 @@ export default function ScheduleScreen() {
             </TouchableOpacity>
           );
         })}</ScrollView>}
-        {show === 'time' && <View style={{flexDirection:'row', height: 180}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}{t('hourSuffix')}</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}{t('minuteSuffix')}</Text></TouchableOpacity>)}</ScrollView></View>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 180}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); newD.setSeconds(0); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}{t('hourSuffix')}</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); newD.setSeconds(0); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}{t('minuteSuffix')}</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
@@ -776,7 +777,7 @@ export default function ScheduleScreen() {
                 <View style={{marginTop: 10, marginBottom: 20}}>
                   <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
                     <Ionicons name="calendar" size={18} color={theme.primary} />
-                    <Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{deadline.toLocaleString()}</Text>
+                    <Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{deadline.toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
                   </TouchableOpacity>
                   {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
                 </View>
@@ -799,7 +800,7 @@ export default function ScheduleScreen() {
                 </>
               )}
 
-              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('sendPushNotification')}</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
+              <View style={styles.settingItem}><Text style={[styles.settingLabel, { color: theme.text }]}>{t('sendScheduleNotification')}</Text><Switch value={useNotification} onValueChange={setUseNotification} trackColor={{ true: theme.primary }} thumbColor="#fff" /></View>
 
               <TouchableOpacity onPress={showEditModal ? handleUpdateSchedule : handleAddSchedule} style={[styles.saveBtn, { backgroundColor: theme.primary }, Shadows.glow]} disabled={isUpdating}>{isUpdating ? <ActivityIndicator color="#fff" /> : <Text style={[styles.saveBtnText, { color: '#fff' }]}>{showEditModal ? t('saveChangesBtn') : t('registerScheduleBtn')}</Text>}</TouchableOpacity>
             </ScrollView>
@@ -808,7 +809,7 @@ export default function ScheduleScreen() {
       </Modal>
 
       <Modal visible={showVoterModal} transparent animationType="fade" onRequestClose={() => setShowVoterModal(false)}>
-        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => <View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20'}]}><Text style={{color: theme.primary, fontWeight: '800'}}>{getUser(vId)?.name?.[0]}</Text></View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{getUser(vId)?.name || t('unknownAuthor')}</Text></View>)}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noParticipants')}</Text>}</View></View></View>
+        <View style={styles.modalOverlayCenter}><View style={[styles.voterModalContent, { backgroundColor: theme.card }, Shadows.medium]}><View style={styles.modalHeader}><Text style={[styles.modalTitle, { color: theme.text, fontSize: 18, fontWeight: '800' }]}>{voterModalTitle}</Text><TouchableOpacity onPress={() => setShowVoterModal(false)}><Ionicons name="close" size={24} color={theme.text} /></TouchableOpacity></View><View style={styles.voterList}>{votersToDisplay.map(vId => { const u = getUser(vId); return (<View key={vId} style={styles.voterListItem}><View style={[styles.voterAvatar, {backgroundColor: theme.primary + '20', overflow: 'hidden'}]}>{u?.profileImage ? <Image source={{ uri: u.profileImage }} style={{ width: '100%', height: '100%' }} /> : <Text style={{color: theme.primary, fontWeight: '800'}}>{u?.name?.[0]}</Text>}</View><Text style={{ color: theme.text, fontWeight: '600', fontSize: 16 }}>{u?.name || t('unknownAuthor')}</Text></View>); })}{votersToDisplay.length === 0 && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noParticipants')}</Text>}</View></View></View>
       </Modal>
       <AdBanner />
     </View>

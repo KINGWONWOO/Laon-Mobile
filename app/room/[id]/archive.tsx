@@ -14,7 +14,7 @@ import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
 
-const { width } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const ITEM_MARGIN = 8;
 const ITEM_SIZE = (width - 32 - (ITEM_MARGIN * (COLUMN_COUNT + 1))) / COLUMN_COUNT;
@@ -67,6 +67,7 @@ export default function ArchiveScreen() {
   const [editCommentText, setEditCommentText] = useState('');
 
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showFullScreen, setShowFullScreen] = useState(false);
 
   // Option Modal states
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
@@ -304,21 +305,21 @@ export default function ArchiveScreen() {
         contentContainerStyle={styles.listContent}
       />
 
-      <Modal visible={!!selectedPhoto} animationType="slide" transparent onRequestClose={() => setSelectedPhoto(null)}>
+      <Modal visible={!!selectedPhoto} animationType="slide" transparent onRequestClose={() => { setSelectedPhoto(null); setShowFullScreen(false); }}>
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
           style={[styles.container, { backgroundColor: theme.background }]}
         >
           <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-            <TouchableOpacity onPress={() => setSelectedPhoto(null)} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => { setSelectedPhoto(null); setShowFullScreen(false); }} style={styles.backBtn}>
               <Ionicons name="close" size={28} color={theme.text} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text }]} numberOfLines={1}>{t('archiveDetailTitle')}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity onPress={handleDownload} style={[styles.saveIconBtn, { backgroundColor: theme.primary + '18', borderColor: theme.primary + '44' }]} disabled={isDownloading}>
+              <TouchableOpacity onPress={handleDownload} style={[styles.downloadBtn, { backgroundColor: theme.primary }]} disabled={isDownloading}>
                 {isDownloading
-                  ? <ActivityIndicator size="small" color={theme.primary} />
-                  : <Ionicons name="download-outline" size={22} color={theme.primary} />}
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <><Ionicons name="arrow-down-circle-outline" size={17} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 13, marginLeft: 5 }}>{t('save')}</Text></>}
               </TouchableOpacity>
               {(selectedPhoto?.userId === currentUser?.id || currentRoom?.leaderId === currentUser?.id) && (
                 <TouchableOpacity onPress={() => setShowPhotoOptions(true)} style={styles.deleteBtn}>
@@ -350,13 +351,23 @@ export default function ArchiveScreen() {
                   </View>
                 </View>
 
-                <View style={{ width: '100%', height: width * 1.1, backgroundColor: '#000', borderRadius: 28, overflow: 'hidden', ...Shadows.soft }}>
+                <TouchableOpacity
+                  activeOpacity={0.95}
+                  disabled={isVideoItem}
+                  onPress={() => setShowFullScreen(true)}
+                  style={{ width: '100%', height: width * 1.1, backgroundColor: '#000', borderRadius: 28, overflow: 'hidden', ...Shadows.soft }}
+                >
                   {isVideoItem ? (
                     <VideoView style={{ width: '100%', height: '100%' }} player={player} contentFit="contain" />
                   ) : (
                     <Image source={{ uri: selectedPhoto?.photoUrl }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
                   )}
-                </View>
+                  {!isVideoItem && (
+                    <View style={styles.fullscreenHint}>
+                      <Ionicons name="expand-outline" size={16} color="#fff" />
+                    </View>
+                  )}
+                </TouchableOpacity>
                 
                 <Text style={[styles.content, { color: theme.text, marginTop: 20 }]}>{selectedPhoto?.description || t('noDescription')}</Text>
 
@@ -407,6 +418,43 @@ export default function ArchiveScreen() {
             }}
             contentContainerStyle={{ paddingBottom: 100 }}
           />
+
+          {showFullScreen && (
+            <View style={styles.fullScreenOverlay}>
+              <ScrollView
+                style={{ flex: 1 }}
+                maximumZoomScale={4}
+                minimumZoomScale={1}
+                centerContent
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Image
+                  source={{ uri: selectedPhoto?.photoUrl }}
+                  style={{ width, height: screenHeight }}
+                  contentFit="contain"
+                />
+              </ScrollView>
+              <TouchableOpacity
+                style={[styles.fullScreenClose, { top: insets.top + 12 }]}
+                onPress={() => setShowFullScreen(false)}
+              >
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
+              <View style={[styles.fullScreenBottomBar, { paddingBottom: insets.bottom + 16 }]}>
+                <TouchableOpacity
+                  style={styles.fullScreenSaveBtn}
+                  onPress={handleDownload}
+                  disabled={isDownloading}
+                >
+                  {isDownloading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <><Ionicons name="arrow-down-circle-outline" size={22} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 15, marginLeft: 8 }}>{t('save')}</Text></>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <OptionModal
             visible={showPhotoOptions}
@@ -521,7 +569,12 @@ const styles = StyleSheet.create({
   backBtn: { padding: 5 },
   headerTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.5 },
   deleteBtn: { padding: 5 },
-  saveIconBtn: { padding: 7, borderRadius: 10, borderWidth: 1, marginRight: 4 },
+  downloadBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 4 },
+  fullscreenHint: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8, padding: 5 },
+  fullScreenOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 100 },
+  fullScreenClose: { position: 'absolute', right: 16, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 8 },
+  fullScreenBottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 16 },
+  fullScreenSaveBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   listContent: { paddingHorizontal: 16, paddingTop: 16 },
   gridItem: { width: ITEM_SIZE, height: ITEM_SIZE * 1.1, margin: ITEM_MARGIN / 2, borderRadius: 20, overflow: 'hidden' },
   gridImage: { width: '100%', height: '100%' },

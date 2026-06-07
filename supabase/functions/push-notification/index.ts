@@ -196,19 +196,21 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'No user_ids provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Fetch profiles (push_token + language)
+    // Fetch profiles (language is needed for everyone, push_token for those who have it)
     const { data: profiles, error: dbError } = await supabase
       .from('profiles')
       .select('id, push_token, language')
       .in('id', user_ids)
-      .not('push_token', 'is', null)
 
     if (dbError) throw dbError
     if (!profiles || profiles.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'No valid push tokens found' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ success: true, message: 'No profiles found' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    const messages = profiles.map((p: { id: string; push_token: string; language: string | null }) => {
+    const pushMessages: any[] = []
+    const dbNotifications: any[] = []
+
+    for (const p of profiles) {
       let title: string
       let body: string
 
@@ -222,30 +224,54 @@ serve(async (req) => {
         body = rawBody || ''
       }
 
-      return {
-        to: p.push_token,
-        sound: 'default',
+      // Add to push messages if token exists
+      if (p.push_token) {
+        pushMessages.push({
+          to: p.push_token,
+          sound: 'default',
+          title,
+          body,
+          data: notifData || {},
+          channelId: 'default',
+        })
+      }
+
+      // Add to DB notifications for everyone
+      dbNotifications.push({
+        user_id: p.id,
+        room_id: notifData?.roomId || null,
+        room_name: safeVarsBase.roomName || '',
+        type: notification_type || 'general',
         title,
         body,
-        data: notifData || {},
-        channelId: 'default',
-      }
-    })
+        target_path: notifData?.targetPath || null,
+      })
+    }
 
-    const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messages),
-    })
+    // Insert into DB notifications
+    if (dbNotifications.length > 0) {
+      const { error: insertErr } = await supabase.from('notifications').insert(dbNotifications)
+      if (insertErr) console.error('[PushFn] DB notification insert error:', insertErr.message)
+    }
 
-    const result = await expoRes.json()
-    console.log('[PushFn] Expo API response:', JSON.stringify(result))
+    // Send push notifications via Expo
+    let expoResult = { success: true, sentCount: 0 }
+    if (pushMessages.length > 0) {
+      const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(pushMessages),
+      })
+      const result = await expoRes.json()
+      console.log('[PushFn] Expo API response:', JSON.stringify(result))
+      expoResult = result
+    }
 
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify(expoResult), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {

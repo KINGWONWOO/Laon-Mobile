@@ -140,7 +140,6 @@ export default function VoteScreen() {
   const isVoteAuthor = activeVote?.userId === currentUser?.id;
   const isVoteLeader = (currentRoom as any)?.leaderId === currentUser?.id;
   const voteOptionsList = isVoteAuthor || isVoteLeader ? [
-    { label: t('notifyNonResponders'), icon: 'notifications-outline', onPress: handleSendReminder },
     ...(isVoteAuthor ? [{ label: t('editTitleDeadline'), icon: 'create-outline', onPress: openEditModal }] : []),
     { label: activeVote?.deadline && new Date(activeVote.deadline) < new Date() ? t('statusClosed') : t('endImmediately'), icon: 'stop-circle-outline', destructive: true, onPress: () => { Alert.alert(t('endVoteTitle'), t('endVoteConfirm'), [{ text: t('cancel'), style: 'cancel' }, { text: t('endAction'), style: 'destructive', onPress: async () => { await closeVote(selectedVoteId!); } }]); } },
     { label: t('delete'), icon: 'trash-outline', destructive: true, onPress: handleDeleteVote }
@@ -282,41 +281,45 @@ export default function VoteScreen() {
               })}
             </View>
 
-            <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 24, marginBottom: 12 }]}>{t('participationStatus')}</Text>
-            <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
-              {([
-                { key: 'readParticipated', members: readAndParticipated, color: theme.primary, bg: theme.primary + '15', nameBg: theme.primary + '10' },
-                { key: 'readNotParticipated', members: readNotParticipated, color: '#FFA500', bg: '#FFA50025', nameBg: '#FFA50015' },
-                { key: 'unread', members: unreadMembers, color: theme.textSecondary, bg: theme.textSecondary + '15', nameBg: theme.textSecondary + '10' },
-              ] as const).map(({ key, members, color, bg, nameBg }, idx) => (
-                <View key={key} style={idx > 0 ? { marginTop: 16 } : undefined}>
-                  <View style={[styles.voterLabelPill, { backgroundColor: bg, alignSelf: 'flex-start', marginBottom: 8 }]}>
-                    <Text style={{ color, fontWeight: '800', fontSize: 11 }} numberOfLines={1}>{t(key)} · {members.length}</Text>
-                  </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {members.length > 0
-                      ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUser(vId)?.name || '?'}</Text>)
-                      : <Text style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 4, opacity: 0.5 }}>-</Text>
-                    }
-                  </ScrollView>
-                </View>
-              ))}
+            {(!vote.isAnonymous || (isOwner && !isClosed && (readNotParticipated.length > 0 || unreadMembers.length > 0))) && (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 24, marginBottom: 12 }]}>{t('participationStatus')}</Text>
+                <View style={[styles.voterSummaryCard, { backgroundColor: theme.card }, Shadows.soft]}>
+                  {!vote.isAnonymous && ([
+                    { key: 'readParticipated', members: readAndParticipated, color: theme.primary, bg: theme.primary + '15', nameBg: theme.primary + '10' },
+                    { key: 'readNotParticipated', members: readNotParticipated, color: '#FFA500', bg: '#FFA50025', nameBg: '#FFA50015' },
+                    { key: 'unread', members: unreadMembers, color: theme.textSecondary, bg: theme.textSecondary + '15', nameBg: theme.textSecondary + '10' },
+                  ] as const).map(({ key, members, color, bg, nameBg }, idx) => (
+                    <View key={key} style={idx > 0 ? { marginTop: 16 } : undefined}>
+                      <View style={[styles.voterLabelPill, { backgroundColor: bg, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                        <Text style={{ color, fontWeight: '800', fontSize: 11 }} numberOfLines={1}>{t(key)} · {members.length}</Text>
+                      </View>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {members.length > 0
+                          ? members.map(vId => <Text key={vId} style={{ fontSize: 12, color: theme.textSecondary, marginRight: 10, fontWeight: '600' }}>{getUser(vId)?.name || '?'}</Text>)
+                          : <Text style={{ fontSize: 11, color: theme.textSecondary, paddingLeft: 4, opacity: 0.5 }}>-</Text>
+                        }
+                      </ScrollView>
+                    </View>
+                  ))}
 
-              {!isClosed && isOwner && readNotParticipated.length > 0 && (
-                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.primary + '15', marginTop: 16 }]} onPress={handleSendReminder} disabled={isSendingReminder}>
-                  {isSendingReminder ? <ActivityIndicator size="small" color={theme.primary} /> : (
-                    <><Ionicons name="notifications" size={15} color={theme.primary} /><Text style={{ color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('notParticipants')}</Text></>
+                  {!isClosed && isOwner && readNotParticipated.length > 0 && (
+                    <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.primary + '15', marginTop: vote.isAnonymous ? 0 : 16 }]} onPress={handleSendReminder} disabled={isSendingReminder}>
+                      {isSendingReminder ? <ActivityIndicator size="small" color={theme.primary} /> : (
+                        <><Ionicons name="notifications" size={15} color={theme.primary} /><Text style={{ color: theme.primary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('notParticipants')}</Text></>
+                      )}
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
-              )}
-              {!isClosed && isOwner && unreadMembers.length > 0 && (
-                <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.textSecondary + '10', marginTop: 8 }]} onPress={handleSendUnreadReminder} disabled={isSendingUnreadReminder}>
-                  {isSendingUnreadReminder ? <ActivityIndicator size="small" color={theme.textSecondary} /> : (
-                    <><Ionicons name="eye-off-outline" size={15} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('sendUnreadReminder')}</Text></>
+                  {!isClosed && isOwner && unreadMembers.length > 0 && (
+                    <TouchableOpacity style={[styles.manualReminderBtn, { backgroundColor: theme.textSecondary + '10', marginTop: 8 }]} onPress={handleSendUnreadReminder} disabled={isSendingUnreadReminder}>
+                      {isSendingUnreadReminder ? <ActivityIndicator size="small" color={theme.textSecondary} /> : (
+                        <><Ionicons name="eye-off-outline" size={15} color={theme.textSecondary} /><Text style={{ color: theme.textSecondary, fontWeight: '800', marginLeft: 8, fontSize: 12, flexShrink: 1 }} numberOfLines={2}>{t('sendUnreadReminder')}</Text></>
+                      )}
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
-              )}
-            </View>
+                </View>
+              </>
+            )}
 
             {isClosed && (
               <View style={[styles.resultBanner, {backgroundColor: theme.primary + '15', borderColor: theme.primary}]}>
@@ -350,7 +353,7 @@ export default function VoteScreen() {
             </TouchableOpacity>
           );
         })}</ScrollView>}
-        {show === 'time' && <View style={{flexDirection:'row', height: 180}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}{t('hourSuffix')}</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}{t('minuteSuffix')}</Text></TouchableOpacity>)}</ScrollView></View>}
+        {show === 'time' && <View style={{flexDirection:'row', height: 180}}><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{hours.map(h => <TouchableOpacity key={h} style={[styles.smallTimeBtn, date.getHours() === h && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setHours(h); newD.setSeconds(0); onDateChange(newD); }}><Text style={{color: date.getHours() === h ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{h}{t('hourSuffix')}</Text></TouchableOpacity>)}</ScrollView><ScrollView style={{flex: 1}} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>{minutes.map(m => <TouchableOpacity key={m} style={[styles.smallTimeBtn, date.getMinutes() === m && {backgroundColor: theme.primary + '20'}]} onPress={() => { const newD = new Date(date); newD.setMinutes(m); newD.setSeconds(0); onDateChange(newD); }}><Text style={{color: date.getMinutes() === m ? theme.primary : theme.text, fontWeight: '700', fontSize: 16}}>{m}{t('minuteSuffix')}</Text></TouchableOpacity>)}</ScrollView></View>}
       </View>
     );
   };
@@ -400,7 +403,7 @@ export default function VoteScreen() {
                 <View style={{marginTop: 10, marginBottom: 20}}>
                   <TouchableOpacity style={[styles.compactRow, {backgroundColor: theme.background}]} onPress={() => setShowPicker(showPicker === 'date' ? null : 'date')}>
                     <Ionicons name="calendar" size={18} color={theme.primary} />
-                    <Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{deadline.toLocaleString()}</Text>
+                    <Text style={{color: theme.text, marginLeft: 10, fontWeight: '700'}}>{deadline.toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
                   </TouchableOpacity>
                   {showPicker && <CompactPicker date={deadline} onDateChange={setDeadline} show={showPicker} setShow={setShowPicker} />}
                 </View>

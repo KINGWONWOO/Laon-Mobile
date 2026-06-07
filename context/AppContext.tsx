@@ -861,14 +861,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const addVote = async (rid: string, q: string, opts: string[], s: any) => {
     if (!currentUserRef.current) return;
-    const { data: v, error } = await contentService.addVote(rid, currentUserRef.current.id, q, s.isAnonymous, s.allowMultiple, s.useNotification ?? true, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes);
+    const useNoti = s.useNotification ?? false;
+    const { data: v, error } = await contentService.addVote(rid, currentUserRef.current.id, q, s.isAnonymous, s.allowMultiple, useNoti, s.deadline ? new Date(s.deadline).toISOString() : undefined, s.reminderMinutes);
     if (error) throw error;
     if (v) {
       const { error: oError } = await contentService.addVoteOptions(v.id, opts);
       if (oError) throw oError;
+      queryClient.setQueryData(['votes', roomIds], (old: any[] = []) => [
+        { ...v, vote_options: [], vote_responses: [], all_responders: [] },
+        ...old,
+      ]);
     }
     const memberIds = (roomsData.find(r=>r.id===rid)?.members || []).filter(id=>id!==currentUserRef.current?.id);
-    if (s.useNotification !== false) {
+    if (useNoti) {
       const rName = roomsData.find(r=>r.id===rid)?.name || '';
       sendTypedPush(memberIds, 'vote_new', { roomName: rName, actorName: currentUserRef.current.name, content: q }, { targetPath: `/room/${rid}/vote`, roomId: rid });
       saveInAppNotifications(memberIds, rid, 'vote_new', '새로운 투표', `${currentUserRef.current.name}: ${q}`, `/room/${rid}/vote`);

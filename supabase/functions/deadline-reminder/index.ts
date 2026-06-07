@@ -19,14 +19,14 @@ const voteTitles: Record<Lang, string> = {
   ja: '[{roomName}] 投票締切まで {timeLabel}', zh: '[{roomName}] 投票截止还有 {timeLabel}', th: '[{roomName}] กำหนดโหวตใน {timeLabel}',
 }
 const scheduleBodies: Record<Lang, string> = {
-  ko: '"{title}" 일정 조율에 아직 참여하지 않으셨어요!', en: 'You haven\'t joined the "{title}" schedule yet!',
-  es: '¡Aún no te has unido a la coordinación "{title}"!', id: 'Anda belum bergabung dalam koordinasi jadwal "{title}"!',
-  ja: '「{title}」のスケジュール調整にまだ参加していません！', zh: '您还没有参加 "{title}" 日程协调！', th: 'คุณยังไม่ได้เข้าร่วมการประสาน "{title}"!',
+  ko: '"{title}" 일정 마감까지 {timeLabel} 남았어요!', en: '"{title}" schedule deadline is in {timeLabel}!',
+  es: '¡Quedan {timeLabel} para "{title}"!', id: 'Tersisa {timeLabel} untuk "{title}"!',
+  ja: '「{title}」の締切まであと{timeLabel}！', zh: '"{title}" 截止还有 {timeLabel}！', th: '"{title}" เหลือเวลา {timeLabel}!',
 }
 const voteBodies: Record<Lang, string> = {
-  ko: '"{title}" 투표에 아직 참여하지 않으셨어요!', en: 'You haven\'t voted in "{title}" yet!',
-  es: '¡Aún no has votado en "{title}"!', id: 'Anda belum berpartisipasi dalam voting "{title}"!',
-  ja: '「{title}」の投票にまだ参加していません！', zh: '您还没有参加 "{title}" 投票！', th: 'คุณยังไม่ได้โหวตใน "{title}"!',
+  ko: '"{title}" 투표 마감까지 {timeLabel} 남았어요!', en: '"{title}" vote deadline is in {timeLabel}!',
+  es: '¡Quedan {timeLabel} para votar "{title}"!', id: 'Tersisa {timeLabel} untuk voting "{title}"!',
+  ja: '「{title}」投票締切まであと{timeLabel}！', zh: '"{title}" 投票截止还有 {timeLabel}！', th: '"{title}" โหวตเหลือเวลา {timeLabel}!',
 }
 
 function getTimeLabel(lang: Lang, minutes: number): string {
@@ -44,46 +44,83 @@ function fill(tmpl: string, vars: Record<string, string>): string {
   return tmpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
 }
 
-async function sendExpoPush(
+async function sendNotifications(
   supabase: any,
   userIds: string[],
   roomName: string,
+  roomId: string,
   contentTitle: string,
   reminderBefore: number,
   type: 'schedule' | 'vote',
-  data: Record<string, unknown> = {}
-) {
-  if (userIds.length === 0) return
+  targetPath: string
+): Promise<string> {
+  if (userIds.length === 0) return 'skipped: no userIds'
 
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profileErr } = await supabase
     .from('profiles')
-    .select('push_token, language')
+    .select('id, push_token, language')
     .in('id', userIds)
-    .not('push_token', 'is', null)
 
-  if (!profiles || profiles.length === 0) return
+  if (profileErr) return `profile query error: ${profileErr.message}`
+  if (!profiles || profiles.length === 0) return `no profiles found for userIds`
 
-  const messages = profiles.map((p: { push_token: string; language: string | null }) => {
+  const pushMessages: any[] = []
+  const dbNotifications: any[] = []
+
+  for (const p of profiles) {
     const lang = ((p.language || 'ko') as Lang)
     const timeLabel = getTimeLabel(lang, reminderBefore)
     const vars = { roomName, title: contentTitle, timeLabel }
+    
     const titleTpl = type === 'schedule' ? scheduleTitles[lang] ?? scheduleTitles.ko : voteTitles[lang] ?? voteTitles.ko
     const bodyTpl = type === 'schedule' ? scheduleBodies[lang] ?? scheduleBodies.ko : voteBodies[lang] ?? voteBodies.ko
-    return {
-      to: p.push_token,
-      sound: 'default',
-      title: fill(titleTpl, vars),
-      body: fill(bodyTpl, vars),
-      data,
-      channelId: 'default',
-    }
-  })
+    
+    const finalTitle = fill(titleTpl, vars)
+    const finalBody = fill(bodyTpl, vars)
 
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
-    body: JSON.stringify(messages),
-  })
+    if (p.push_token) {
+      pushMessages.push({
+        to: p.push_token,
+        sound: 'default',
+        title: finalTitle,
+        body: finalBody,
+        data: { targetPath, roomId },
+        channelId: 'default',
+      })
+    }
+
+    dbNotifications.push({
+      user_id: p.id,
+      room_id: roomId,
+      room_name: roomName,
+      type: type === 'schedule' ? 'schedule_reminder' : 'vote_reminder',
+      title: finalTitle,
+      body: finalBody,
+      target_path: targetPath,
+    })
+  }
+
+  if (dbNotifications.length > 0) {
+    const { error: dbErr } = await supabase.from('notifications').insert(dbNotifications)
+    if (dbErr) console.error('[deadline-reminder] DB notification error:', dbErr.message)
+  }
+
+  if (pushMessages.length > 0) {
+    console.log('[Push] Sending to Expo:', JSON.stringify(pushMessages))
+    try {
+      const expoRes = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Accept-encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
+        body: JSON.stringify(pushMessages),
+      })
+      const expoBody = await expoRes.json()
+      console.log('[Push] Expo response:', JSON.stringify(expoBody))
+    } catch (e: any) {
+      console.error('[Push] Expo fetch error:', e.message)
+    }
+  }
+
+  return `Processed ${profiles.length} users`
 }
 
 serve(async (req) => {
@@ -92,120 +129,131 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
+    console.log('[deadline-reminder] Function invoked at', new Date().toISOString())
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: { Authorization: `Bearer ${serviceRoleKey}` },
+      },
+    })
+
+    const url = new URL(req.url)
+    const testMode = url.searchParams.get('test') === 'true'
     const now = new Date()
     const results: string[] = []
 
-    // 마감 전 알림이 필요한 일정들 조회 (reminder_sent가 null이거나 false인 것)
-    const { data: schedules } = await supabase
+    if (testMode) console.log('[deadline-reminder] ⚠️ TEST MODE — 시간 조건 무시')
+
+    // 1. Schedules
+    let schedulesQuery = supabase
       .from('schedules')
       .select('id, room_id, title, deadline, reminder_before, reminder_sent')
-      .eq('use_notification', true)
-      .or('reminder_sent.is.null,reminder_sent.eq.false')
-      .not('deadline', 'is', null)
       .not('reminder_before', 'is', null)
       .gt('reminder_before', 0)
 
-    // 마감 전 알림이 필요한 투표들 조회
-    const { data: votes } = await supabase
-      .from('votes')
-      .select('id, room_id, question, deadline, reminder_before, reminder_sent')
-      .eq('use_notification', true)
-      .or('reminder_sent.is.null,reminder_sent.eq.false')
-      .not('deadline', 'is', null)
-      .not('reminder_before', 'is', null)
-      .gt('reminder_before', 0)
+    if (!testMode) {
+      schedulesQuery = schedulesQuery
+        .not('reminder_sent', 'is', true)
+        .not('deadline', 'is', null)
+    }
 
-    // 일정 알림 처리
+    const { data: schedules, error: schedErr } = await schedulesQuery
+
+    console.log('[deadline-reminder] schedules found:', schedules?.length ?? 0, schedErr ? `error: ${JSON.stringify(schedErr)}` : 'ok')
+    results.push(`[진단] schedules_found: ${schedules?.length ?? 0}${schedErr ? `, error: ${JSON.stringify(schedErr)}` : ''}`)
+
     if (schedules) {
       for (const s of schedules) {
-        const deadlineDate = new Date(s.deadline)
-        const reminderTime = new Date(deadlineDate.getTime() - s.reminder_before * 60 * 1000)
+        const deadlineDate = s.deadline ? new Date(s.deadline) : null
+        const reminderTime = deadlineDate ? new Date(deadlineDate.getTime() - s.reminder_before * 60 * 1000) : null
+        const conditionMet = testMode
+          || (!!deadlineDate && !!reminderTime && reminderTime <= now && deadlineDate > now)
 
-        // 리마인더 시간이 됐고 마감기한이 아직 지나지 않은 것만 처리
-        if (reminderTime <= now && deadlineDate > now) {
-          const { data: members } = await supabase
-            .from('room_members')
-            .select('user_id')
-            .eq('room_id', s.room_id)
+        if (conditionMet) {
+          const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', s.room_id)
+          const { data: room } = await supabase.from('rooms').select('name').eq('id', s.room_id).single()
 
-          const { data: responses } = await supabase
-            .from('schedule_responses')
-            .select('user_id')
-            .eq('schedule_id', s.id)
-
-          const { data: room } = await supabase
-            .from('rooms')
-            .select('name')
-            .eq('id', s.room_id)
-            .single()
-
-          const participantIds = responses?.map((r: any) => r.user_id) || []
-          const nonParticipantIds = members
-            ?.map((m: any) => m.user_id)
-            .filter((id: string) => !participantIds.includes(id)) || []
-
+          const allMemberIds = members?.map((m: any) => m.user_id) || []
           const roomName = room?.name || '방'
 
-          if (nonParticipantIds.length > 0) {
-            await sendExpoPush(supabase, nonParticipantIds, roomName, s.title, s.reminder_before, 'schedule', { targetPath: `/room/${s.room_id}/schedule`, roomId: s.room_id })
-            results.push(`Schedule ${s.id}: Reminder sent to ${nonParticipantIds.length} members`)
-          }
-
+          const result = await sendNotifications(
+            supabase, 
+            allMemberIds, 
+            roomName, 
+            s.room_id, 
+            s.title, 
+            s.reminder_before, 
+            'schedule', 
+            `/room/${s.room_id}/schedule`
+          )
+          results.push(`Schedule "${s.title}": ${result}`)
           await supabase.from('schedules').update({ reminder_sent: true }).eq('id', s.id)
         }
       }
     }
 
-    // 투표 알림 처리
+    // 2. Votes
+    let votesQuery = supabase
+      .from('votes')
+      .select('id, room_id, question, deadline, reminder_before, reminder_sent')
+      .not('reminder_before', 'is', null)
+      .gt('reminder_before', 0)
+
+    if (!testMode) {
+      votesQuery = votesQuery
+        .not('reminder_sent', 'is', true)
+        .not('deadline', 'is', null)
+    }
+
+    const { data: votes, error: votesErr } = await votesQuery
+    results.push(`[진단] votes_found: ${votes?.length ?? 0}${votesErr ? `, error: ${JSON.stringify(votesErr)}` : ''}`)
+
+    if (votesErr) console.error('[deadline-reminder] votes query error:', votesErr.message)
+
     if (votes) {
       for (const v of votes) {
-        const deadlineDate = new Date(v.deadline)
-        const reminderTime = new Date(deadlineDate.getTime() - v.reminder_before * 60 * 1000)
+        const deadlineDate = v.deadline ? new Date(v.deadline) : null
+        const reminderTime = deadlineDate ? new Date(deadlineDate.getTime() - v.reminder_before * 60 * 1000) : null
+        const conditionMet = testMode
+          || (!!deadlineDate && !!reminderTime && reminderTime <= now && deadlineDate > now)
 
-        // 리마인더 시간이 됐고 마감기한이 아직 지나지 않은 것만 처리
-        if (reminderTime <= now && deadlineDate > now) {
-          const { data: members } = await supabase
-            .from('room_members')
-            .select('user_id')
-            .eq('room_id', v.room_id)
+        if (conditionMet) {
+          const { data: members } = await supabase.from('room_members').select('user_id').eq('room_id', v.room_id)
+          const { data: room } = await supabase.from('rooms').select('name').eq('id', v.room_id).single()
 
-          const { data: responses } = await supabase
-            .from('vote_responses')
-            .select('user_id')
-            .eq('vote_id', v.id)
-
-          const { data: room } = await supabase
-            .from('rooms')
-            .select('name')
-            .eq('id', v.room_id)
-            .single()
-
-          const participantIds = responses?.map((r: any) => r.user_id) || []
-          const nonParticipantIds = members
-            ?.map((m: any) => m.user_id)
-            .filter((id: string) => !participantIds.includes(id)) || []
-
+          const allMemberIds = members?.map((m: any) => m.user_id) || []
           const roomName = room?.name || '방'
 
-          if (nonParticipantIds.length > 0) {
-            await sendExpoPush(supabase, nonParticipantIds, roomName, v.question, v.reminder_before, 'vote', { targetPath: `/room/${v.room_id}/vote`, roomId: v.room_id })
-            results.push(`Vote ${v.id}: Reminder sent to ${nonParticipantIds.length} members`)
-          }
-
+          const result = await sendNotifications(
+            supabase, 
+            allMemberIds, 
+            roomName, 
+            v.room_id, 
+            v.question, 
+            v.reminder_before, 
+            'vote', 
+            `/room/${v.room_id}/vote`
+          )
+          results.push(`Vote "${v.question}": ${result}`)
           await supabase.from('votes').update({ reminder_sent: true }).eq('id', v.id)
         }
       }
     }
 
+    console.log('[deadline-reminder] Done. results:', results)
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err: any) {
+    console.error('[deadline-reminder] Uncaught error:', err.message)
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
