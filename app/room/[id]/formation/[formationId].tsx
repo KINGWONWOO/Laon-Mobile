@@ -4,13 +4,15 @@ import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { Dancer, FormationScene, TimelineEntry, Position, Formation, FormationSettings } from '../../../../types';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction, useAnimatedRef, scrollTo, SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useDerivedValue, withSpring, withTiming, makeMutable, Easing, cancelAnimation, useAnimatedReaction, useAnimatedRef, scrollTo, SharedValue, useFrameCallback } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { FormationPiPPlayer } from '../../../../components/ui/FormationPiPPlayer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { WebView } from 'react-native-webview';
 import { OptionModal } from '../../../../components/ui/RoomComponents';
 import { storageService } from '../../../../services/storageService';
@@ -618,8 +620,14 @@ export default function FormationEditorScreen() {
   const currentTimeMs = useSharedValue(0);
   const isPlayerPlayingSV = useSharedValue(false);
   const isUserScrollingSV = useSharedValue(false);
+  const lastStablePrevIdxSV = useSharedValue(-2); // tracks stable section; -2 = uninitialized
   const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
-  const seekFreezeUntilRef = useRef(0);
+  // Audio status cache — written from JS (status listener), read on UI thread (frame callback)
+  const cachedPlayingSV = useSharedValue(false);
+  const cachedTimeSV = useSharedValue(0);
+  const lastStatusTsSV = useSharedValue(Date.now());
+  // Replaces seekFreezeUntilRef so the UI-thread frame callback can read it without a bridge hop
+  const seekFreezeUntilSV = useSharedValue(0);
 
   // formationId가 바뀔 때 상태를 해당 동선 데이터로 초기화
   useEffect(() => {
@@ -646,9 +654,9 @@ export default function FormationEditorScreen() {
     const timeMs = timeSec * 1000;
     cancelAnimation(currentTimeMs);
     currentTimeMs.value = timeMs;
-    seekFreezeUntilRef.current = Date.now() + 300;
+    seekFreezeUntilSV.value = Date.now() + 300;
     player.seekTo(timeSec);
-  }, [player, currentTimeMs]);
+  }, [player, currentTimeMs, seekFreezeUntilSV]);
 
   const activeScene = useMemo(() => scenes.find(s => s.id === activeSceneId), [scenes, activeSceneId]);
   
@@ -683,6 +691,24 @@ export default function FormationEditorScreen() {
   const [activeEntryIdInPlace, setActiveEntryIdInPlace] = useState<string | null>(null);
 
   const sortedTimeline = useMemo(() => [...timeline].sort((a, b) => a.timestampMillis - b.timestampMillis), [timeline]);
+
+  // O(1) scene position lookup — replaces per-frame scenes.find() inside the animated reaction
+  const scenePositionsMap = useMemo(() => {
+    const map: Record<string, Record<string, { x: number; y: number }>> = {};
+    scenes.forEach(s => { map[s.id] = s.positions; });
+    return map;
+  }, [scenes]);
+
+  // O(1) full scene lookup for render (avoids scenes.find() per timeline block per render)
+  const sceneFullMap = useMemo(() => {
+    const map: Record<string, FormationScene> = {};
+    scenes.forEach(s => { map[s.id] = s; });
+    return map;
+  }, [scenes]);
+
+  // When scenes change, force next frame to recompute dancer positions even in stable state
+  useEffect(() => { lastStablePrevIdxSV.value = -2; }, [scenePositionsMap, lastStablePrevIdxSV]);
+
   const [, setChangeCount] = useState(0);
 
   // Auto-save logic
@@ -1081,59 +1107,29 @@ export default function FormationEditorScreen() {
 
   // playbackStatusUpdate 이벤트(100ms)로 playing/currentTime을 캐시하고
   // rAF(60fps)에서 보간해 currentTimeMs를 매끄럽게 업데이트
+  // JS thread: cache audio status on each status event (100ms intervals)
+  // Only SharedValue writes here — no per-frame JS work
   useEffect(() => {
-    let raf: number;
-    let isActive = true;
-    let cachedPlaying = false;
-    let cachedCurrentTime = 0;
-    let lastStatusTs = 0;
-    let statusEventCount = 0;
-    let lastDiagSecAudio = -1;
-
-    const statusSub = player.addListener('playbackStatusUpdate', (status: any) => {
-      cachedPlaying = status.playing;
-      cachedCurrentTime = status.currentTime;
-      lastStatusTs = Date.now();
-      statusEventCount++;
-      // 첫 이벤트 및 재생 상태 전환 시 로그
-      if (statusEventCount === 1) {
-        console.log('[Formation-Audio] First playbackStatusUpdate:', JSON.stringify(status));
-      }
+    const sub = player.addListener('playbackStatusUpdate', (status: any) => {
+      cachedPlayingSV.value = status.playing;
+      cachedTimeSV.value = status.currentTime;
+      lastStatusTsSV.value = Date.now();
     });
+    return () => sub.remove();
+  }, [player, cachedPlayingSV, cachedTimeSV, lastStatusTsSV]);
 
-    const tick = () => {
-      if (!isActive) return;
-      isPlayerPlayingSV.value = cachedPlaying;
-      if (!isUserScrollingSV.value && Date.now() > seekFreezeUntilRef.current) {
-        const elapsed = cachedPlaying ? (Date.now() - lastStatusTs) / 1000 : 0;
-        currentTimeMs.value = (cachedCurrentTime + elapsed) * 1000;
-      }
-
-      // 1초마다 오디오-SharedValue 동기 진단 로그
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (nowSec !== lastDiagSecAudio) {
-        lastDiagSecAudio = nowSec;
-        console.log(
-          `[Formation-Audio] cachedPlaying=${cachedPlaying}  cachedCurrentTime=${cachedCurrentTime.toFixed(2)}s` +
-          `  currentTimeMs.value=${currentTimeMs.value.toFixed(0)}  statusEvents=${statusEventCount}` +
-          `  isUserScrolling=${isUserScrollingSV.value}  freezeUntil=${seekFreezeUntilRef.current > Date.now() ? 'YES' : 'no'}`
-        );
-        statusEventCount = 0; // 초당 이벤트 수 카운트 리셋
-      }
-
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => {
-      isActive = false;
-      cancelAnimationFrame(raf);
-      statusSub.remove();
-    };
-  }, [player]);
-
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, isPlaying: isPlayerPlayingSV.value, isScrolling: isUserScrollingSV.value, pps: pxPerSecSV.value }), (data) => {
-    if (data.isPlaying && !data.isScrolling) { scrollTo(timelineScrollViewRef, (data.time / 1000) * data.pps, 0, false); }
+  // UI thread frame callback: interpolates audio time and syncs scroll — zero JS-bridge overhead per frame
+  useFrameCallback(() => {
+    'worklet';
+    const playing = cachedPlayingSV.value;
+    isPlayerPlayingSV.value = playing;
+    if (!isUserScrollingSV.value && Date.now() > seekFreezeUntilSV.value) {
+      const elapsed = playing ? (Date.now() - lastStatusTsSV.value) / 1000 : 0;
+      currentTimeMs.value = (cachedTimeSV.value + elapsed) * 1000;
+    }
+    if (playing && !isUserScrollingSV.value) {
+      scrollTo(timelineScrollViewRef, (currentTimeMs.value / 1000) * pxPerSecSV.value, 0, false);
+    }
   });
 
   const handleTimelineScroll = useCallback((e: any) => {
@@ -1147,15 +1143,15 @@ export default function FormationEditorScreen() {
       const now = Date.now();
       if (now - lastSeekTimeRef.current > 100) {
         lastSeekTimeRef.current = now;
-        seekFreezeUntilRef.current = now + 300;
+        seekFreezeUntilSV.value = now + 300;
         try { player.seekTo(timeSec); } catch (_) {}
       }
     }
-  }, [player, currentTimeMs, pxPerSecSV]);
+  }, [player, currentTimeMs, pxPerSecSV, seekFreezeUntilSV]);
 
   const onScrollEnd = (e: any) => {
     const finalTimeMs = (e.nativeEvent.contentOffset.x / pxPerSecSV.value) * 1000;
-    seekFreezeUntilRef.current = Date.now() + 300;
+    seekFreezeUntilSV.value = Date.now() + 300;
     currentTimeMs.value = finalTimeMs;
     isUserScrollingSV.value = false;
   };
@@ -1167,34 +1163,56 @@ export default function FormationEditorScreen() {
     }
   }, [activeSceneId, mode, dancers, scenes]);
 
-  useAnimatedReaction(() => ({ time: currentTimeMs.value, sortedTimeline, mode, scenes }), (data) => {
-    if (data.mode === 'place') {
-      let prevE = null, nextE = null;
-      for (let e of data.sortedTimeline) { if (e.timestampMillis <= data.time) prevE = e; else { nextE = e; break; } }
-      dancers.forEach(d => {
-        let p = { x: 0.5, y: 0.5 };
-        const getScenePos = (sId: string) => data.scenes.find(s => s.id === sId)?.positions[d.id] || { x: 0.5, y: 0.5 };
-        if (!prevE) p = data.sortedTimeline.length > 0 ? getScenePos(data.sortedTimeline[0]?.sceneId) : { x: 0.5, y: 0.5 };
-        else {
-          const prevPos = getScenePos(prevE.sceneId);
-          if (data.time <= prevE.timestampMillis + prevE.durationMillis) p = prevPos;
-          else if (nextE) {
-            const nextPos = getScenePos(nextE.sceneId);
-            const gapStart = prevE.timestampMillis + prevE.durationMillis, gapEnd = nextE.timestampMillis;
-            const progress = Math.max(0, Math.min(1, (data.time - gapStart) / (gapEnd - gapStart)));
-            const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-            p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
-          } else p = prevPos;
-        }
-        if (dancerPositions[d.id]) dancerPositions[d.id].value = p;
-      });
-    }
-  }, [mode, sortedTimeline, scenes, dancers]);
+  useAnimatedReaction(() => ({ time: currentTimeMs.value, sortedTimeline, mode, sceneMap: scenePositionsMap }), (data) => {
+    if (data.mode !== 'place') return;
 
-  const openTimelineMenuAt = (x: number) => { 
-    const ts = (x / pxPerSecSV.value) * 1000;
-    setTouchTimeMs(ts); 
-    setShowTimelineMenu(true); 
+    // Binary-search style: find prevIdx (last entry whose timestamp <= time)
+    let prevIdx = -1;
+    let nextIdx = -1;
+    for (let i = 0; i < data.sortedTimeline.length; i++) {
+      if (data.sortedTimeline[i].timestampMillis <= data.time) prevIdx = i;
+      else { nextIdx = i; break; }
+    }
+
+    const prevE = prevIdx >= 0 ? data.sortedTimeline[prevIdx] : null;
+    const nextE = nextIdx >= 0 ? data.sortedTimeline[nextIdx] : null;
+    const inGap = !!prevE && !!nextE && data.time > (prevE.timestampMillis + prevE.durationMillis);
+
+    // Skip redundant work: if stable (not in transition gap) and section hasn't changed, positions are identical
+    if (!inGap && prevIdx === lastStablePrevIdxSV.value) return;
+    lastStablePrevIdxSV.value = inGap ? -2 : prevIdx;
+
+    // O(1) position lookup via pre-indexed map
+    const getPos = (sId: string, dId: string): { x: number; y: number } =>
+      (data.sceneMap[sId] && data.sceneMap[sId][dId]) ? data.sceneMap[sId][dId] : { x: 0.5, y: 0.5 };
+
+    dancers.forEach(d => {
+      let p: { x: number; y: number };
+
+      if (!prevE) {
+        p = data.sortedTimeline.length > 0
+          ? getPos(data.sortedTimeline[0].sceneId, d.id)
+          : { x: 0.5, y: 0.5 };
+      } else if (!inGap) {
+        p = getPos(prevE.sceneId, d.id);
+      } else {
+        const prevPos = getPos(prevE.sceneId, d.id);
+        const nextPos = getPos(nextE!.sceneId, d.id);
+        const gapStart = prevE.timestampMillis + prevE.durationMillis;
+        const gapEnd = nextE!.timestampMillis;
+        const progress = Math.max(0, Math.min(1, (data.time - gapStart) / (gapEnd - gapStart)));
+        const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        p = { x: prevPos.x + (nextPos.x - prevPos.x) * ease, y: prevPos.y + (nextPos.y - prevPos.y) * ease };
+      }
+
+      if (dancerPositions[d.id]) dancerPositions[d.id].value = p;
+    });
+  }, [mode, sortedTimeline, scenePositionsMap, dancers]);
+
+  const openTimelineMenuAt = () => {
+    // Use the needle's current playback position so blocks are created exactly at the yellow line
+    setTouchTimeMs(currentTimeMs.value);
+    setShowTimelineMenu(true);
   };
   
   const handleAddTimelineEntry = (sceneId: string) => { 
@@ -1467,11 +1485,17 @@ export default function FormationEditorScreen() {
       await FileSystem.writeAsStringAsync(filePath, JSON.stringify(data), { encoding: 'utf8' });
       setShowFilenameModal(false);
       setShowExportModal(false);
-      Alert.alert(t('success'), `${finalName}.json ${t('fileSaveSuccess')}`);
+      // 공유 시트를 열어 사용자가 Files, iCloud, 카카오톡 등 원하는 곳으로 내보내게 함
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(filePath, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: `${finalName}.json` });
+      } else {
+        Alert.alert(t('success'), `${finalName}.json ${t('fileSaveSuccess')}`);
+      }
     } catch (e: any) {
       Alert.alert(t('error'), `${t('fileSaveFailed')}: ${e.message}`);
     }
   };
+
 
   const startExportJSON = () => {
     const now = new Date();
@@ -1705,7 +1729,7 @@ export default function FormationEditorScreen() {
                 contentContainerStyle={{ paddingHorizontal: CENTER_OFFSET }}
                 removeClippedSubviews={true}
               >
-                <GestureDetector gesture={Gesture.Simultaneous(timelinePinchGesture, Gesture.Tap().runOnJS(true).onEnd((e) => openTimelineMenuAt(e.x)))}>
+                <GestureDetector gesture={Gesture.Simultaneous(timelinePinchGesture, Gesture.Tap().runOnJS(true).onEnd(() => openTimelineMenuAt()))}>
                   <TimelineContainer duration={effectiveDuration || 60} pxPerSecSV={pxPerSecSV}>
                     <WaveformBackground duration={effectiveDuration || 60} tiles={waveformTiles} pxPerSecSV={pxPerSecSV} />
                     <TimeMarkers duration={effectiveDuration || 60} pxPerSecSV={pxPerSecSV} />
@@ -1725,7 +1749,7 @@ export default function FormationEditorScreen() {
                             onCommitResize={handleCommitResize} 
                             onActionClick={handleEntryActionClick} 
                             dancers={dancers} 
-                            scene={scenes.find(s => s.id === e.sceneId)} 
+                            scene={sceneFullMap[e.sceneId]}
                             settings={settings} 
                           />
                           {idx < arr.length - 1 && (
@@ -1826,7 +1850,24 @@ export default function FormationEditorScreen() {
 
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <View style={styles.modalBg}>
-          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}><Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('exportShare')}</Text><TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity></View><View style={{ gap: 12 }}><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={startExportJSON}><View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="code-working" size={24} color={theme.primary} /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('exportJson')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('exportJsonDesc')}</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity><TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}><View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View><View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('uploadFeedback')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('uploadFeedbackDesc')}</Text></View><Ionicons name="chevron-forward" size={18} color={theme.border} /></TouchableOpacity></View></View>
+          <View style={[styles.menu, { width: '85%', paddingBottom: 30, backgroundColor: theme.card }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}>
+                <Text style={[styles.menuTitle, { marginBottom: 0, color: theme.text }]}>{t('exportShare')}</Text>
+                <TouchableOpacity onPress={() => setShowExportModal(false)}><Ionicons name="close" size={24} color={theme.textSecondary} /></TouchableOpacity>
+              </View>
+              <View style={{ gap: 12 }}>
+                <TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={startExportJSON}>
+                  <View style={[styles.exportIcon, { backgroundColor: theme.primary + '22' }]}><Ionicons name="download-outline" size={24} color={theme.primary} /></View>
+                  <View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('exportJson')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('exportJsonDesc')}</Text></View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.border} />
+                </TouchableOpacity>
+<TouchableOpacity style={[styles.exportOption, { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 }]} onPress={() => setShowPublishModal(true)}>
+                  <View style={[styles.exportIcon, { backgroundColor: '#FF2D5522' }]}><Ionicons name="videocam" size={24} color="#FF2D55" /></View>
+                  <View style={{ flex: 1 }}><Text style={[styles.exportLabel, { color: theme.text }]}>{t('uploadFeedback')}</Text><Text style={[styles.exportDesc, { color: theme.textSecondary }]}>{t('uploadFeedbackDesc')}</Text></View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.border} />
+                </TouchableOpacity>
+              </View>
+            </View>
         </View>
       </Modal>
 
