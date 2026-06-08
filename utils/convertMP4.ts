@@ -371,6 +371,73 @@ function rebuildMoov(
   return out.build();
 }
 
+// ─── Fast-start: late-moov 표준 MP4 → moov를 파일 앞으로 이동 ──────────────
+
+function patchStcoOffsets(moovBuf: Uint8Array, delta: number): Uint8Array {
+  const out = new Uint8Array(moovBuf);
+  const CONTAINERS = new Set(['moov','trak','mdia','minf','stbl','edts','udta','dinf','meta','ilst']);
+
+  function walk(from: number, to: number) {
+    for (const box of scanBoxes(out, from, to)) {
+      if (box.type === 'stco') {
+        const count = r32(out, box.start + 12);
+        for (let i = 0; i < count; i++) {
+          const off = box.start + 16 + i * 4;
+          const newVal = (r32(out, off) + delta) >>> 0;
+          out[off]   = (newVal >>> 24) & 0xff;
+          out[off+1] = (newVal >>> 16) & 0xff;
+          out[off+2] = (newVal >>> 8)  & 0xff;
+          out[off+3] =  newVal         & 0xff;
+        }
+      } else if (box.type === 'co64') {
+        const count = r32(out, box.start + 12);
+        for (let i = 0; i < count; i++) {
+          const off = box.start + 16 + i * 8;
+          const loOld = r32(out, off + 4);
+          const loNew = (loOld + delta) >>> 0;
+          const hiNew = (r32(out, off) + (loOld + delta > 0xFFFFFFFF ? 1 : 0)) >>> 0;
+          out[off]   = (hiNew >>> 24) & 0xff;
+          out[off+1] = (hiNew >>> 16) & 0xff;
+          out[off+2] = (hiNew >>> 8)  & 0xff;
+          out[off+3] =  hiNew         & 0xff;
+          out[off+4] = (loNew >>> 24) & 0xff;
+          out[off+5] = (loNew >>> 16) & 0xff;
+          out[off+6] = (loNew >>> 8)  & 0xff;
+          out[off+7] =  loNew         & 0xff;
+        }
+      } else if (CONTAINERS.has(box.type)) {
+        walk(box.start + 8, box.end);
+      }
+    }
+  }
+  walk(8, out.length);
+  return out;
+}
+
+function faststartBuffer(buf: Uint8Array, top: Box[]): Uint8Array[] | null {
+  const ftypBox = top.find(b => b.type === 'ftyp');
+  const moovBox = top.find(b => b.type === 'moov');
+  const firstMdat = top.find(b => b.type === 'mdat');
+
+  if (!moovBox || !firstMdat) return null;
+  if (moovBox.start < firstMdat.start) return null; // already fast-start
+
+  const ftypData = ftypBox ? buf.subarray(ftypBox.start, ftypBox.end) : new Uint8Array(0);
+  const moovData = buf.subarray(moovBox.start, moovBox.end);
+
+  // moov를 mdat 앞으로 이동하면 mdat의 절대 위치가 moov.size만큼 증가
+  const patchedMoov = patchStcoOffsets(moovData, moovData.length);
+
+  const rest: Uint8Array[] = [];
+  for (const box of top) {
+    if (box.type === 'ftyp' || box.type === 'moov') continue;
+    rest.push(buf.subarray(box.start, box.end));
+  }
+
+  console.log(`[convertMP4] fast-start 적용: moov(${(moovData.length/1024).toFixed(1)}KB) → 파일 앞으로 이동`);
+  return [ftypData, patchedMoov, ...rest];
+}
+
 // ─── 메인 변환 함수 ──────────────────────────────────────────────────────────
 
 function defragmentBuffer(buf: Uint8Array): Uint8Array[] {
@@ -380,6 +447,11 @@ function defragmentBuffer(buf: Uint8Array): Uint8Array[] {
   const ftypBox = top.find(b => b.type === 'ftyp');
   const moovBox = top.find(b => b.type === 'moov');
   if (!moovBox) return [buf];
+
+  // moof 없음 → 표준 MP4; moov가 mdat 뒤에 있으면 fast-start로 재배치
+  if (!top.some(b => b.type === 'moof')) {
+    return faststartBuffer(buf, top) ?? [buf];
+  }
 
   const { tracks } = parseMoov(buf, moovBox);
   tracks.forEach(t => t.samplesPerFragment = []);

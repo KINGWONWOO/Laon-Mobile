@@ -147,7 +147,8 @@ export default function FormationPlayer({
     player.loop = true;
 
     if (isPlaying) {
-      try { (player as any).rate = playbackRate; } catch (_) {}
+      try { player.playbackRate = playbackRate; } catch (_) {}
+      if (videoPlayer?.src) { try { videoPlayer.playbackRate = playbackRate; } catch (_) {} }
       player.play();
       if (videoPlayer?.src) videoPlayer.play();
 
@@ -165,6 +166,13 @@ export default function FormationPlayer({
       if (videoPlayer?.src) videoPlayer.pause();
     }
   }, [isPlaying, player, videoPlayer, noAudio, playbackRate]);
+
+  // Rate-only change while playing — update without restarting playback
+  useEffect(() => {
+    if (!isPlaying || !player) return;
+    try { player.playbackRate = playbackRate; } catch (_) {}
+    if (videoPlayer?.src) { try { videoPlayer.playbackRate = playbackRate; } catch (_) {} }
+  }, [playbackRate]);
 
   // Explicit seek
   useEffect(() => {

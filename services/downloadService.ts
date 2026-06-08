@@ -4,12 +4,17 @@ import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
 
 export const saveMediaToDevice = async (url: string): Promise<void> => {
+  const isLocal = url.startsWith('file://') || url.startsWith('/');
   const ext = (url.split('?')[0].split('.').pop() || 'mp4').toLowerCase();
-  const filename = `laon_${Date.now()}.${ext}`;
-  const localUri = `${FileSystem.cacheDirectory}${filename}`;
 
-  const fileInfo = await FileSystem.getInfoAsync(localUri);
-  const uri = fileInfo.exists ? localUri : (await FileSystem.downloadAsync(url, localUri)).uri;
+  let uri: string;
+  if (isLocal) {
+    uri = url;
+  } else {
+    const filename = `laon_${Date.now()}.${ext}`;
+    const localUri = `${FileSystem.cacheDirectory}${filename}`;
+    uri = (await FileSystem.downloadAsync(url, localUri)).uri;
+  }
 
   const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync();
 

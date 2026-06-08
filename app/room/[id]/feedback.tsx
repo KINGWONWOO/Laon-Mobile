@@ -64,6 +64,7 @@ export default function FeedbackScreen() {
   const [commentMenuAnchor, setCommentMenuAnchor] = useState({ x: 0, y: 0 });
 
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
   const [isMirrorMode, setIsMirrorMode] = useState(false);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -205,7 +206,7 @@ export default function FeedbackScreen() {
       const triggerTime = c.timestampMillis - 1000;
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis);
+    }).sort((a, b) => b.timestampMillis - a.timestampMillis).slice(0, 6);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -247,6 +248,7 @@ export default function FeedbackScreen() {
       }
 
       markItemAsAccessed('video', selectedVideo.id);
+      setVideoDuration(0);
       setIsCaching(true);
 
       try {
@@ -255,8 +257,11 @@ export default function FeedbackScreen() {
           const fileName = remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4';
           const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
           const fileInfo = await FileSystem.getInfoAsync(fileUri);
-          if (fileInfo.exists) setCachedVideoUrl(fileUri);
-          else {
+          const isComplete = fileInfo.exists && (fileInfo as any).size > 10240;
+          if (isComplete) {
+            setCachedVideoUrl(fileUri);
+          } else {
+            if (fileInfo.exists) await FileSystem.deleteAsync(fileUri, { idempotent: true });
             const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
             setCachedVideoUrl(uri);
           }
@@ -267,8 +272,11 @@ export default function FeedbackScreen() {
           const fileName = `choreo_${remoteUrl.split('/').pop()?.split('?')[0] || 'video.mp4'}`;
           const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
           const fileInfo = await FileSystem.getInfoAsync(fileUri);
-          if (fileInfo.exists) setCachedChoreographyUrl(fileUri);
-          else {
+          const isComplete = fileInfo.exists && (fileInfo as any).size > 10240;
+          if (isComplete) {
+            setCachedChoreographyUrl(fileUri);
+          } else {
+            if (fileInfo.exists) await FileSystem.deleteAsync(fileUri, { idempotent: true });
             const { uri } = await FileSystem.downloadAsync(remoteUrl, fileUri);
             setCachedChoreographyUrl(uri);
           }
@@ -292,6 +300,7 @@ export default function FeedbackScreen() {
     if (player && !isFormation) {
       try { player.playbackRate = playbackRate; } catch (e) {}
     }
+    // Formation videos: playbackRate is passed as prop to FormationPlayer which handles it internally
   }, [playbackRate, isFormation]);
 
   useEffect(() => {
@@ -345,26 +354,7 @@ export default function FeedbackScreen() {
         const fileName = `${Date.now()}.mp4`;
         const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
 
-        // 대형 영상인 경우 PiP 안무 영상 포함 여부 확인
-        let choreographyUrl: string | undefined = undefined;
-        const currentFormation = formations.find(f => f.roomId === id && !f.isLocal); // 최근 저장된 대형
-        if (currentFormation?.videoSettings?.videoUrl) {
-          const includePip = await new Promise<boolean>((resolve) => {
-            Alert.alert(
-              t('includePipTitle'),
-              t('includePipMsg'),
-              [
-                { text: t('uploadOnlyFormation'), onPress: () => resolve(false), style: 'cancel' },
-                { text: t('includeChoreographyVideo'), onPress: () => resolve(true) }
-              ]
-            );
-          });
-          if (includePip) {
-            choreographyUrl = currentFormation.videoSettings.videoUrl;
-          }
-        }
-
-        await addVideo(id || '', publicUrl, videoTitle, true, choreographyUrl);
+        await addVideo(id || '', publicUrl, videoTitle, true, undefined);
         setShowAddModal(false);
         setVideoTitle('');
       } catch (error: any) { Alert.alert('업로드 실패', error.message); } finally { setIsLoading(false); }
@@ -389,10 +379,15 @@ export default function FeedbackScreen() {
   };
 
   const handleUpdateVideo = async () => {
-    if (!editingVideo || !editTitle.trim()) return;
-    await updateVideo(editingVideo.id, editTitle);
-    setEditingVideo(null);
-    refreshAllData();
+    if (!editingVideo || !editTitle.trim() || isUpdatingTitle) return;
+    setIsUpdatingTitle(true);
+    try {
+      await updateVideo(editingVideo.id, editTitle);
+      setEditingVideo(null);
+      refreshAllData();
+    } finally {
+      setIsUpdatingTitle(false);
+    }
   };
 
   const handleDeleteVideo = (video: VideoFeedback) => {
@@ -467,10 +462,38 @@ export default function FeedbackScreen() {
       player.muted = !isSwapped;
       subPlayer.muted = isSwapped;
     }
+    // !isSwapped means we're switching TO choreography-as-main
+    if (!isSwapped && subPlayer && cachedChoreographyUrl && isFormationPlaying) {
+      subPlayer.currentTime = formationTimeRef.current / 1000;
+      subPlayer.play();
+    } else if (isSwapped && subPlayer) {
+      subPlayer.pause();
+    }
   };
 
   const handleDownload = async () => {
-    if (!selectedVideo || isFormation || isDownloading) return;
+    if (!selectedVideo || isDownloading) return;
+
+    if (isFormation) {
+      const choreographyUrl = cachedChoreographyUrl || selectedVideo.choreographyVideoUrl;
+      if (!choreographyUrl) {
+        Alert.alert(t('error'), '저장할 안무 영상이 없습니다.');
+        return;
+      }
+      setIsDownloading(true);
+      try {
+        await saveMediaToDevice(choreographyUrl);
+        Alert.alert(t('success'), t('saveSuccess'));
+      } catch (e: any) {
+        if (e.message !== 'PERMISSION_DENIED' && e.message !== 'SHARING_UNAVAILABLE') {
+          Alert.alert('저장 실패', '저장 중 오류가 발생했습니다.');
+        }
+      } finally {
+        setIsDownloading(false);
+      }
+      return;
+    }
+
     setIsDownloading(true);
     try {
       await saveMediaToDevice(selectedVideo.videoUrl);
@@ -923,7 +946,7 @@ export default function FeedbackScreen() {
                           {formatTime(c.timestampMillis)}
                         </Text>
                       </View>
-                      <Text style={[styles.bubbleText, { color: theme.text }]}>{c.text}</Text>
+                      <Text style={[styles.bubbleText, { color: theme.text }]} numberOfLines={4}>{c.text}</Text>
                     </Animated.View>
                   ))}
                 </View>
@@ -1176,7 +1199,9 @@ export default function FeedbackScreen() {
             <TextInput style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, borderWidth: 1 }]} value={editTitle} onChangeText={setEditTitle} />
             <View style={{flexDirection:'row', justifyContent:'flex-end'}}>
               <TouchableOpacity onPress={() => setEditingVideo(null)} style={{marginRight: 20, padding: 10}}><Text style={{color: theme.textSecondary, fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdateVideo} style={{padding: 10}}><Text style={{color: theme.primary, fontWeight:'900'}}>{t('edit')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleUpdateVideo} style={{padding: 10}} disabled={isUpdatingTitle}>
+                {isUpdatingTitle ? <ActivityIndicator size="small" color={theme.primary} /> : <Text style={{color: theme.primary, fontWeight:'900'}}>{t('edit')}</Text>}
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1234,7 +1259,7 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 70, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
+  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 70, width: 220, flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-end', zIndex: 90 },
   bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
