@@ -621,6 +621,23 @@ export default function FormationEditorScreen() {
   const timelineScrollViewRef = useAnimatedRef<Animated.ScrollView>();
   const seekFreezeUntilRef = useRef(0);
 
+  // formationId가 바뀔 때 상태를 해당 동선 데이터로 초기화
+  useEffect(() => {
+    setDancers(formation?.data?.dancers || []);
+    setScenes(formation?.data?.scenes || []);
+    setTimeline(formation?.data?.timeline || []);
+    setAudioUrl(formation?.audioUrl || '');
+    setVideoUrl(formation?.videoSettings?.videoUrl || '');
+    pipX.value = formation?.videoSettings?.pipPosition?.x ?? width - 220;
+    pipY.value = formation?.videoSettings?.pipPosition?.y ?? 100;
+    pipScale.value = formation?.videoSettings?.pipScale ?? 1;
+    const base = formation?.settings || { gridRows: 10, gridCols: 20, stageDirection: 'top', snapToGrid: true, dancerNameSize: 8 };
+    setSettings({ ...base, sideWingWidth: base.sideWingWidth ?? 2 });
+    setActiveSceneId(formation?.data?.scenes?.[0]?.id || null);
+    setSyncOffset(formation?.videoSettings?.syncOffset || 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formationId]);
+
   const player = useAudioPlayer(audioUrl, { updateInterval: 100 });
   const playerStatus = useAudioPlayerStatus(player);
   const effectiveDuration = player.duration || 60;
@@ -690,10 +707,9 @@ export default function FormationEditorScreen() {
     });
   }, [handleAutoSave]);
 
-  const formationOptions = formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id ? [
-    { label: t('save'), icon: 'save-outline', onPress: () => handleSave() },
-    { label: t('exportShare'), icon: 'share-outline', onPress: () => setShowExportModal(true) }
-  ] : [
+  const isOwnerOrLeader = formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id;
+
+  const formationOptions = [
     { label: t('reportLabel'), icon: 'warning-outline', destructive: true, onPress: () => { if(formation) reportContent(formation.id, 'formation'); } },
     { label: t('blockAuthorLabel'), icon: 'ban-outline', destructive: true, onPress: () => { if(formation) blockUser(formation.userId); } }
   ];
@@ -1577,16 +1593,20 @@ export default function FormationEditorScreen() {
         />
       ) : null}
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.replace(`/room/${id}/formation`)}><Ionicons name="chevron-back" size={28} color={theme.text} /></TouchableOpacity>
         <View style={[styles.modeToggle, { backgroundColor: theme.card }]}>
           <TouchableOpacity onPress={() => setMode('create')} style={[styles.modeTab, mode === 'create' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'create' ? theme.background : theme.textSecondary }]}>{t('createFormation')}</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setMode('place')} style={[styles.modeTab, mode === 'place' && { backgroundColor: theme.primary }]}><Text style={[styles.tabText, { color: mode === 'place' ? theme.background : theme.textSecondary }]}>{t('placeFormation')}</Text></TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
-          {(formation?.userId === currentUser?.id || (currentRoom as any)?.leaderId === currentUser?.id) ? (
-            <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
-          ) : null}
-          <TouchableOpacity onPress={() => setShowFormationOptions(true)}><Ionicons name="ellipsis-vertical" size={24} color={theme.text} /></TouchableOpacity>
+          {isOwnerOrLeader ? (
+            <>
+              <TouchableOpacity onPress={handleSave}><Ionicons name="save-outline" size={24} color={theme.primary} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowExportModal(true)}><Ionicons name="share-outline" size={24} color={theme.text} /></TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity onPress={() => setShowFormationOptions(true)}><Ionicons name="ellipsis-vertical" size={24} color={theme.text} /></TouchableOpacity>
+          )}
         </View>
       </View>
 
