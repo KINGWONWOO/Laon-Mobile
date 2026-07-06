@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Alert, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
-import { useGlobalSearchParams, useRouter } from 'expo-router';
+import { useGlobalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,19 +37,21 @@ export default function FormationListScreen() {
   
   const webViewRef = useRef<WebView>(null);
 
-  useEffect(() => {
-    const access = checkProAccess('formation');
-    if (!access.canAccess) {
-      Alert.alert(
-        t('proFeatureTitle'),
-        t('formationProOnlyMsg'),
-        [
-          { text: t('back'), onPress: () => router.back() },
-          { text: t('viewMembership'), onPress: () => router.push('/subscription') }
-        ]
-      );
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      const access = checkProAccess('formation');
+      if (!access.canAccess) {
+        Alert.alert(
+          t('proFeatureTitle'),
+          t('formationProOnlyMsg'),
+          [
+            { text: t('back'), onPress: () => router.back() },
+            { text: t('viewMembership'), onPress: () => router.push('/subscription') }
+          ]
+        );
+      }
+    }, [checkProAccess, t, router])
+  );
 
   const roomFormations = useMemo(() =>
     formations.filter(f => f.roomId === id && !f.isPublished).sort((a, b) => b.createdAt - a.createdAt),

@@ -21,6 +21,7 @@ interface FormationPlayerProps {
   hideLabels?: boolean;
   forceDarkMode?: boolean;
   containerWidth?: number;
+  containerHeight?: number;
   externalVideoPlayer?: any;
 }
 
@@ -83,7 +84,7 @@ export default function FormationPlayer({
   formation, currentTimeMs, seekToMs, onTimeUpdate, onDurationDetected,
   isPlaying = false, playbackRate = 1, noAudio = false, hidePip = false,
   hideLabels = false, forceDarkMode = false,
-  containerWidth, externalVideoPlayer
+  containerWidth, containerHeight, externalVideoPlayer
 }: FormationPlayerProps) {
   const { theme: appTheme, t } = useAppContext();
 
@@ -107,10 +108,12 @@ export default function FormationPlayer({
   const sideWingWidth = formation?.settings?.sideWingWidth ?? 0;
   const videoSettings = formation?.videoSettings;
 
-  // Use containerWidth if provided (thumbnail mode), otherwise full screen
+  // Contain mode: fit within containerWidth × containerHeight while preserving aspect ratio
   const effectiveWidth = containerWidth ?? WINDOW_WIDTH;
   const padding = containerWidth != null ? 0 : 40;
-  const STAGE_CELL_SIZE = (effectiveWidth - padding) / gridCols;
+  const cellByWidth = (effectiveWidth - padding) / gridCols;
+  const cellByHeight = containerHeight != null ? containerHeight / gridRows : Infinity;
+  const STAGE_CELL_SIZE = Math.min(cellByWidth, cellByHeight);
   const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
   const wingPct = (sideWingWidth > 0 ? `${(sideWingWidth / gridCols) * 100}%` : '0%') as `${number}%`;
@@ -125,10 +128,19 @@ export default function FormationPlayer({
 
   const videoPlayer = externalVideoPlayer || internalVideoPlayer;
 
-  // Report audio duration once when available
+  // Report audio duration once when available; fallback to timeline max when no audio
   useEffect(() => {
-    if (noAudio || !onDurationDetected) return;
+    if (!onDurationDetected) return;
     durationReportedRef.current = false;
+
+    if (noAudio || !formation?.audioUrl) {
+      if (timeline.length > 0) {
+        const maxMs = Math.max(...timeline.map((e: any) => e.timestampMillis + (e.durationMillis || 0)));
+        if (maxMs > 0) onDurationDetected(maxMs / 1000);
+      }
+      return;
+    }
+
     let attempts = 0;
     const poll = setInterval(() => {
       if (player?.duration > 0) {
@@ -136,10 +148,17 @@ export default function FormationPlayer({
         durationReportedRef.current = true;
         clearInterval(poll);
       }
-      if (++attempts > 100) clearInterval(poll);
+      if (++attempts > 100) {
+        // Audio never loaded — fall back to timeline
+        if (timeline.length > 0) {
+          const maxMs = Math.max(...timeline.map((e: any) => e.timestampMillis + (e.durationMillis || 0)));
+          if (maxMs > 0) onDurationDetected(maxMs / 1000);
+        }
+        clearInterval(poll);
+      }
     }, 200);
     return () => clearInterval(poll);
-  }, [formation?.audioUrl, noAudio]);
+  }, [formation?.audioUrl, noAudio, timeline]);
 
   // Play/pause + time reporting
   useEffect(() => {
@@ -201,14 +220,6 @@ export default function FormationPlayer({
         </View>
       )}
       <View style={styles.stageWrapper}>
-        {!hideLabels && (
-          <View style={{ position: 'absolute', top: -45, left: 0, right: 0, alignItems: 'center' }}>
-            <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center', opacity: 0.8 }]}>
-              {stageDirection === 'top' ? t('front') : t('backDir')}
-            </Text>
-          </View>
-        )}
-
         <View style={[styles.stage, { width: STAGE_WIDTH, height: STAGE_HEIGHT, backgroundColor: theme.card, borderColor: theme.border }]}>
           {/* Grid lines */}
           <View style={StyleSheet.absoluteFill}>
@@ -219,7 +230,7 @@ export default function FormationPlayer({
               <View key={`v-${i}`} style={[styles.gridV, { left: `${(i / gridCols) * 100}%`, backgroundColor: theme.border, opacity: gridOpacity }]} />
             ))}
           </View>
-          
+
           {/* Center Crosshair (Editor style) */}
           <View style={{ position: 'absolute', top: '50%', left: '50%', width: 24, height: 2, backgroundColor: theme.primary, marginLeft: -12, marginTop: -1, opacity: 0.8, borderRadius: 1, zIndex: 1 }} />
           <View style={{ position: 'absolute', top: '50%', left: '50%', width: 2, height: 24, backgroundColor: theme.primary, marginLeft: -1, marginTop: -12, opacity: 0.8, borderRadius: 1, zIndex: 1 }} />
@@ -231,6 +242,27 @@ export default function FormationPlayer({
               <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: wingPct, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', zIndex: 1 }} />
             </>
           )}
+
+          {/* Direction labels — rendered inside stage so they're never clipped */}
+          {!hideLabels && (
+            <>
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', zIndex: 3 }} pointerEvents="none">
+                <View style={{ backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 3, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 }}>
+                  <Text style={[styles.directionLabelText, { color: '#FFFFFF', letterSpacing: 1.5 }]}>
+                    {stageDirection === 'top' ? t('front') : t('backDir')}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', zIndex: 3 }} pointerEvents="none">
+                <View style={{ backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 3, borderTopLeftRadius: 6, borderTopRightRadius: 6 }}>
+                  <Text style={[styles.directionLabelText, { color: '#FFFFFF', letterSpacing: 1.5 }]}>
+                    {stageDirection === 'bottom' ? t('front') : t('backDir')}
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+
           {/* Dancers */}
           {dancers.map((d: any, i: number) => (
             <DancerNode
@@ -246,14 +278,6 @@ export default function FormationPlayer({
             />
           ))}
         </View>
-
-        {!hideLabels && (
-          <View style={{ position: 'absolute', bottom: -45, left: 0, right: 0, alignItems: 'center' }}>
-            <Text style={[styles.directionLabelText, { color: theme.text, textAlign: 'center', opacity: 0.8 }]}>
-              {stageDirection === 'bottom' ? t('front') : t('backDir')}
-            </Text>
-          </View>
-        )}
       </View>
     </View>
   );

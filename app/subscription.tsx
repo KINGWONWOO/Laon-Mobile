@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions, Platform, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,18 +7,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Shadows } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
+import { getOfferings } from '../services/revenueCat';
+import { PurchasesPackage } from 'react-native-purchases';
 
 const { width } = Dimensions.get('window');
 
 export default function SubscriptionScreen() {
-  const { currentUser, theme, isPro, purchasePro, t } = useAppContext();
+  const { currentUser, theme, isPro, purchasePro, restoreProPurchases, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
   const [isCouponProcessing, setIsCouponProcessing] = useState(false);
   const couponRef = useRef<TextInput>(null);
+
+  const [proPackage, setProPackage] = useState<PurchasesPackage | null>(null);
+  const [displayPrice, setDisplayPrice] = useState('₩3,900');
+
+  useEffect(() => {
+    getOfferings().then(offering => {
+      const pkg = offering?.availablePackages?.[0] ?? null;
+      if (pkg) {
+        setProPackage(pkg);
+        setDisplayPrice(pkg.product.priceString);
+      }
+    }).catch(() => {});
+  }, []);
 
   const daysLeft = useMemo(() => {
     if (!currentUser?.subscription?.expiryDate) return 0;
@@ -59,16 +75,37 @@ export default function SubscriptionScreen() {
   };
 
   const handlePurchase = async () => {
+    if (!proPackage) {
+      Alert.alert(t('errorTitle'), t('paymentError'));
+      return;
+    }
     setIsProcessing(true);
     try {
-      // In a real app, this would involve expo-in-app-purchases or react-native-iap
-      // For now, we simulate the store purchase through our context
-      await purchasePro();
+      await purchasePro(proPackage);
       Alert.alert(t('subscriptionComplete'), t('proActivated'));
+    } catch (e: any) {
+      // 사용자가 구매를 취소한 경우는 에러 표시 안 함
+      if (!e?.userCancelled) {
+        Alert.alert(t('errorTitle'), t('paymentError'));
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsRestoring(true);
+    try {
+      const restored = await restoreProPurchases();
+      if (restored) {
+        Alert.alert(t('subscriptionComplete'), t('proActivated'));
+      } else {
+        Alert.alert(t('errorTitle'), '복원할 구독 내역이 없습니다.');
+      }
     } catch (e: any) {
       Alert.alert(t('errorTitle'), t('paymentError'));
     } finally {
-      setIsProcessing(false);
+      setIsRestoring(false);
     }
   };
 
@@ -198,7 +235,7 @@ export default function SubscriptionScreen() {
 
         <PlanCard
           title={t('proCardTitle')}
-          price="₩3,900"
+          price={displayPrice}
           subText={t('priceSubText')}
           tier="pro"
           isCurrent={isPro}
@@ -212,6 +249,19 @@ export default function SubscriptionScreen() {
             { text: t('featureNoAds'), pro: true },
           ]}
         />
+
+        {!isPro && (
+          <TouchableOpacity
+            style={[styles.restoreBtn, { borderColor: theme.border }]}
+            onPress={handleRestore}
+            disabled={isRestoring}
+          >
+            {isRestoring
+              ? <ActivityIndicator size="small" color={theme.textSecondary} />
+              : <Text style={[styles.restoreBtnText, { color: theme.textSecondary }]}>{t('restorePurchase')}</Text>
+            }
+          </TouchableOpacity>
+        )}
 
         <View style={styles.faqSection}>
           <Text style={[styles.faqTitle, { color: theme.text }]}>{t('faqTitle')}</Text>
@@ -272,4 +322,6 @@ const styles = StyleSheet.create({
   couponApplyBtn: { paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   couponApplyText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   couponError: { color: '#ff4d4f', fontSize: 12, fontWeight: '600', marginTop: 8 },
+  restoreBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  restoreBtnText: { fontSize: 13, fontWeight: '600' },
 });

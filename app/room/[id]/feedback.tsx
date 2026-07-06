@@ -100,10 +100,12 @@ export default function FeedbackScreen() {
   };
 
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
+  const [formationContainerHeight, setFormationContainerHeight] = useState(0);
   const [formationTime, setFormationTime] = useState(0);
   const [formationDuration, setFormationDuration] = useState(60);
   const [formationSeekMs, setFormationSeekMs] = useState<number | null>(null);
   const formationTimeRef = useRef(0);
+  const lastOnTimeUpdateRef = useRef(0);
   const [videoTime, setVideoTime] = useState(0);
 
   // 서브 영상 위치·크기 (핀치/드래그)
@@ -132,6 +134,7 @@ export default function FeedbackScreen() {
 
   // formationTime ref로 최신값 유지 (interval 클로저에서 사용)
   const handleFormationTimeUpdate = useCallback((ms: number) => {
+    if (ms > 0) lastOnTimeUpdateRef.current = Date.now();
     formationTimeRef.current = ms;
     setFormationTime(ms);
     currentTimeMsSV.value = ms; // keep PiP in sync
@@ -161,6 +164,26 @@ export default function FeedbackScreen() {
     }, 2000);
     return () => clearInterval(interval);
   }, [isFormation, isFormationPlaying, subPlayer, cachedChoreographyUrl, isSwapped]);
+  // Wall clock fallback: advance formationTime when audio isn't reporting (no audioUrl or remote device)
+  useEffect(() => {
+    if (!isFormation || !isFormationPlaying) return;
+    let lastTick = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const dt = now - lastTick;
+      lastTick = now;
+      const audioIsActive = (now - lastOnTimeUpdateRef.current) < 200;
+      if (!audioIsActive) {
+        const next = formationTimeRef.current + dt * playbackRate;
+        const clamped = formationDuration > 0 ? Math.min(next, formationDuration * 1000) : next;
+        formationTimeRef.current = clamped;
+        currentTimeMsSV.value = clamped;
+        setFormationTime(clamped);
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isFormation, isFormationPlaying, playbackRate, formationDuration]);
+
   useEffect(() => {
     if (cachedVideoUrl && player) {
       player.replace(cachedVideoUrl);
@@ -420,6 +443,8 @@ export default function FeedbackScreen() {
 
   const seekTo = (ms: number) => {
     if (isFormation) {
+      formationTimeRef.current = ms;
+      currentTimeMsSV.value = ms;
       setFormationTime(ms);
       setFormationSeekMs(ms);
       // subPlayer only controls choreography when swapped to main; FormationPiPPlayer handles !isSwapped
@@ -581,7 +606,10 @@ export default function FeedbackScreen() {
 
       if (isFormation) {
         return selectedFormation ? (
-          <View style={[{ flex: 1, padding: 20 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}>
+          <View
+            style={[{ flex: 1, padding: 20 }, isMirrorMode && { transform: [{ scaleX: -1 }] }]}
+            onLayout={(e) => setFormationContainerHeight(e.nativeEvent.layout.height)}
+          >
             <FormationPlayer
               formation={selectedFormation}
               currentTimeMs={formationTime}
@@ -591,6 +619,7 @@ export default function FeedbackScreen() {
               isPlaying={isFormationPlaying}
               playbackRate={playbackRate}
               containerWidth={SCREEN_WIDTH - 80}
+              containerHeight={formationContainerHeight > 0 ? formationContainerHeight - 40 : undefined}
               hidePip={true}
               forceDarkMode={true}
             />
@@ -633,8 +662,10 @@ export default function FeedbackScreen() {
     const renderSubContent = () => {
       if (!hasChoreography) return null;
 
-      // Non-swapped: choreography video floats as PiP → use FormationPiPPlayer (react-native-video)
-      if (!isSwapped && cachedChoreographyUrl) {
+      // Non-swapped: choreography video floats as PiP → use FormationPiPPlayer
+      // Don't render anything while cachedChoreographyUrl is still loading
+      if (!isSwapped) {
+        if (!cachedChoreographyUrl) return null;
         return (
           <FormationPiPPlayer
             videoUrl={cachedChoreographyUrl}

@@ -6,7 +6,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -14,6 +14,9 @@ import { AppProvider, useAppContext } from '../context/AppContext';
 import { initSentry, withSentry } from '../services/logger';
 import * as Notifications from 'expo-notifications';
 import { initAds } from '../services/adService';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -65,10 +68,11 @@ function RootLayoutNav() {
     };
   }, []);
 
-  // 초기 로딩 완료 처리
+  // 초기 로딩 완료 처리 — 준비되면 네이티브 스플래시를 숨김
   useEffect(() => {
     if (isMounted && !isLoadingUser) {
       setIsInitialLoading(false);
+      SplashScreen.hideAsync();
     }
   }, [isMounted, isLoadingUser]);
 
@@ -100,13 +104,8 @@ function RootLayoutNav() {
     }
   }, [currentUser, segments, isMounted, isLoadingUser]);
 
-  // 💡 앱이 완전히 처음 켜질 때만 로딩 뷰를 보여줍니다.
   if (!isMounted || isInitialLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-        <ActivityIndicator size="large" color="#21F3A3" />
-      </View>
-    );
+    return null;
   }
 
   return (

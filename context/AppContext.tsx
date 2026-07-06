@@ -11,6 +11,8 @@ import { Alert } from 'react-native';
 import { authService } from '../services/authService';
 import { Language, SUPPORTED_LANGUAGES, createTranslator } from '../constants/translations';
 import { registerForPushNotificationsAsync } from '../services/NotificationService';
+import { initRevenueCat, getCustomerInfo, purchasePackage as rcPurchasePackage, restorePurchases as rcRestorePurchases, isProActive, getProExpiryMs } from '../services/revenueCat';
+import { PurchasesPackage } from 'react-native-purchases';
 
 interface AppContextType {
   currentUser: User | null;
@@ -108,7 +110,8 @@ interface AppContextType {
 
   // Subscription
   isPro: boolean;
-  purchasePro: (durationDays?: number) => Promise<void>;
+  purchasePro: (pkg?: import('react-native-purchases').PurchasesPackage, durationDays?: number) => Promise<void>;
+  restoreProPurchases: () => Promise<boolean>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder', roomId?: string) => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
   sendDirectReminder: (userIds: string[], notificationType: string, vars: Record<string, any>) => Promise<void>;
@@ -302,14 +305,40 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const syncRcWithSupabase = async (userId: string) => {
+    try {
+      const customerInfo = await getCustomerInfo();
+      if (!isProActive(customerInfo)) return;
+      const expiryMs = getProExpiryMs(customerInfo) ?? (Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await supabase.from('profiles').update({
+        subscription_tier: 'pro',
+        subscription_start: new Date().toISOString(),
+        subscription_expiry: new Date(expiryMs).toISOString(),
+      }).eq('id', userId);
+    } catch (_) {}
+  };
+
   const fetchMyProfile = async (userId: string, sessionUser?: any) => {
     try {
+      // RevenueCat 초기화 (userId로 구독 상태 추적)
+      try { initRevenueCat(userId); } catch (_) {}
+
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      
+
       if (data) {
-        const user: User = { 
-          id: data.id, 
-          name: data.name || sessionUser?.user_metadata?.name || '댄서', 
+        // RC가 pro인데 Supabase가 아직 모르는 경우 동기화 (다기기 복원 등)
+        const subExpired = !data.subscription_tier || data.subscription_tier !== 'pro' ||
+          (data.subscription_expiry && new Date(data.subscription_expiry).getTime() < Date.now());
+        if (subExpired) {
+          await syncRcWithSupabase(userId);
+          // 동기화 후 최신 데이터 재조회
+          const { data: refreshed } = await supabase.from('profiles').select('*').eq('id', userId).single();
+          if (refreshed) Object.assign(data, refreshed);
+        }
+
+        const user: User = {
+          id: data.id,
+          name: data.name || sessionUser?.user_metadata?.name || '댄서',
           profileImage: data.profile_image || sessionUser?.user_metadata?.avatar_url || null,
           subscription: data.subscription_tier ? {
             tier: data.subscription_tier,
@@ -386,17 +415,43 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }, [currentUser]);
 
-  const purchasePro = async (durationDays: number = 30) => {
+  const purchasePro = async (pkg?: PurchasesPackage, durationDays: number = 30) => {
     if (!currentUserRef.current) return;
     const now = Date.now();
-    const expiry = now + (durationDays * 24 * 60 * 60 * 1000);
-    const { error } = await supabase.from('profiles').update({
-      subscription_tier: 'pro',
-      subscription_start: new Date(now).toISOString(),
-      subscription_expiry: new Date(expiry).toISOString(),
-    }).eq('id', currentUserRef.current.id);
-    if (error) throw error;
+
+    if (pkg) {
+      // 실제 RevenueCat 결제
+      const customerInfo = await rcPurchasePackage(pkg);
+      const expiryMs = getProExpiryMs(customerInfo) ?? (now + 30 * 24 * 60 * 60 * 1000);
+      const { error } = await supabase.from('profiles').update({
+        subscription_tier: 'pro',
+        subscription_start: new Date(now).toISOString(),
+        subscription_expiry: new Date(expiryMs).toISOString(),
+      }).eq('id', currentUserRef.current.id);
+      if (error) throw error;
+    } else {
+      // 쿠폰 경로
+      const expiry = now + (durationDays * 24 * 60 * 60 * 1000);
+      const { error } = await supabase.from('profiles').update({
+        subscription_tier: 'pro',
+        subscription_start: new Date(now).toISOString(),
+        subscription_expiry: new Date(expiry).toISOString(),
+      }).eq('id', currentUserRef.current.id);
+      if (error) throw error;
+    }
+
     await fetchMyProfile(currentUserRef.current.id);
+  };
+
+  const restoreProPurchases = async (): Promise<boolean> => {
+    if (!currentUserRef.current) return false;
+    const customerInfo = await rcRestorePurchases();
+    if (isProActive(customerInfo)) {
+      await syncRcWithSupabase(currentUserRef.current.id);
+      await fetchMyProfile(currentUserRef.current.id);
+      return true;
+    }
+    return false;
   };
 
   const checkProAccess = (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder', roomId?: string) => {
@@ -1014,7 +1069,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
     sendPushNotification, inAppNotifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, sendProReminder, sendDirectReminder,
+    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, restoreProPurchases, sendProReminder, sendDirectReminder,
     language, setLanguage, t
   }), [
     currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,
