@@ -100,7 +100,7 @@ export default function SubscriptionScreen() {
       if (restored) {
         Alert.alert(t('subscriptionComplete'), t('proActivated'));
       } else {
-        Alert.alert(t('errorTitle'), '복원할 구독 내역이 없습니다.');
+        Alert.alert(t('errorTitle'), t('noRestoreFound'));
       }
     } catch (e: any) {
       Alert.alert(t('errorTitle'), t('paymentError'));
