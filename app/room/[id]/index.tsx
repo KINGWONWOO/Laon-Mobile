@@ -400,19 +400,6 @@ export default function RoomMainScreen() {
             ))}
           </View>
 
-          {/* [임시] 알림 테스트 버튼 */}
-          <TouchableOpacity
-            style={[styles.testNotiBtn, { backgroundColor: '#FF9F43' + '22', borderColor: '#FF9F43' }]}
-            onPress={async () => {
-              if (!room.members?.length) return;
-              await sendPushNotification(room.members, '🔔 테스트 알림', `[${room.name}] 알림이 정상적으로 작동합니다!`);
-              Alert.alert('전송 완료', `${room.members.length}명에게 테스트 알림을 보냈습니다.`);
-            }}
-          >
-            <Ionicons name="notifications" size={16} color="#FF9F43" style={{ marginRight: 6 }} />
-            <Text style={{ color: '#FF9F43', fontWeight: '700', fontSize: 14 }}>테스트 알림 보내기</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.roomDeleteLink} onPress={() => setShowDeleteConfirm(true)}>
             <Text style={styles.roomDeleteText}>{isLeader ? t('deleteRoom') : t('leaveRoom')}</Text>
           </TouchableOpacity>
@@ -595,7 +582,6 @@ const styles = StyleSheet.create({
   activityIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   activityText: { fontSize: 13, lineHeight: 18 },
   activityTime: { fontSize: 11, marginLeft: 8, flexShrink: 0 },
-  testNotiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
   roomDeleteLink: { marginTop: 16, alignItems: 'center', paddingBottom: 20 },
   roomDeleteText: { color: '#ff4444', fontSize: 13, fontWeight: '600', opacity: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
