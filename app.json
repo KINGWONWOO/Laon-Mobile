@@ -2,7 +2,7 @@
   "expo": {
     "name": "LAON",
     "slug": "laon-dance-feedback",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/LaonIcon.png",
     "scheme": "laondancefeedback",
@@ -21,14 +21,12 @@
     "android": {
       "package": "om.laon.dancefeedback",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 7,
+      "versionCode": 9,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO",
         "NOTIFICATIONS"
       ],
       "adaptiveIcon": {
@@ -55,9 +53,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/LaonIcon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#303437"
         }
       ],
       "expo-secure-store",
@@ -69,14 +67,14 @@
         }
       ],
       "expo-video",
-      "expo-media-library",
+      ["expo-media-library", { "granularPermissions": [] }],
       "expo-audio",
       "expo-asset",
       [
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true,
+            "usesCleartextTraffic": false,
             "largeHeap": true
           }
         }
@@ -85,7 +83,7 @@
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-4292623789702109~5725434154",
-          "iosAppId": "ca-app-pub-4292623789702109~5725434154"
+          "iosAppId": "ca-app-pub-4292623789702109~8783741095"
         }
       ],
       "react-native-video"

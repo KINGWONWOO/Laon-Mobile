@@ -28,11 +28,9 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setErrorMsg(null);
-    console.log('[LoginScreen] Attempting email login:', email);
     try {
       const { data, error } = await authService.signIn(email, password);
       if (error) throw error;
-      console.log('[LoginScreen] Login success, navigating to rooms');
       router.replace('/rooms');
     } catch (err: any) {
       console.error('[LoginScreen] Login error:', err);
