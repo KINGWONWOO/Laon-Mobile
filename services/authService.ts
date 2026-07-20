@@ -27,7 +27,7 @@ export const authService = {
 
       if (provider === 'kakao') {
         options.queryParams = {
-          scope: 'profile_nickname,account_email',
+          scope: 'profile_nickname account_email',
         };
       }
 
@@ -49,50 +49,66 @@ export const authService = {
       // 💡 PKCE 보안을 위해 verifier가 저장될 시간을 소폭 확보 (AsyncStorage 지연 대응)
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // 💡 Android에서 Kakao 앱이 설치된 경우, Chrome Custom Tab이 닫히고 Kakao 앱이
+      // OAuth를 처리한 뒤 딥링크로 돌아오는 흐름에 대응하기 위해 별도 리스너를 등록
+      let deepLinkUrl: string | null = null;
+      const redirectBase = redirectTo.split('?')[0];
+      const linkingSubscription = Linking.addEventListener('url', ({ url }) => {
+        if (url.startsWith(redirectBase)) {
+          deepLinkUrl = url;
+          linkingSubscription.remove();
+        }
+      });
+
       const res = await WebBrowser.openAuthSessionAsync(oauthData.url, redirectTo);
 
-      if (res.type === 'success' && res.url) {
-        // 💡 PKCE Flow인지 Implicit Flow인지 URL 분석을 통해 판단
-        const urlObj = new URL(res.url.replace('#', '?'));
-        const code = urlObj.searchParams.get('code');
-        const error = urlObj.searchParams.get('error');
+      if (res.type !== 'success' || !res.url) {
+        // Chrome Custom Tab이 앱 전환으로 닫혔을 경우, 딥링크 도착을 최대 1초 대기
+        // (글로벌 딥링크 핸들러(AppContext)가 지연 도착도 처리)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      linkingSubscription.remove();
 
-        if (error) {
-          throw new Error(`인증 에러: ${urlObj.searchParams.get('error_description') || error}`);
-        }
+      const callbackUrl = (res.type === 'success' && res.url) ? res.url : deepLinkUrl;
+      if (!callbackUrl) return { data: null, error: null };
 
-        if (code) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(res.url);
-          
-          if (sessionError) {
-            console.warn(`[Auth] PKCE Exchange failed: ${sessionError.message}`);
-            // verifier 누락 등의 문제로 실패한 경우 fallback 시도
-          } else {
-            return { data: sessionData, error: null };
-          }
-        }
+      // 💡 PKCE Flow인지 Implicit Flow인지 URL 분석을 통해 판단
+      const urlObj = new URL(callbackUrl.replace('#', '?'));
+      const code = urlObj.searchParams.get('code');
+      const error = urlObj.searchParams.get('error');
 
-        // Fallback: URL 파싱 시도 (Implicit flow 대비 또는 PKCE 실패 시 대응)
-        const access_token = urlObj.searchParams.get('access_token');
-        const refresh_token = urlObj.searchParams.get('refresh_token');
-        
-        if (access_token) {
-          const { data, error: setSessionError } = await supabase.auth.setSession({ 
-            access_token, 
-            refresh_token: refresh_token || '' 
-          });
-          return { data, error: setSessionError };
-        }
-        
-        if (code && !access_token) {
-          // 코드는 있는데 exchange 실패했고 토큰도 없으면 에러
-          throw new Error('인증 코드를 세션으로 교환하는 데 실패했습니다.');
-        }
-
-        throw new Error('인증 정보를 찾을 수 없습니다.');
+      if (error) {
+        throw new Error(`인증 에러: ${urlObj.searchParams.get('error_description') || error}`);
       }
 
-      return { data: null, error: null };
+      if (code) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(callbackUrl);
+
+        if (sessionError) {
+          console.warn(`[Auth] PKCE Exchange failed: ${sessionError.message}`);
+          // verifier 누락 등의 문제로 실패한 경우 fallback 시도
+        } else {
+          return { data: sessionData, error: null };
+        }
+      }
+
+      // Fallback: URL 파싱 시도 (Implicit flow 대비 또는 PKCE 실패 시 대응)
+      const access_token = urlObj.searchParams.get('access_token');
+      const refresh_token = urlObj.searchParams.get('refresh_token');
+
+      if (access_token) {
+        const { data, error: setSessionError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token: refresh_token || ''
+        });
+        return { data, error: setSessionError };
+      }
+
+      if (code && !access_token) {
+        throw new Error('인증 코드를 세션으로 교환하는 데 실패했습니다.');
+      }
+
+      throw new Error('인증 정보를 찾을 수 없습니다.');
     } catch (err: any) {
       return { data: null, error: err };
     }

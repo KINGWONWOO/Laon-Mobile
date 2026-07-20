@@ -8,6 +8,7 @@ import { contentService } from '../services/contentService';
 import { getThemeColors } from '../constants/theme';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Alert } from 'react-native';
+import * as Linking from 'expo-linking';
 import { authService } from '../services/authService';
 import { Language, SUPPORTED_LANGUAGES, createTranslator } from '../constants/translations';
 import { registerForPushNotificationsAsync } from '../services/NotificationService';
@@ -392,9 +393,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     });
+
+    // 💡 Samsung Internet 등 브라우저가 laondancefeedback:// 스킴을 자동 처리 못할 때,
+    // 사용자가 "서비스로 돌아가세요"를 탭하면 딥링크가 Linking 이벤트로 도착함.
+    // signInWithSocial 함수가 이미 종료된 후라도 여기서 코드 교환 처리.
+    const handleAuthDeepLink = async ({ url }: { url: string }) => {
+      if (!url.startsWith('laondancefeedback://auth/callback')) return;
+      try {
+        const urlObj = new URL(url.replace('#', '?'));
+        const code = urlObj.searchParams.get('code');
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(url);
+          // onAuthStateChange가 세션을 감지하여 로그인 처리
+        }
+      } catch (e) {
+        console.warn('[Auth] Global deeplink handler error:', e);
+      }
+    };
+
+    const linkingSubscription = Linking.addEventListener('url', handleAuthDeepLink);
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      linkingSubscription.remove();
     };
   }, []);
 

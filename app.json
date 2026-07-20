@@ -2,7 +2,7 @@
   "expo": {
     "name": "LAON",
     "slug": "laon-dance-feedback",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/LaonIcon.png",
     "scheme": "laondancefeedback",
@@ -21,12 +21,10 @@
     "android": {
       "package": "om.laon.dancefeedback",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 9,
+      "versionCode": 11,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
         "NOTIFICATIONS"
       ],
       "adaptiveIcon": {
@@ -54,8 +52,8 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "resizeMode": "cover",
-          "backgroundColor": "#303437"
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
         }
       ],
       "expo-secure-store",
@@ -86,7 +84,8 @@
           "iosAppId": "ca-app-pub-4292623789702109~8783741095"
         }
       ],
-      "react-native-video"
+      "react-native-video",
+      "./plugins/withMediaPermissionsFix"
     ],
     "experiments": {
       "typedRoutes": true,
