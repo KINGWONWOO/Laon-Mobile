@@ -31,7 +31,7 @@ export default function LoginScreen() {
     try {
       const { data, error } = await authService.signIn(email, password);
       if (error) throw error;
-      router.replace('/rooms');
+      // _layout.tsx의 guard가 currentUser 변경을 감지하여 /rooms로 이동
     } catch (err: any) {
       console.error('[LoginScreen] Login error:', err);
       setErrorMsg(err.message || t('loginFailed'));
@@ -45,7 +45,7 @@ export default function LoginScreen() {
     try {
       const { data, error } = await loginWithSocial(provider);
       if (error) throw error;
-      if (data?.session) router.replace('/rooms');
+      // _layout.tsx의 guard가 currentUser 변경을 감지하여 /rooms로 이동
     } catch (err: any) {
       console.error(`[SocialAuth] Error:`, err);
       Alert.alert(t('notification'), `${provider} ${t('loginFailed')}\n${err.message || ''}`);

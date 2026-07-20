@@ -32,6 +32,11 @@ export default function NoticeDetailScreen() {
   const [editCommentText, setEditCommentText] = useState('');
   const [isUpdatingComment, setIsUpdatingComment] = useState(false);
 
+  const [localComments, setLocalComments] = useState<any[]>(notice?.comments || []);
+  useEffect(() => {
+    setLocalComments(notice?.comments || []);
+  }, [notice?.comments]);
+
   // Option Modal states
   const [showNoticeOptions, setShowNoticeOptions] = useState(false);
   const [showCommentOptions, setShowCommentOptions] = useState(false);
@@ -139,6 +144,17 @@ export default function NoticeDetailScreen() {
     setViewerVisible(true);
   };
 
+  const handleDeleteComment = async (commentId: string) => {
+    const oldComments = [...localComments];
+    setLocalComments(prev => prev.filter(c => c.id !== commentId));
+    try {
+      await deleteNoticeComment(commentId);
+    } catch (e: any) {
+      setLocalComments(oldComments);
+      Alert.alert(t('error'), e.message);
+    }
+  };
+
   const handleUpdateComment = async () => {
     if (!editCommentText.trim() || !editingCommentId) return;
     setIsUpdatingComment(true);
@@ -182,7 +198,7 @@ export default function NoticeDetailScreen() {
       if (!selectedComment) return;
       Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
         { text: t('cancel') },
-        { text: t('delete'), style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
+        { text: t('delete'), style: 'destructive', onPress: () => handleDeleteComment(selectedComment.id) }
       ]);
     }}
   ] : isLeader ? [
@@ -190,7 +206,7 @@ export default function NoticeDetailScreen() {
       if (!selectedComment) return;
       Alert.alert(t('deleteCommentTitle'), t('deleteConfirm'), [
         { text: t('cancel') },
-        { text: t('delete'), style: 'destructive', onPress: () => deleteNoticeComment(selectedComment.id) }
+        { text: t('delete'), style: 'destructive', onPress: () => handleDeleteComment(selectedComment.id) }
       ]);
     }}
   ] : [
@@ -199,10 +215,9 @@ export default function NoticeDetailScreen() {
   ];
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: theme.background }]}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -215,7 +230,7 @@ export default function NoticeDetailScreen() {
       </View>
 
       <FlatList
-        data={notice.comments || []}
+        data={localComments}
         keyExtractor={item => item.id}
         ListHeaderComponent={
           <View style={styles.contentSection}>
@@ -250,7 +265,7 @@ export default function NoticeDetailScreen() {
             )}
 
             <View style={[styles.divider, { backgroundColor: theme.border, opacity: 0.5 }]} />
-            <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{t('commentCountLabel')} {notice.comments?.length || 0}</Text>
+            <Text style={[styles.commentCount, { color: theme.text, letterSpacing: -0.5, fontWeight: '800' }]}>{t('commentCountLabel')} {localComments.length}</Text>
           </View>
         }
         renderItem={({ item: comment }) => {
@@ -385,12 +400,14 @@ export default function NoticeDetailScreen() {
           onChangeText={setCommentText}
           multiline
         />
-        <TouchableOpacity 
-          style={[styles.sendBtn, { backgroundColor: theme.primary }]} 
+        <TouchableOpacity
+          style={[styles.sendBtn, { backgroundColor: theme.primary }]}
           onPress={handleAddComment}
-          disabled={!commentText.trim()}
+          disabled={!commentText.trim() || isSubmitting}
         >
-          <Ionicons name="send" size={20} color={theme.background} />
+          {isSubmitting
+            ? <ActivityIndicator size="small" color={theme.background} />
+            : <Ionicons name="send" size={20} color={theme.background} />}
         </TouchableOpacity>
       </View>
 

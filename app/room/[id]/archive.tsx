@@ -66,6 +66,7 @@ export default function ArchiveScreen() {
   const [editingComment, setEditingComment] = useState<any>(null);
   const [editCommentText, setEditCommentText] = useState('');
 
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showFullScreen, setShowFullScreen] = useState(false);
 
@@ -138,10 +139,11 @@ export default function ArchiveScreen() {
   };
 
   const handleAddComment = async () => {
-    if (!selectedPhoto || !newComment.trim()) return;
+    if (!selectedPhoto || !newComment.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
     const commentText = newComment.trim();
     setNewComment('');
-    
+
     // Optimistic update
     const tempId = Math.random().toString();
     const optimisticComment = { id: tempId, text: commentText, userId: currentUser?.id, createdAt: new Date().toISOString() };
@@ -153,6 +155,8 @@ export default function ArchiveScreen() {
     } catch (e) {
       Alert.alert(t('error'), t('commentError'));
       setSelectedPhoto(selectedPhoto); // Rollback
+    } finally {
+      setIsSubmittingComment(false);
     }
   };
 
@@ -311,8 +315,8 @@ export default function ArchiveScreen() {
       />
 
       <Modal visible={!!selectedPhoto} animationType="slide" transparent onRequestClose={() => { setSelectedPhoto(null); setShowFullScreen(false); }}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.container, { backgroundColor: theme.background }]}
         >
           <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -487,12 +491,14 @@ export default function ArchiveScreen() {
               onChangeText={setNewComment}
               multiline
             />
-            <TouchableOpacity 
-              style={[styles.sendBtn, { backgroundColor: theme.primary }]} 
+            <TouchableOpacity
+              style={[styles.sendBtn, { backgroundColor: theme.primary }]}
               onPress={handleAddComment}
-              disabled={!newComment.trim()}
+              disabled={!newComment.trim() || isSubmittingComment}
             >
-              <Ionicons name="send" size={20} color="#fff" />
+              {isSubmittingComment
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="send" size={20} color="#fff" />}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -513,6 +519,10 @@ export default function ArchiveScreen() {
       </Modal>
 
       <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalOverlayUpload}>
           <View style={[styles.modalContentUpload, { backgroundColor: theme.card }]}>
             <Text style={{color: theme.text, fontSize: 20, fontWeight: '900', marginBottom: 24, letterSpacing: -0.5}}>{t('archiveUploadTitle')}</Text>
@@ -560,6 +570,7 @@ export default function ArchiveScreen() {
             <TouchableOpacity onPress={() => setShowAddModal(false)} style={{marginTop: 24}}><Text style={{color: theme.textSecondary, textAlign: 'center', fontWeight: '700'}}>{t('cancel')}</Text></TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
       <View style={{ paddingHorizontal: 24 }}>
         <AdBanner />
