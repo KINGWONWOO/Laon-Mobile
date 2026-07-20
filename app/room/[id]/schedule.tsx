@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView, Image, Animated as RNAnimated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, Modal, ScrollView, RefreshControl, Dimensions, Switch, ActivityIndicator, Platform, KeyboardAvoidingView, Image } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../context/AppContext';
@@ -7,8 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, runOnJS, withTiming } from 'react-native-reanimated';
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -53,9 +53,10 @@ export default function ScheduleScreen() {
   const animTimeCellH1 = useAnimatedStyle(() => ({ height: 34 * (scale1.value / fitScaleSV.value) }));
   const animGridCell1 = useAnimatedStyle(() => { const r = scale1.value / fitScaleSV.value; return { width: 52 * r, height: 36 * r }; });
   const animDateHeader1 = useAnimatedStyle(() => { const r = scale1.value / fitScaleSV.value; return { width: 52 * r, height: 42 * r }; });
-  // Horizontal scroll offset — native driver keeps sticky header in perfect sync (zero lag)
-  const hScrollX1 = useRef(new RNAnimated.Value(0)).current;
-  const stickyTranslate1 = RNAnimated.multiply(hScrollX1, -1);
+  // Horizontal scroll offset — reanimated shared value so pinch gesture and scroll coexist
+  const scrollX1 = useSharedValue(0);
+  const scrollHandler1 = useAnimatedScrollHandler({ onScroll: (e) => { scrollX1.value = e.contentOffset.x; } });
+  const stickyStyle1 = useAnimatedStyle(() => ({ transform: [{ translateX: -scrollX1.value }] }));
 
   // Auto-fit: 100% = entire grid visible on screen
   useEffect(() => {
@@ -396,7 +397,7 @@ export default function ScheduleScreen() {
             <TouchableOpacity onPress={() => setShowScheduleOptions(true)} style={styles.detailDeleteBtn}><Ionicons name="ellipsis-vertical" size={24} color={theme.text} /></TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+          <GHScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
             <View style={styles.statusRow}>
               {isClosed ? (
                 <View style={[styles.statusBadge, {backgroundColor: theme.error + '15'}]}><Text style={{color: theme.error, fontWeight:'800', fontSize: 12}}>{t('statusDeadline')}</Text></View>
@@ -441,7 +442,7 @@ export default function ScheduleScreen() {
                 <View style={{ flexDirection: 'row', zIndex: 2, backgroundColor: theme.background }}>
                   <View style={{ width: 52 }} />
                   <View style={{ flex: 1, overflow: 'hidden' }}>
-                    <RNAnimated.View style={[{ flexDirection: 'row' }, { transform: [{ translateX: stickyTranslate1 }] }]}>
+                    <Animated.View style={[{ flexDirection: 'row' }, stickyStyle1]}>
                       {uniqueDates.map(date => {
                         const d = new Date(date as string);
                         return (
@@ -451,11 +452,11 @@ export default function ScheduleScreen() {
                           </Animated.View>
                         );
                       })}
-                    </RNAnimated.View>
+                    </Animated.View>
                   </View>
                 </View>
                 {/* Grid body */}
-                <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} bounces={false} style={{ flex: 1 }}>
+                <GHScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} bounces={false} style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row' }}>
                     <View style={{ width: 52 }}>
                       {hours.map(hour => (
@@ -464,7 +465,7 @@ export default function ScheduleScreen() {
                         </Animated.View>
                       ))}
                     </View>
-                    <RNAnimated.ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} scrollEventThrottle={1} onScroll={RNAnimated.event([{ nativeEvent: { contentOffset: { x: hScrollX1 } } }], { useNativeDriver: true })} style={{ flex: 1 }}>
+                    <Animated.ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={scrollHandler1} style={{ flex: 1 }}>
                       <View>
                         {hours.map(hour => {
                           const userResponseIds = schedule.responses[currentUser?.id || ''] || [];
@@ -522,9 +523,9 @@ export default function ScheduleScreen() {
                           );
                         })}
                       </View>
-                    </RNAnimated.ScrollView>
+                    </Animated.ScrollView>
                   </View>
-                </ScrollView>
+                </GHScrollView>
               </View>
             </GestureDetector>
 
@@ -638,7 +639,7 @@ export default function ScheduleScreen() {
                 <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>{t('noScheduleData')}</Text>
               )}
             </View>
-          </ScrollView>
+          </GHScrollView>
 
           <OptionModal visible={showScheduleOptions} onClose={() => setShowScheduleOptions(false)} options={scheduleOptions} title={t('scheduleSettings')} theme={theme} cancelLabel={t('cancel')} />
         </View>

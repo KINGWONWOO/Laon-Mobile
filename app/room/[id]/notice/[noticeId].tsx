@@ -73,12 +73,17 @@ export default function NoticeDetailScreen() {
   }
 
   const handleAddComment = async () => {
-    if (!commentText.trim()) return;
+    if (!commentText.trim() || isSubmitting) return;
     setIsSubmitting(true);
+    const text = commentText.trim();
+    setCommentText('');
+    const tempId = 'temp_' + Date.now();
+    setLocalComments(prev => [...prev, { id: tempId, text, userId: currentUser?.id, createdAt: new Date().toISOString() }]);
     try {
-      await addNoticeComment(notice.id, commentText.trim());
-      setCommentText('');
+      await addNoticeComment(notice.id, text);
     } catch (e: any) {
+      setLocalComments(prev => prev.filter(c => c.id !== tempId));
+      setCommentText(text);
       Alert.alert(t('error'), e.message);
     } finally {
       setIsSubmitting(false);
