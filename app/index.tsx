@@ -7,9 +7,13 @@ import { useRouter } from 'expo-router';
 import { Colors, Shadows } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import { authService } from '../services/authService';
 import { useAppContext } from '../context/AppContext';
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../constants/translations';
+
+const APP_VERSION = Constants.expoConfig?.version ?? '';
+const BUILD_NUMBER = Constants.expoConfig?.android?.versionCode ?? '';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -57,10 +61,13 @@ export default function LoginScreen() {
   const currentColors = theme || Colors;
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: currentColors.background }]}
     >
+      <Text style={[styles.versionBadge, { color: currentColors.textSecondary }]}>
+        v{APP_VERSION} ({BUILD_NUMBER})
+      </Text>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={{ flex: 1 }}>
           <View style={styles.header}>
@@ -197,5 +204,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 32 },
   langRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 20, gap: 8 },
   langChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
-  langChipText: { fontSize: 11, fontWeight: '700' }
+  langChipText: { fontSize: 11, fontWeight: '700' },
+  versionBadge: { position: 'absolute', top: Platform.OS === 'ios' ? 54 : 32, right: 20, fontSize: 11, fontWeight: '600', opacity: 0.45, zIndex: 1 },
 });
