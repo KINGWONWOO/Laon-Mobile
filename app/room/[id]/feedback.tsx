@@ -236,7 +236,7 @@ export default function FeedbackScreen() {
       const triggerTime = c.timestampMillis - 1000;
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => a.timestampMillis - b.timestampMillis).slice(-6);
+    }).sort((a, b) => a.createdAt - b.createdAt).slice(-6);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
