@@ -1444,8 +1444,13 @@ export default function FormationEditorScreen() {
       setVideoConversionProgress(0);
       await new Promise(resolve => setTimeout(resolve, 0));
       try {
+        let lastProgressTs = 0;
         const convertedUri = await ensureStandardMP4(fileUri, (ratio) => {
-          setVideoConversionProgress(Math.floor(ratio * 100));
+          const now = Date.now();
+          if (now - lastProgressTs >= 100) {
+            lastProgressTs = now;
+            setVideoConversionProgress(Math.floor(ratio * 100));
+          }
         });
 
         // documentDirectory에 복사하여 OS 캐시 정리에도 파일 유지
@@ -1464,6 +1469,8 @@ export default function FormationEditorScreen() {
         pipX.value = width - 220;
         pipY.value = 100;
         pipScale.value = 1;
+        // PiP 플레이어가 초기화될 시간을 확보한 후 오버레이 해제
+        await new Promise(resolve => setTimeout(resolve, 400));
       } catch (e: any) {
         Alert.alert(t('error'), e.message);
       } finally {

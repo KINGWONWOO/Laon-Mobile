@@ -131,10 +131,14 @@ export default function FormationPlayer({
   const sideWingWidth = formation?.settings?.sideWingWidth ?? 0;
   const videoSettings = formation?.videoSettings;
 
+  const isCompact = containerWidth != null;
+  const showDirectionLabels = !hideLabels;
+  const labelExtraHeight = showDirectionLabels ? 28 : 0;
+
   const effectiveWidth = containerWidth ?? WINDOW_WIDTH;
-  const padding = containerWidth != null ? 0 : 40;
+  const padding = isCompact ? 0 : 40;
   const cellByWidth = (effectiveWidth - padding) / gridCols;
-  const cellByHeight = containerHeight != null ? containerHeight / gridRows : Infinity;
+  const cellByHeight = containerHeight != null ? (containerHeight - labelExtraHeight * 2) / gridRows : Infinity;
   const STAGE_CELL_SIZE = Math.min(cellByWidth, cellByHeight);
   const STAGE_WIDTH = gridCols * STAGE_CELL_SIZE;
   const STAGE_HEIGHT = gridRows * STAGE_CELL_SIZE;
@@ -217,7 +221,6 @@ export default function FormationPlayer({
 
       const interval = setInterval(() => {
         const ms = player.currentTime * 1000;
-        // Drive DancerNode animation directly on UI thread via SharedValue
         internalTimeSV.value = ms;
         onTimeUpdate?.(ms);
         if (!durationReportedRef.current && player.duration > 0 && onDurationDetected) {
@@ -230,10 +233,10 @@ export default function FormationPlayer({
       player.pause();
       if (videoPlayer?.src) videoPlayer.pause();
     }
-  }, [isPlaying, player, videoPlayer, noAudio, playbackRate]);
+  }, [isPlaying, player, videoPlayer, noAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!isPlaying || !player) return;
+    if (!player) return;
     try { player.playbackRate = playbackRate; } catch (_) {}
     if (videoPlayer?.src) { try { videoPlayer.playbackRate = playbackRate; } catch (_) {} }
   }, [playbackRate]);
@@ -247,13 +250,11 @@ export default function FormationPlayer({
 
   if (!formation) return null;
 
-  const isCompact = containerWidth != null;
-  const showDirectionLabels = !hideLabels && !isCompact;
   const gridOpacity = isCompact ? 0.3 : 0.4;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {videoSettings?.videoUrl && !hidePip && !isCompact && (
+      {videoSettings?.videoUrl && !hidePip && (
         <View style={[styles.pipContainer, { left: videoSettings.pipPosition.x, top: videoSettings.pipPosition.y }]}>
           <VideoView
             player={videoPlayer}
@@ -290,8 +291,8 @@ export default function FormationPlayer({
             const thick = Math.max(1, Math.round(STAGE_CELL_SIZE * 0.1));
             return (
               <>
-                <View style={{ position: 'absolute', top: '50%', left: '50%', width: arm, height: thick, backgroundColor: theme.primary, marginLeft: -(arm / 2), marginTop: -(thick / 2), opacity: 0.9, borderRadius: 1, zIndex: 1 }} />
-                <View style={{ position: 'absolute', top: '50%', left: '50%', width: thick, height: arm, backgroundColor: theme.primary, marginLeft: -(thick / 2), marginTop: -(arm / 2), opacity: 0.9, borderRadius: 1, zIndex: 1 }} />
+                <View style={{ position: 'absolute', top: '50%', left: '50%', width: arm, height: thick, backgroundColor: theme.primary, marginLeft: -(arm / 2), marginTop: -(thick / 2), opacity: 0.9, borderRadius: 1 }} />
+                <View style={{ position: 'absolute', top: '50%', left: '50%', width: thick, height: arm, backgroundColor: theme.primary, marginLeft: -(thick / 2), marginTop: -(arm / 2), opacity: 0.9, borderRadius: 1 }} />
               </>
             );
           })()}

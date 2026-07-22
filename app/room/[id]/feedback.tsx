@@ -726,7 +726,7 @@ export default function FeedbackScreen() {
     if (isLandscape) {
       return (
         <Modal visible={true} animationType="fade" transparent={false} onRequestClose={() => setIsFormationFullScreen(false)}>
-          <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
+          <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
             <View style={{ flex: 1 }}>
               <FormationPlayer
                 formation={selectedFormation}
@@ -738,9 +738,9 @@ export default function FeedbackScreen() {
                 isPlaying={isFormationPlaying}
                 playbackRate={playbackRate}
                 containerWidth={winW}
-                containerHeight={winH - 70}
+                containerHeight={winH - Math.max(70, 56 + insets.bottom)}
                 hidePip={false}
-                forceDarkMode={true}
+                forceDarkMode={false}
               />
               {/* 전체화면 컨트롤 오버레이 */}
               <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom + 4, paddingHorizontal: 4, backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -1295,11 +1295,11 @@ export default function FeedbackScreen() {
             animationType="fade"
             onRequestClose={() => setShowCommentInput(false)}
           >
-            <View style={styles.modalOverlay}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-                style={[styles.modalContent, { backgroundColor: theme.card }]}
-              >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 }}
+            >
+              <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
                 <Text style={{ color: theme.text, marginBottom: 15, fontWeight: "800" }}>
                   {t('commentAtTime').replace('{time}', formatTime(isFormation ? formationTime : Math.floor((player?.currentTime || 0) * 1000)))}
                 </Text>
@@ -1326,8 +1326,8 @@ export default function FeedbackScreen() {
                     )}
                   </TouchableOpacity>
                 </View>
-              </KeyboardAvoidingView>
-            </View>
+              </View>
+            </KeyboardAvoidingView>
           </Modal>
 
           <Modal
