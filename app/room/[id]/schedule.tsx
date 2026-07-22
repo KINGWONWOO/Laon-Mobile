@@ -9,6 +9,7 @@ import { Shadows } from '../../../constants/theme';
 import AdBanner from '../../../components/ui/AdBanner';
 import { Gesture, GestureDetector, GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedScrollHandler, runOnJS, withTiming } from 'react-native-reanimated';
+const AnimatedGHScrollView = Animated.createAnimatedComponent(GHScrollView);
 
 export default function ScheduleScreen() {
   const { id } = useGlobalSearchParams<{ id: string }>();
@@ -46,6 +47,7 @@ export default function ScheduleScreen() {
   };
 
   const pinch1 = Gesture.Pinch()
+    .simultaneousWithExternalGesture()
     .onUpdate(e => { scale1.value = Math.min(Math.max(saved1.value * e.scale, fitScaleSV.value * 0.3), fitScaleSV.value * 3); })
     .onEnd(() => { saved1.value = scale1.value; runOnJS(setDisplayPct1)(Math.round((scale1.value / fitScaleSV.value) * 100)); });
   // Dimension-driven zoom: animating actual width/height so ScrollViews see correct content size
@@ -465,7 +467,7 @@ export default function ScheduleScreen() {
                         </Animated.View>
                       ))}
                     </View>
-                    <Animated.ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={scrollHandler1} style={{ flex: 1 }}>
+                    <AnimatedGHScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} scrollEventThrottle={16} onScroll={scrollHandler1} style={{ flex: 1 }}>
                       <View>
                         {hours.map(hour => {
                           const userResponseIds = schedule.responses[currentUser?.id || ''] || [];
@@ -523,7 +525,7 @@ export default function ScheduleScreen() {
                           );
                         })}
                       </View>
-                    </Animated.ScrollView>
+                    </AnimatedGHScrollView>
                   </View>
                 </GHScrollView>
               </View>

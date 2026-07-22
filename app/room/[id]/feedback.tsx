@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, TouchableWithoutFeedback, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, RefreshControl, ScrollView, Dimensions, useWindowDimensions } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,7 +17,7 @@ import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponen
 import { PopoverMenu } from '../../../components/ui/PopoverMenu';
 import { Shadows } from '../../../constants/theme';
 import { createTranslator } from '../../../constants/translations';
-import Animated, { FadeIn, FadeOut, LinearTransition, useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useSharedValue, useAnimatedStyle, runOnJS, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
@@ -25,6 +25,7 @@ import { saveMediaToDevice } from '../../../services/downloadService';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function FeedbackScreen() {
+  const { width: winW, height: winH } = useWindowDimensions();
   const { id } = useGlobalSearchParams<{ id: string }>();
   const router = useRouter();
   const { videos, addVideo, updateVideo, deleteVideo, addComment, updateComment, deleteComment, getRoomDisplayUser, currentUser, theme, markItemAsAccessed, refreshAllData, formations, checkProAccess, isPro, rooms, blockUser, reportContent, language } = useAppContext();
@@ -100,6 +101,7 @@ export default function FeedbackScreen() {
   };
 
   const [isFormationPlaying, setIsFormationPlaying] = useState(false);
+  const [isFormationFullScreen, setIsFormationFullScreen] = useState(false);
   const [formationContainerHeight, setFormationContainerHeight] = useState(0);
   const [formationTime, setFormationTime] = useState(0);
   const [formationDuration, setFormationDuration] = useState(60);
@@ -122,6 +124,11 @@ export default function FeedbackScreen() {
   const [subContainerW, setSubContainerW] = useState(SUB_INIT_W);
 
   const [videoDuration, setVideoDuration] = useState(0);
+
+  // 영상 핀치줌 (issue #9)
+  const videoZoom = useSharedValue(1);
+  const savedVideoZoom = useSharedValue(1);
+  const videoZoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: videoZoom.value }] }));
 
   const isFormation = selectedVideo?.videoUrl?.startsWith('formation://');
   const selectedFormation = useMemo(() => {
@@ -146,11 +153,10 @@ export default function FeedbackScreen() {
     if (cachedVideoUrl) p.play();
   });
 
-  const subPlayer = useVideoPlayer(cachedChoreographyUrl || '', p => {
+  const subPlayer = useVideoPlayer('', p => {
     p.loop = true;
     p.muted = true;
     p.preservesPitch = true;
-    if (cachedChoreographyUrl) p.play();
   });
 
   // 안무 영상 드리프트 보정: swapped일 때만 (non-swapped는 FormationPiPPlayer가 처리)
@@ -193,13 +199,14 @@ export default function FeedbackScreen() {
   }, [cachedVideoUrl, player]);
 
   useEffect(() => {
-    if (cachedChoreographyUrl && subPlayer) {
+    if (isSwapped && cachedChoreographyUrl && subPlayer) {
       subPlayer.replace(cachedChoreographyUrl);
       subPlayer.muted = true;
-      subPlayer.pause();
       subPlayer.currentTime = 0;
+    } else if (!isSwapped && subPlayer) {
+      try { subPlayer.pause(); } catch (_) {}
     }
-  }, [cachedChoreographyUrl, subPlayer]);
+  }, [cachedChoreographyUrl, subPlayer, isSwapped]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -229,7 +236,7 @@ export default function FeedbackScreen() {
       const triggerTime = c.timestampMillis - 1000;
       const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
       return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => b.timestampMillis - a.timestampMillis).slice(0, 6);
+    }).sort((a, b) => a.timestampMillis - b.timestampMillis).slice(-6);
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -259,6 +266,32 @@ export default function FeedbackScreen() {
     changeOrientation();
     return () => { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); };
   }, [isFullScreen]);
+
+  // 동선 영상 전체화면 (가로모드)
+  useEffect(() => {
+    if (!selectedVideo || !isFormation) return;
+    if (isFormationFullScreen) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    }
+  }, [isFormationFullScreen, selectedVideo, isFormation]);
+
+  // 영상 모달 닫힐 때 항상 세로모드로 복귀
+  useEffect(() => {
+    if (!selectedVideo) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      setIsFullScreen(false);
+      setIsFormationFullScreen(false);
+    }
+  }, [selectedVideo]);
+
+  const handleCloseModal = async () => {
+    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    setIsFullScreen(false);
+    setIsFormationFullScreen(false);
+    setSelectedVideo(null);
+  };
 
   useEffect(() => {
     async function cacheAndPlay() {
@@ -316,6 +349,8 @@ export default function FeedbackScreen() {
     cacheAndPlay();
     setPlaybackRate(1.0);
     setShowSpeedPicker(false);
+    videoZoom.value = 1;
+    savedVideoZoom.value = 1;
     if (isFormation) { setFormationTime(0); setIsFormationPlaying(true); }
   }, [selectedVideo?.id]);
 
@@ -534,6 +569,30 @@ export default function FeedbackScreen() {
 
   const [barWidth, setBarWidth] = useState(0);
 
+  const scrubGesture = Gesture.Pan()
+    .minDistance(0)
+    .onBegin((e) => {
+      'worklet';
+      runOnJS(setIsScrubbing)(true);
+      runOnJS(resetControlsTimer)();
+      const totalDuration = isFormation ? formationDuration : videoDuration;
+      if (totalDuration <= 0 || barWidth <= 0) return;
+      const ratio = Math.max(0, Math.min(1, e.x / barWidth));
+      runOnJS(seekTo)(ratio * totalDuration * 1000);
+    })
+    .onUpdate((e) => {
+      'worklet';
+      const totalDuration = isFormation ? formationDuration : videoDuration;
+      if (totalDuration <= 0 || barWidth <= 0) return;
+      const ratio = Math.max(0, Math.min(1, e.x / barWidth));
+      runOnJS(seekTo)(ratio * totalDuration * 1000);
+    })
+    .onEnd(() => {
+      'worklet';
+      runOnJS(setIsScrubbing)(false);
+      runOnJS(resetControlsTimer)();
+    });
+
   // 서브 영상 애니메이션·제스처 — 컴포넌트 최상위에 정의해야 Rules of Hooks를 지킴
   const subAnimStyle = useAnimatedStyle(() => ({
     position: 'absolute',
@@ -578,6 +637,178 @@ export default function FeedbackScreen() {
     pinchGesture
   );
 
+  if (selectedVideo && isFormation && selectedFormation) {
+    const videoObj = videos.find((v) => v.id === selectedVideo.id) || selectedVideo;
+    const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
+    const isLandscape = isFormationFullScreen;
+    const progressPct = formationDuration > 0 ? (formationTime / 1000 / formationDuration) * 100 : 0;
+
+    const renderFormationControls = (compact = false) => (
+      <>
+        {!compact && (
+          <View style={styles.formationSpeedRow}>
+            <TouchableOpacity
+              style={styles.speedArrowBtn}
+              onPress={() => setPlaybackRate((r) => Math.max(0.25, Math.round((r - 0.25) * 100) / 100))}
+            >
+              <Ionicons name="chevron-back" size={18} color={theme.text} />
+            </TouchableOpacity>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 4 }}>
+              {speedOptions.map((speed) => (
+                <TouchableOpacity
+                  key={speed}
+                  style={[styles.formationSpeedChip, { backgroundColor: speed === playbackRate ? theme.primary : (compact ? 'rgba(255,255,255,0.12)' : (theme.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)')) }]}
+                  onPress={() => setPlaybackRate(speed)}
+                >
+                  <Text style={[styles.formationSpeedChipText, { color: speed === playbackRate ? '#fff' : (compact ? 'rgba(255,255,255,0.9)' : theme.text) }]}>
+                    {speed % 1 === 0 ? speed.toFixed(1) : speed}×
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.speedArrowBtn}
+              onPress={() => setPlaybackRate((r) => Math.min(2.0, Math.round((r + 0.25) * 100) / 100))}
+            >
+              <Ionicons name="chevron-forward" size={18} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 재생/진행바 */}
+        <View style={[styles.formationProgressRow, compact && { paddingHorizontal: 8 }]}>
+          <TouchableOpacity
+            onPress={() => setIsFormationPlaying((v) => !v)}
+            style={[styles.formationPlayBtn, { backgroundColor: theme.primary }]}
+          >
+            <Ionicons name={isFormationPlaying ? 'pause' : 'play'} size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={[styles.timeText, { color: compact ? 'rgba(255,255,255,0.8)' : theme.textSecondary, width: 42 }]}>{formatTime(formationTime)}</Text>
+          <GestureDetector gesture={scrubGesture}>
+            <View
+              style={[styles.progressBarTouchable, { flex: 1 }]}
+              onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+            >
+              <View style={[styles.progressBarBg, { backgroundColor: compact ? 'rgba(255,255,255,0.25)' : (theme.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'), height: 6, borderRadius: 3 }]}>
+                <View style={[styles.progressBarFill, {
+                  width: `${progressPct}%`,
+                  backgroundColor: theme.primary,
+                  height: 6,
+                  borderRadius: 3,
+                }]} />
+                <View style={[styles.progressKnob, {
+                  left: `${progressPct}%`,
+                  backgroundColor: '#FFF',
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  marginLeft: -8,
+                  top: -5,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 2,
+                  elevation: 3,
+                }]} />
+              </View>
+            </View>
+          </GestureDetector>
+          <Text style={[styles.timeText, { color: compact ? 'rgba(255,255,255,0.8)' : theme.textSecondary, width: 42, textAlign: 'right' }]}>{formatTime(formationDuration * 1000)}</Text>
+          {compact && (
+            <TouchableOpacity onPress={() => setIsFormationFullScreen(false)} style={{ paddingLeft: 8 }}>
+              <Ionicons name="contract" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </>
+    );
+
+    if (isLandscape) {
+      return (
+        <Modal visible={true} animationType="fade" transparent={false} onRequestClose={() => setIsFormationFullScreen(false)}>
+          <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flex: 1 }}>
+              <FormationPlayer
+                formation={selectedFormation}
+                currentTimeMs={formationTime}
+                externalTimeSV={currentTimeMsSV}
+                seekToMs={formationSeekMs}
+                onTimeUpdate={handleFormationTimeUpdate}
+                onDurationDetected={setFormationDuration}
+                isPlaying={isFormationPlaying}
+                playbackRate={playbackRate}
+                containerWidth={winW}
+                containerHeight={winH - 70}
+                hidePip={false}
+                forceDarkMode={true}
+              />
+              {/* 전체화면 컨트롤 오버레이 */}
+              <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom + 4, paddingHorizontal: 4, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                {renderFormationControls(true)}
+              </View>
+            </View>
+          </GestureHandlerRootView>
+        </Modal>
+      );
+    }
+
+    return (
+      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={handleCloseModal}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={[{ flex: 1 }, { backgroundColor: theme.background }]}>
+            {/* 헤더 */}
+            <View style={[styles.formationHeader, { paddingTop: insets.top, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+              <TouchableOpacity onPress={handleCloseModal} style={{ padding: 4 }}>
+                <Ionicons name="chevron-back" size={28} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.formationHeaderTitle, { color: theme.text }]} numberOfLines={1}>{videoObj.title}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {hasChoreography && (
+                  <TouchableOpacity
+                    onPress={handleDownload}
+                    disabled={isDownloading}
+                    style={[styles.archiveDownloadBtn, { backgroundColor: theme.primary }]}
+                  >
+                    {isDownloading
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <><Ionicons name="arrow-down-circle-outline" size={17} color="#fff" /><Text style={styles.archiveDownloadBtnText}>{t('save')}</Text></>
+                    }
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setIsFormationFullScreen(true)} style={{ padding: 4 }}>
+                  <Ionicons name="expand" size={22} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 대형 배치 뷰 */}
+            <View style={{ flex: 1 }} onLayout={(e) => setFormationContainerHeight(e.nativeEvent.layout.height)}>
+              <FormationPlayer
+                formation={selectedFormation}
+                currentTimeMs={formationTime}
+                externalTimeSV={currentTimeMsSV}
+                seekToMs={formationSeekMs}
+                onTimeUpdate={handleFormationTimeUpdate}
+                onDurationDetected={setFormationDuration}
+                isPlaying={isFormationPlaying}
+                playbackRate={playbackRate}
+                containerWidth={winW}
+                containerHeight={formationContainerHeight > 0 ? formationContainerHeight : undefined}
+                hidePip={false}
+                forceDarkMode={false}
+              />
+            </View>
+
+            {/* 하단 컨트롤 */}
+            <View style={[styles.formationControls, { paddingBottom: insets.bottom + 8, backgroundColor: theme.card, borderTopColor: theme.border }]}>
+              {renderFormationControls(false)}
+            </View>
+          </View>
+        </GestureHandlerRootView>
+      </Modal>
+    );
+  }
+
   if (selectedVideo) {
     const videoObj = videos.find((v) => v.id === selectedVideo.id) || selectedVideo;
     const hasChoreography = !!cachedChoreographyUrl || !!selectedVideo.choreographyVideoUrl;
@@ -621,7 +852,7 @@ export default function FeedbackScreen() {
               containerWidth={SCREEN_WIDTH - 80}
               containerHeight={formationContainerHeight > 0 ? formationContainerHeight - 40 : undefined}
               hidePip={true}
-              forceDarkMode={true}
+              forceDarkMode={false}
             />
             {isMirrorMode && (
               <View style={[styles.mirrorIndicator, { left: insets.left + 20, transform: [{ scaleX: -1 }] }]}>
@@ -719,29 +950,6 @@ export default function FeedbackScreen() {
       seekTo(ratio * totalDuration * 1000);
     };
 
-    const scrubGesture = Gesture.Pan()
-      .minDistance(0)
-      .onBegin((e) => {
-        'worklet';
-        runOnJS(setIsScrubbing)(true);
-        runOnJS(resetControlsTimer)();
-        const totalDuration = isFormation ? formationDuration : videoDuration;
-        if (totalDuration <= 0 || barWidth <= 0) return;
-        const ratio = Math.max(0, Math.min(1, e.x / barWidth));
-        runOnJS(seekTo)(ratio * totalDuration * 1000);
-      })
-      .onUpdate((e) => {
-        'worklet';
-        const totalDuration = isFormation ? formationDuration : videoDuration;
-        if (totalDuration <= 0 || barWidth <= 0) return;
-        const ratio = Math.max(0, Math.min(1, e.x / barWidth));
-        runOnJS(seekTo)(ratio * totalDuration * 1000);
-      })
-      .onEnd(() => {
-        'worklet';
-        runOnJS(setIsScrubbing)(false);
-        runOnJS(resetControlsTimer)();
-      });
 
     const renderCustomControls = () => {
       const totalDuration = isFormation ? formationDuration : videoDuration;
@@ -813,8 +1021,28 @@ export default function FeedbackScreen() {
       );
     };
 
+    // 영상 핀치줌 + 더블탭 리셋 제스처 (issue #9)
+    const videoPinchGesture = Gesture.Pinch()
+      .onStart(() => { 'worklet'; savedVideoZoom.value = videoZoom.value; })
+      .onUpdate(e => { 'worklet'; videoZoom.value = Math.max(0.5, Math.min(4, savedVideoZoom.value * e.scale)); });
+
+    const videoDoubleTapGesture = Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => { 'worklet'; videoZoom.value = withTiming(1, { duration: 200 }); savedVideoZoom.value = 1; });
+
+    const videoSingleTapGesture = Gesture.Tap()
+      .numberOfTaps(1)
+      .requireExternalGestureToFail(videoDoubleTapGesture)
+      .runOnJS(true)
+      .onEnd(() => toggleControls());
+
+    const videoAreaGesture = Gesture.Simultaneous(
+      videoPinchGesture,
+      Gesture.Exclusive(videoDoubleTapGesture, videoSingleTapGesture)
+    );
+
     return (
-      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={() => setSelectedVideo(null)}>
+      <Modal visible={true} animationType="slide" transparent={false} onRequestClose={handleCloseModal}>
         <GestureHandlerRootView style={{ flex: 1 }}>
         <View
           style={[
@@ -834,11 +1062,13 @@ export default function FeedbackScreen() {
                 { backgroundColor: "#000" },
               ]}
             >
-              {renderMainContent()}
+              <Animated.View style={[StyleSheet.absoluteFill, videoZoomStyle]}>
+                {renderMainContent()}
+              </Animated.View>
 
-              <TouchableWithoutFeedback onPress={toggleControls}>
+              <GestureDetector gesture={videoAreaGesture}>
                 <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
+              </GestureDetector>
 
               {/* 서브 영상은 UI 표시 여부와 무관하게 항상 표시 */}
               {renderSubContent()}
@@ -855,7 +1085,7 @@ export default function FeedbackScreen() {
                     <TouchableOpacity
                       onPress={() => {
                         if (isFullScreen) setIsFullScreen(false);
-                        else setSelectedVideo(null);
+                        else handleCloseModal();
                       }}
                     >
                       <Ionicons name="chevron-back" size={28} color="#fff" />
@@ -904,7 +1134,7 @@ export default function FeedbackScreen() {
                     </TouchableOpacity>
                     {!isFormation && (
                       <TouchableOpacity
-                        style={[styles.saveBtn, { marginRight: 16 }]}
+                        style={[styles.archiveDownloadBtn, { marginRight: 8 }]}
                         onPress={() => {
                           resetControlsTimer();
                           handleDownload();
@@ -914,7 +1144,7 @@ export default function FeedbackScreen() {
                         {isDownloading ? (
                           <ActivityIndicator size="small" color="#fff" />
                         ) : (
-                          <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+                          <><Ionicons name="arrow-down-circle-outline" size={17} color="#fff" /><Text style={styles.archiveDownloadBtnText}>{t('save')}</Text></>
                         )}
                       </TouchableOpacity>
                     )}
@@ -956,15 +1186,14 @@ export default function FeedbackScreen() {
                 </Animated.View>
               )}
 
-              {/* Floating Comment Bubbles with Absolute Fixed Height Container */}
+              {/* Floating Comment Bubbles */}
               {activeFloatingBubbles.length > 0 && (
                 <View style={styles.floatingContainer} pointerEvents="none">
                   {activeFloatingBubbles.map((c) => (
                     <Animated.View
                       key={c.id}
-                      entering={FadeIn.duration(800)}
-                      exiting={FadeOut.duration(800)}
-                      layout={LinearTransition.springify().damping(20).stiffness(90)}
+                      entering={FadeIn.duration(600)}
+                      exiting={FadeOut.duration(600)}
                       style={[
                         styles.bubble,
                         { backgroundColor: theme.card + "EE", borderColor: theme.primary, borderLeftWidth: 3 },
@@ -1290,7 +1519,7 @@ const styles = StyleSheet.create({
   pickBtn: { padding: 20, borderRadius: 24, alignItems: 'center' },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   formationPlayOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  floatingContainer: { position: 'absolute', right: 20, top: 20, bottom: 70, width: 220, flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-end', zIndex: 90 },
+  floatingContainer: { position: 'absolute', right: 20, bottom: 80, width: 220, flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', zIndex: 90 },
   bubble: { padding: 8, paddingHorizontal: 12, borderRadius: 12, width: '100%', maxWidth: 200, marginBottom: 8 },
   bubbleUser: { fontSize: 10, fontWeight: '800' },
   bubbleTime: { fontSize: 8, fontWeight: '600', marginLeft: 6 },
@@ -1310,4 +1539,16 @@ const styles = StyleSheet.create({
   mirrorBtnText: { fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
   mirrorIndicator: { position: 'absolute', top: 60, left: 20, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
   mirrorIndicatorText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  // 아카이브 스타일 다운로드 버튼 (피드백 + 동선 공용)
+  archiveDownloadBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  archiveDownloadBtnText: { color: '#fff', fontWeight: '800', fontSize: 13, marginLeft: 5 },
+  // 동선영상 전용 뷰
+  formationHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5 },
+  formationHeaderTitle: { flex: 1, fontSize: 16, fontWeight: '800', letterSpacing: -0.3, marginHorizontal: 12 },
+  formationControls: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 0.5 },
+  formationSpeedRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  formationSpeedChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  formationSpeedChipText: { fontWeight: '700', fontSize: 12 },
+  formationProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  formationPlayBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 });
