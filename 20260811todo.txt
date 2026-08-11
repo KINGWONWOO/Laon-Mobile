@@ -1,0 +1,85 @@
+====================================================
+  LAON 출시 전 외부 사이트 처리 목록 — 2026-08-11
+  (코드 수정은 완료, 아래는 외부 대시보드에서 할 일)
+====================================================
+
+──────────────────────────────────────────────────
+[CRITICAL] 즉시 처리
+──────────────────────────────────────────────────
+
+□ [Cloudflare] R2 액세스 키 히스토리 노출 리스크 확인
+   - 상황: R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY가 git 최초 커밋(d09151e)에
+           포함되었다가 a413dca에서 삭제됨. 히스토리에 키가 잔존함.
+   - 현재 방침: 키 교체 안 하는 방향
+   - 리스크: GitHub 리포가 public이 되거나 누군가 히스토리를 열람하면 키 노출 가능
+   - ★ 리포는 반드시 private으로 유지할 것
+   - 나중에 키 교체 원하면:
+       1. Cloudflare 대시보드 → R2 → 액세스 키 → 새 키 발급
+       2. Supabase Edge Function Secrets에 새 키 업데이트 (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)
+       3. BFG Repo Cleaner로 git 히스토리 정리 후 force-push
+
+──────────────────────────────────────────────────
+[HIGH] 출시 전 처리 필요
+──────────────────────────────────────────────────
+
+□ [Supabase] RevenueCat 웹훅 시크릿 환경변수 설정
+   - 위치: Supabase 대시보드 → Edge Functions → revenuecat-webhook → Secrets
+   - 추가할 값: REVENUECAT_WEBHOOK_SECRET=<RevenueCat 대시보드 시크릿>
+   - ★ 중요: 코드가 !RC_WEBHOOK_SECRET 이면 401 반환하도록 수정됨.
+             이 변수가 없으면 RevenueCat 웹훅이 아예 동작 안 함.
+   - RevenueCat 시크릿 위치: Project Settings → Integrations → Webhooks
+
+□ [Supabase] 수정된/신규 Edge Function 배포
+   - get-r2-upload-url: JWT 인증 + 경로/MIME 화이트리스트 추가됨 → 재배포 필요
+       supabase functions deploy get-r2-upload-url
+   - redeem-coupon: 신규 생성됨 → 최초 배포 필요
+       supabase functions deploy redeem-coupon
+
+□ [Google Cloud Console] Firebase API 키 패키지명 제한
+   - 위치: console.cloud.google.com → API 및 서비스 → 사용자 인증 정보
+   - 키: AIzaSyBstvLZtgo29... (google-services.json에 포함, git 히스토리에 있음)
+   - 조치: 애플리케이션 제한 → Android 앱 → 패키지명 om.laon.dancefeedback 으로 제한
+           (패키지명+SHA-1 제한으로 실질적 위험 감소 가능)
+
+──────────────────────────────────────────────────
+[MEDIUM] EAS 빌드 전 처리 필요
+──────────────────────────────────────────────────
+
+□ [EAS Build] RevenueCat 환경변수 추가
+   - revenueCat.ts가 process.env.EXPO_PUBLIC_REVENUECAT_KEY_IOS 를 읽도록 변경됨
+   - 로컬 .env에는 이미 추가됨. EAS Build 사용 시 대시보드 Secrets에도 추가 필요:
+       EXPO_PUBLIC_REVENUECAT_KEY_IOS=appl_AaNtdLiUvRWPUawaYrTsFRNcgTG
+       EXPO_PUBLIC_REVENUECAT_KEY_ANDROID=goog_MbFvKeqoLyAtmbGINoNCApsoRWW
+   - EAS 대시보드: expo.dev → 프로젝트 → Secrets
+
+──────────────────────────────────────────────────
+[REMIND LATER] 새 쿠폰 발행 시 반드시 처리
+──────────────────────────────────────────────────
+
+□ 쿠폰 중복 사용 방지 테이블 추가 (새 쿠폰 발행 전 필수)
+   - 현재 테스트 쿠폰(ALWAYSLAONZENA 등)은 무제한 재사용 가능 상태
+   - 실 서비스 쿠폰 발행 전에 아래 마이그레이션 적용 후 redeem-coupon 함수 업데이트:
+
+       CREATE TABLE coupon_redemptions (
+         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+         user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
+         coupon_code text NOT NULL,
+         redeemed_at timestamptz DEFAULT now(),
+         UNIQUE(user_id, coupon_code)
+       );
+
+====================================================
+  [코드 수정 완료 목록 — 2026-08-11]
+====================================================
+
+✓ 항목 2  — get-r2-upload-url: JWT 인증 + 경로/MIME 화이트리스트 + error.stack 제거
+✓ 항목 4  — revenuecat-webhook: !RC_WEBHOOK_SECRET 로 fail-closed 수정
+✓ 항목 5  — revenueCat.ts: API 키 → .env EXPO_PUBLIC_ 변수로 이동
+✓ 항목 6  — .gitignore: google-services.json 추가
+✓ 항목 7  — get-r2-upload-url: error.stack 클라이언트 응답에서 제거
+✓ 항목 8  — redeem-coupon Edge Function 신규 생성, 쿠폰 서버사이드 처리로 이동
+✓ 항목 9  — get-r2-upload-url: MIME 타입 화이트리스트 적용
+✓ 항목 10 — AppContext: RC Sync catch(_){} → catch(e) 최소 로깅
+✓ 항목 11 — AppContext + storageService: console.log → __DEV__ 게이팅
+✓ 항목 13 — delete-account: err.message 클라이언트 응답에서 제거
+✓ 항목 14 — app.json 버전: 1.0.11 / versionCode 21 (오늘 커밋에서 수정됨)

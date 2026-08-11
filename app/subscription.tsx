@@ -13,7 +13,7 @@ import { PurchasesPackage } from 'react-native-purchases';
 const { width } = Dimensions.get('window');
 
 export default function SubscriptionScreen() {
-  const { currentUser, theme, isPro, purchasePro, restoreProPurchases, t } = useAppContext();
+  const { currentUser, theme, isPro, purchasePro, reloadProfile, restoreProPurchases, t } = useAppContext();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -48,22 +48,19 @@ export default function SubscriptionScreen() {
     setIsCouponProcessing(true);
     setCouponError('');
     try {
-      const { data, error } = await supabase
-        .from('coupons')
-        .select('benefit, duration_days')
-        .eq('code', code)
-        .eq('is_active', true)
-        .maybeSingle();
-      if (error) {
-        console.error('[coupon] supabase error:', error);
-        setCouponError(t('couponError'));
+      const { data, error } = await supabase.functions.invoke('redeem-coupon', {
+        body: { code },
+      });
+      if (error || !data?.success) {
+        const errCode = data?.error;
+        if (errCode === 'INVALID_COUPON') {
+          setCouponError(t('couponInvalid'));
+        } else {
+          setCouponError(t('couponError'));
+        }
         return;
       }
-      if (!data) {
-        setCouponError(t('couponInvalid'));
-        return;
-      }
-      await purchasePro(data.duration_days);
+      await reloadProfile();
       Alert.alert(t('couponApplied'), t('proActivated'));
       setCouponCode('');
     } catch (e: any) {

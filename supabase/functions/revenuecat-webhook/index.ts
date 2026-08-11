@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization') ?? '';
-  if (RC_WEBHOOK_SECRET && authHeader !== `Bearer ${RC_WEBHOOK_SECRET}`) {
+  if (!RC_WEBHOOK_SECRET || authHeader !== `Bearer ${RC_WEBHOOK_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
 

@@ -78,6 +78,6 @@ serve(async (req) => {
 
   } catch (err: any) {
     console.error('[Edge] Critical server error:', err)
-    return res({ success: false, error: '서버 오류가 발생했습니다.', details: err.message }, 500)
+    return res({ success: false, error: '서버 오류가 발생했습니다.' }, 500)
   }
 })

@@ -111,7 +111,8 @@ interface AppContextType {
 
   // Subscription
   isPro: boolean;
-  purchasePro: (pkg?: import('react-native-purchases').PurchasesPackage, durationDays?: number) => Promise<void>;
+  purchasePro: (pkg: import('react-native-purchases').PurchasesPackage) => Promise<void>;
+  reloadProfile: () => Promise<void>;
   restoreProPurchases: () => Promise<boolean>;
   checkProAccess: (type: 'room_count' | 'archive_limit' | 'formation' | 'feedback_limit' | 'reminder', roomId?: string) => { canAccess: boolean, limit?: number, current?: number };
   sendProReminder: (roomId: string, type: 'vote' | 'schedule', targetId: string) => Promise<void>;
@@ -224,10 +225,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const sendPushNotification = async (userIds: string[], title: string, body: string, data?: any) => {
     if (!userIds || userIds.length === 0) {
-      console.log('[Push] sendPushNotification skipped: empty userIds');
+      if (__DEV__) console.log('[Push] sendPushNotification skipped: empty userIds');
       return;
     }
-    console.log('[Push] Sending notification →', { title, body, userIds, data });
+    if (__DEV__) console.log('[Push] Sending notification →', { title, body, userIds, data });
     try {
       const { data: res, error } = await supabase.functions.invoke('push-notification', {
         body: { user_ids: userIds, title, body, data },
@@ -241,7 +242,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           console.error('[Push] Edge function response body:', JSON.stringify(body));
         }
       } else {
-        console.log('[Push] Edge function response:', res);
+        if (__DEV__) console.log('[Push] Edge function response:', res);
       }
     } catch (err) {
       console.error('[Push] sendPushNotification threw:', err);
@@ -316,7 +317,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         subscription_start: new Date().toISOString(),
         subscription_expiry: new Date(expiryMs).toISOString(),
       }).eq('id', userId);
-    } catch (_) {}
+    } catch (e) { console.error('[RC Sync]', e); }
   };
 
   const fetchMyProfile = async (userId: string, sessionUser?: any) => {
@@ -422,7 +423,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (currentUser?.id) {
-      console.log('[Push] User detected, starting push token registration for userId:', currentUser.id);
+      if (__DEV__) console.log('[Push] User detected, starting push token registration for userId:', currentUser.id);
       registerForPushNotificationsAsync(currentUser.id).catch(err =>
         console.error('[Push] Registration error:', err)
       );
@@ -437,31 +438,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }, [currentUser]);
 
-  const purchasePro = async (pkg?: PurchasesPackage, durationDays: number = 30) => {
+  const purchasePro = async (pkg: PurchasesPackage) => {
     if (!currentUserRef.current) return;
     const now = Date.now();
+    const customerInfo = await rcPurchasePackage(pkg);
+    const expiryMs = getProExpiryMs(customerInfo) ?? (now + 30 * 24 * 60 * 60 * 1000);
+    const { error } = await supabase.from('profiles').update({
+      subscription_tier: 'pro',
+      subscription_start: new Date(now).toISOString(),
+      subscription_expiry: new Date(expiryMs).toISOString(),
+    }).eq('id', currentUserRef.current.id);
+    if (error) throw error;
+    await fetchMyProfile(currentUserRef.current.id);
+  };
 
-    if (pkg) {
-      // 실제 RevenueCat 결제
-      const customerInfo = await rcPurchasePackage(pkg);
-      const expiryMs = getProExpiryMs(customerInfo) ?? (now + 30 * 24 * 60 * 60 * 1000);
-      const { error } = await supabase.from('profiles').update({
-        subscription_tier: 'pro',
-        subscription_start: new Date(now).toISOString(),
-        subscription_expiry: new Date(expiryMs).toISOString(),
-      }).eq('id', currentUserRef.current.id);
-      if (error) throw error;
-    } else {
-      // 쿠폰 경로
-      const expiry = now + (durationDays * 24 * 60 * 60 * 1000);
-      const { error } = await supabase.from('profiles').update({
-        subscription_tier: 'pro',
-        subscription_start: new Date(now).toISOString(),
-        subscription_expiry: new Date(expiry).toISOString(),
-      }).eq('id', currentUserRef.current.id);
-      if (error) throw error;
-    }
-
+  const reloadProfile = async () => {
+    if (!currentUserRef.current) return;
     await fetchMyProfile(currentUserRef.current.id);
   };
 
@@ -729,7 +721,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const deleteAccount = async () => {
     if (!currentUserRef.current) return;
     try {
-      console.log('[Account] Starting deleteAccount process...');
+      if (__DEV__) console.log('[Account] Starting deleteAccount process...');
       
       const { data: { session } } = await supabase.auth.getSession();
       const userToken = session?.access_token;
@@ -788,7 +780,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!currentUserRef.current) return;
     const room = await roomService.joinRoom(rid, pc, currentUserRef.current.id);
     if (room) {
-      console.log('[AppContext] Join success, updating cache for room:', room.id);
+      if (__DEV__) console.log('[AppContext] Join success, updating cache for room:', room.id);
       queryClient.setQueryData(['rooms', currentUserRef.current.id], (old: any[] | undefined) => {
         const list = old || [];
         if (list.find((r: any) => r.id === room.id)) return list;
@@ -1091,7 +1083,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     formations: formationsQuery.data || [], addFormation, updateFormation, deleteFormation, publishFormationAsFeedback,
     sendPushNotification, inAppNotifications, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     refreshAllData, themeType, setThemeType, customColor, setCustomColor, customBackgroundColor, setCustomBackgroundColor, theme,
-    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, restoreProPurchases, sendProReminder, sendDirectReminder,
+    updateRoomUserProfile, getRoomUserProfile, roomProfiles, isPro, checkProAccess, purchasePro, reloadProfile, restoreProPurchases, sendProReminder, sendDirectReminder,
     language, setLanguage, t
   }), [
     currentUser, isLoadingUser, roomsData, isLoadingRooms, allUsers, noticesMapped, videosMapped, photosMapped, schedulesMapped, votesMapped, formationsQuery.data,

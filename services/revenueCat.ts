@@ -1,8 +1,8 @@
 import Purchases, { LOG_LEVEL, PurchasesPackage, CustomerInfo } from 'react-native-purchases';
 import { Platform } from 'react-native';
 
-const RC_API_KEY_IOS = 'appl_AaNtdLiUvRWPUawaYrTsFRNcgTG';
-const RC_API_KEY_ANDROID = 'goog_MbFvKeqoLyAtmbGINoNCApsoRWW';
+const RC_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_KEY_IOS!;
+const RC_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_KEY_ANDROID!;
 
 export const ENTITLEMENT_PRO = 'pro';
 

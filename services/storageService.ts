@@ -34,7 +34,7 @@ export const storageService = {
         targetPath = await storageService.compressImage(filePath);
       }
 
-      console.log(`[Storage] Uploading: ${bucketPath}/${fileName}`);
+      if (__DEV__) console.log(`[Storage] Uploading: ${bucketPath}/${fileName}`);
       
       const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true } as any);
       if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
