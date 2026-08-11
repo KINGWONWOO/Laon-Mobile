@@ -1,0 +1,305 @@
+====================================================
+  LAON QA 리포트 — 2026-08-11
+  총 35건 | CRITICAL 2 / HIGH 10 / MEDIUM 18 / LOW 5
+====================================================
+
+──────────────────────────────────────────────────
+[CRITICAL] 출시 블로커 — 즉시 수정
+──────────────────────────────────────────────────
+
+□ C-1. 인증 경쟁 조건 — 프로필 미완성 상태로 라우트 가드 실행
+   파일: context/AppContext.tsx:371–395
+   재현: 소셜 로그인 직후 딥링크 콜백 / 앱 재시작 시
+   증상: setIsLoadingUser(false)가 fetchMyProfile 완료 전에 호출됨.
+         syncRcWithSupabase(수 초 소요)가 끝나기 전에 라우트 가드 실행 →
+         빈 프로필 상태로 화면 전환 발생
+   원인: getSession() promise와 onAuthStateChange가 동시에 동작,
+         fetchMyProfile을 await 없이 시작하고 바로 setIsLoadingUser(false) 호출
+
+□ C-2. 결제 성공 후 Supabase DB 업데이트 실패 시 "결제 오류"로 표시
+   파일: context/AppContext.tsx:441–453
+   재현: 결제 직후 네트워크 단절 / Supabase 일시 오류
+   증상: RevenueCat 결제 성공(돈 빠져나감)했는데 supabase.update() 에러 시
+         throw error → subscription.tsx catch에서 "결제 오류" Alert 표시.
+         앱은 무료 상태로 남고 사용자는 중복 결제 시도 가능.
+         다음 앱 재시작 시 syncRcWithSupabase로 복구되나 즉시 확인 불가
+   원인: if (error) throw error; 가 RC 결제 성공 이후에 위치해
+         DB 오류를 결제 실패와 동일하게 처리
+
+──────────────────────────────────────────────────
+[HIGH] 출시 전 수정 권장
+──────────────────────────────────────────────────
+
+□ H-1. Redo 실행 시 댄서 위치 접근 경로 오류 → 댄서 화면 밖으로 사라짐
+   파일: app/room/[id]/formation/[formationId].tsx:1093
+   재현: formation 편집기에서 Redo 실행
+   증상: 댄서들이 화면 밖으로 사라지거나 이전 위치에 고정됨
+   원인: (next as any).positions[dId] → next는 HistoryState이므로
+         최상위에 positions 없음.
+         올바른 경로: next.scenes.find(s => s.id === activeSceneId)?.positions[dId]
+         Undo는 정상 동작, Redo만 항상 undefined 할당. as any로 TS 에러 무시됨
+
+□ H-2. 씬 롱프레스 삭제 → 타임라인 고아 엔트리 → 크래시 가능
+   파일: app/room/[id]/formation/[formationId].tsx:1610–1616
+   재현: 타임라인에 배치된 씬 카드를 롱프레스 → 삭제
+   증상: 씬 이름 없는 빈 블록 표시, scene.positions 접근 시 크래시
+   원인: setScenes(filter)만 호출, setTimeline(filter) 빠뜨림.
+         deleteActiveScene(줄 1584)은 둘 다 처리하나 롱프레스 핸들러는 씬만 삭제
+
+□ H-3. FormationPiPPlayer loop=false → 안무 영상 끝나면 싱크 완전 깨짐
+   파일: components/ui/FormationPiPPlayer.tsx:64–68
+   재현: 안무 영상이 동선보다 짧을 때
+   증상: 한 번 재생 끝나면 PiP 정지. 타임라인은 계속 진행되는데
+         안무 영상만 첫 프레임에 고정됨
+   원인: useVideoPlayer 초기화 시 p.loop = false 설정.
+         드리프트 보정 인터벌도 재생 재개 로직 없음
+
+□ H-4. 댓글 입력창 useEffect 스테일 클로저 → 영상 재생 오작동
+   파일: app/room/[id]/feedback.tsx:403–412
+   재현: 댓글창 열었다 닫은 뒤 영상 교체 후 다시 댓글창 여닫기
+   증상: 댓글창 닫을 때 이전 영상 player를 참조해 엉뚱한 영상 재생 또는 멈춤
+   원인: useEffect(..., [showCommentInput]) 의존성에
+         player, isFormation, selectedVideo 누락
+
+□ H-5. 전체화면 orientation lock 두 useEffect가 경쟁
+   파일: app/room/[id]/feedback.tsx:300–317
+   재현: 일반 전체화면과 동선 전체화면을 빠르게 전환
+   증상: 화면이 의도치 않은 방향으로 고정되거나 잠금 해제 안 됨
+   원인: isFullScreen 감시 useEffect와 isFormationFullScreen 감시 useEffect가
+         독립적으로 ScreenOrientation.lockAsync 호출.
+         두 플래그가 동시에 true이면 LANDSCAPE/PORTRAIT lock 비동기 충돌
+
+□ H-6. Android — 알림 채널이 토큰 저장 이후에 생성됨 (첫 설치 시 알림 수신 실패)
+   파일: services/NotificationService.ts:54–79
+   재현: Android 기기 최초 설치 후 첫 로그인
+   증상: 토큰은 DB에 저장되지만 채널 생성 전에 도착한 알림 무음 처리
+   원인: 코드 순서: 토큰 저장(54–68) → 채널 생성(71–79).
+         채널 생성이 토큰 저장보다 먼저 이루어져야 함
+
+□ H-7. MAX_FILE_SIZE 상수가 선언만 되고 실제로 체크 안 함
+   파일: services/storageService.ts:5, 29–101
+   재현: 초대형 이미지(RAW, 초고해상도 HEIC 등) 업로드 시
+   증상: 압축 후에도 5MB 초과 파일이 R2에 그대로 업로드됨
+   원인: const MAX_FILE_SIZE = 5 * 1024 * 1024 선언 후
+         uploadToR2 내부에 if (fileInfo.size > MAX_FILE_SIZE) 체크 코드 없음
+
+□ H-8. 일정 날짜 new Date("YYYY-MM-DD") → KST에서 하루 밀림
+   파일: app/room/[id]/schedule.tsx:158, 449
+   재현: KST(UTC+9), JST 등 UTC+0보다 큰 타임존 기기에서 일정 편집 모달 열기
+   증상: 설정한 날짜가 편집 모달에서 하루 전날로 표시됨.
+         예: 2026-08-11 설정 → 편집 시 2026-08-10으로 표시
+   원인: 시간 없는 날짜 문자열은 UTC 자정으로 파싱됨.
+         KST에서 UTC 자정 = 현지 전날 오전 9시 → toLocaleDateString이 전날 반환
+         수정: "YYYY-MM-DD" → new Date("YYYY-MM-DDT12:00:00")
+
+□ H-9. 투표 편집 시 선택지 삭제가 서버에 반영 안 됨
+   파일: app/room/[id]/vote.tsx:103–115
+   재현: 투표 편집 모달에서 기존 선택지 삭제 후 저장
+   증상: UI에서는 줄어들어 보이지만 다시 열면 삭제한 선택지 그대로 표시
+   원인: handleUpdateVote가 새 옵션 추가(addVoteOptions)만 처리.
+         삭제된 옵션 제거 로직 전혀 없음
+
+□ H-10. 실시간 채널이 모든 DB 변경에 전체 쿼리 무효화 → 쿼리 폭풍
+   파일: context/AppContext.tsx:567–570
+   재현: 방 멤버가 많고 활발히 사용 중일 때 / 본인이 댓글·공지 작업 시
+   증상: 댓글 하나 달면 전체 쿼리 재조회 + 실시간 채널 감지로 한 번 더
+         → 방 전체 쿼리 2중 폭발, 네트워크 과부하
+   원인: event: '*', schema: 'public' 전체 구독 +
+         핸들러에서 queryClient.invalidateQueries()(전체) 호출
+
+──────────────────────────────────────────────────
+[MEDIUM] 가능하면 수정
+──────────────────────────────────────────────────
+
+□ M-1. 동영상 크기 검사가 MP4 변환 이후에 실행 — 변환 시간 낭비 후 오류
+   파일: app/room/[id]/archive.tsx:111–118
+   재현: 5MB 초과 동영상 업로드 시도
+   증상: ensureStandardMP4 변환(CPU 집약) 완료 후 용량 초과 알림.
+         변환 시간 낭비. 변환 후 파일이 더 커진 경우 검사 통과 가능
+   원인: 크기 체크 순서가 잘못됨. 변환 전 원본 크기 먼저 체크해야 함
+
+□ M-2. 댓글 등록 후 videos 배열 구 캐시 참조 → 사이드바 즉시 갱신 안 됨
+   파일: app/room/[id]/feedback.tsx:461–476
+   재현: 댓글 등록 직후
+   증상: 방금 추가한 댓글이 사이드바에 즉시 나타나지 않음
+   원인: addComment 후 videos.find(v => v.id === selectedVideo.id) 호출하지만
+         videos는 클로저가 캡처한 이전 렌더 값 → 새 댓글 포함 안 됨
+
+□ M-3. playbackRate 변경 시 fallback 인터벌 재시작으로 formationTime jumpy 점프
+   파일: app/room/[id]/feedback.tsx:203–220
+   재현: 동선 재생 중 재생 속도 변경 (1x → 0.5x 등)
+   증상: 속도 변경 시 타임라인 바늘이 순간 크게 점프
+   원인: 의존성 변경으로 인터벌 재시작 시 lastTick이 Date.now()로 리셋되어
+         큰 dt가 한 번 발생
+
+□ M-4. 댓글 수정 롤백이 스테일 클로저의 구 selectedPhoto 참조
+   파일: app/room/[id]/archive.tsx:210–220
+   재현: 댓글 수정 API 실패 시
+   증상: 롤백 시 그 사이 발생한 다른 변경(예: 좋아요)도 함께 사라짐
+   원인: handleUpdateComment가 selectedPhoto를 클로저로 캡처.
+         함수 실행 중 상태가 바뀌어도 캡처 당시 값으로 롤백
+
+□ M-5. 낙관적 댓글 롤백이 이미 업데이트된 selectedPhoto를 다시 세팅
+   파일: app/room/[id]/archive.tsx:157–169
+   재현: 아카이브 댓글 작성 중 네트워크 오류
+   증상: 낙관적으로 추가된 댓글이 화면에 잔존 (롤백 실패)
+   원인: catch에서 setSelectedPhoto(selectedPhoto) 호출하나
+         이 시점 selectedPhoto는 이미 updatedPhoto로 변경된 상태.
+         함수 시작 시 const originalPhoto = selectedPhoto로 캡처했어야 함
+
+□ M-6. 아카이브 동영상 아이템에 커스텀 컨트롤 없음 — 일시정지·되감기 불가
+   파일: app/room/[id]/archive.tsx:60–70, 376
+   재현: 아카이브에서 동영상 선택 후 시청
+   증상: 재생은 되지만 일시정지, 되감기, 진행바 조작 불가
+   원인: VideoView에 nativeControls={false}인데 커스텀 컨트롤 UI 없음
+
+□ M-7. subPosX/subPosY SharedValue가 모듈 레벨 SCREEN_WIDTH로 고정
+   파일: app/room/[id]/feedback.tsx:145–149
+   재현: 세로 모드에서 서브 PiP 위치 조절 후 가로 모드(전체화면) 전환
+   증상: PiP 영상이 화면 밖으로 사라짐
+   원인: Dimensions.get('window').width는 모듈 레벨에서 한 번만 읽힘.
+         useWindowDimensions()의 winW가 있으나 SharedValue 초기화에 미사용
+
+□ M-8. analyzeAudio가 외부 CDN에 의존 — 오프라인 시 파형 분석 실패
+   파일: app/room/[id]/formation/[formationId].tsx:976–981, 1694
+   재현: 오프라인 상태 / CDN 지연 시 동선 편집 화면 진입
+   증상: 파형 표시 없이 편집해야 함. lamejs CDN 로드 실패 시 오디오 압축도 불가
+   원인: WebView가 cdnjs.cloudflare.com에서 lame.min.js 동적 로드.
+         analyzeAudio가 useCallback 없이 정의되어 의존성 경고 억제 중
+
+□ M-9. 방 참여 직후 멤버 수 1명으로 잠시 표시
+   파일: services/roomService.ts:39–55, context/AppContext.tsx:780–793
+   재현: 방 참여 직후 방 목록/상세에서 멤버 수 확인
+   증상: 실제 멤버 20명인 방이어도 UI에 1명으로 잠시 표시
+   원인: joinRoom 반환 Room 객체에 members: [userId] 하드코딩
+
+□ M-10. 갤러리 개수 제한이 Pro 여부 무시하고 항상 20개 고정
+   파일: services/storageService.ts:108–109
+   재현: 리더가 Pro인 방에서 멤버가 21번째 파일 업로드 시
+   증상: 리더가 Pro여도 21번째 업로드 차단됨
+   원인: storageService.uploadToGallery가 MAX_GALLERY_COUNT=20 항상 적용.
+         isPro/leaderIsPro 정보를 전달받지 않음
+
+□ M-11. 알림 탭으로 앱 실행 시 비로그인 상태에서 router.push 실행
+   파일: app/_layout.tsx:55–61
+   재현: 앱 완전 종료 상태에서 푸시 알림 탭 / 세션 만료 상태
+   증상: 인증 필요한 화면으로 이동 시도 → 라우트 가드가 루트로 보내지만
+         잠깐 빈 화면 또는 에러 노출 가능
+   원인: responseListener 콜백에서 currentUser 여부 확인 없이 바로 router.push 호출
+
+□ M-12. 쿠폰 에러 코드 구분 부족 — 만료·중복 사용 시 원인 불명
+   파일: app/subscription.tsx:54–62
+   재현: 만료된 쿠폰 / 이미 사용한 쿠폰 입력 시
+   증상: 어떤 이유로 쿠폰이 안 되는지 알 수 없음 (일반 오류 메시지만 표시)
+   원인: INVALID_COUPON 한 가지만 명시 처리, 나머지 전부 일반 오류로 처리
+
+□ M-13. 낙관적 댓글 createdAt이 string → formatDateFull(number) 불일치 → Invalid Date
+   파일: app/room/[id]/notice/[noticeId].tsx:81
+   재현: 공지사항 상세에서 댓글 작성 직후
+   증상: 방금 추가한 댓글의 날짜가 "Invalid Date" 또는 이상한 숫자로 표시
+   원인: createdAt: new Date().toISOString() (string)으로 삽입하나
+         formatDateFull은 timestamp: number(밀리초)를 기대.
+         수정: createdAt: Date.now()
+         동일 패턴이 archive.tsx:158 addPhotoComment에도 있음
+
+□ M-14. 방장이 다른 멤버의 아카이브 댓글을 삭제할 수 없음
+   파일: app/room/[id]/archive.tsx:267–277
+   재현: 방장이 다른 멤버 댓글의 ··· 버튼 탭
+   증상: ··· 버튼은 보이지만 commentOptions에 리더 삭제 항목 없음
+   원인: isRoomLeader 여부를 commentOptions 구성 시 체크하지 않음
+
+□ M-15. 피드백 댓글 수정/삭제 실패 시 롤백·알림 없음
+   파일: app/room/[id]/feedback.tsx:501–516
+   재현: 댓글 수정 또는 삭제 중 네트워크 오류
+   증상: 조용한 실패. UI는 변경된 상태로 남으나 서버 미반영
+   원인: handleUpdateComment에 catch 블록 전혀 없음.
+         handleDeleteComment도 에러 처리 없이 refreshAllData()만 호출
+
+□ M-16. isClosed를 클라이언트 시계로만 판단 — 기기 시계 조작 시 마감 우회
+   파일: app/room/[id]/schedule.tsx:362, app/room/[id]/vote.tsx:179
+   재현: 기기 시계를 과거로 변경 후 일정/투표 화면 진입
+   증상: 마감된 투표/일정에 응답 가능. 반대로 마감 전인데 마감됨으로 표시될 수도 있음
+   원인: isClosed = schedule.deadline && new Date(schedule.deadline) < new Date()
+         new Date()는 클라이언트 시각. 서버 사이드 마감 체크 없음
+
+□ M-17. 강퇴 후 refreshAllData 미호출 → 다른 화면과 동기화 불일치
+   파일: app/room/[id]/members.tsx:49, 81
+   재현: 방장이 멤버 강퇴 직후 일정·투표 화면 확인
+   증상: 강퇴된 사용자가 일정/투표 응답률 계산에 계속 포함됨
+   원인: 강퇴 후 로컬 memberIds만 업데이트하고 refreshAllData() 미호출
+
+□ M-18. optimistic update 캐시 키 불일치 — roomIds 배열 참조가 매 렌더 다름
+   파일: context/AppContext.tsx:833–836
+   재현: 방 참여 직후 공지 추가 시
+   증상: 낙관적 UI 업데이트가 캐시에 반영되지 않고 refreshAllData()로 덮어씌워짐
+   원인: queryClient.setQueryData(['notices', roomIds])에서 roomIds가
+         useMemo 배열이라 참조가 매 렌더 다를 수 있음.
+         동일 패턴이 addVote(줄 941)에도 있음
+
+──────────────────────────────────────────────────
+[LOW] 추후 개선
+──────────────────────────────────────────────────
+
+□ L-1. noAudio=true일 때 빈 audio player에 playbackRate 세팅 시도
+   파일: components/ui/FormationPlayer.tsx:258–262
+   재현: noAudio=true로 마운트된 FormationPlayer에서 playbackRate prop 변경
+   증상: 내부 에러 발생 가능성
+   원인: noAudio 여부 체크 없이 player.playbackRate = playbackRate 호출
+
+□ L-2. 댓글 ··· 메뉴 options가 이전 selectedComment 기준으로 계산
+   파일: app/room/[id]/notice/[noticeId].tsx:195–220, 285–289
+   재현: 댓글 목록에서 빠르게 다른 댓글 ··· 버튼 연속 탭
+   증상: 잘못된 댓글을 대상으로 수정/삭제 실행됨
+   원인: commentOptions가 selectedComment state에 의존하는 파생 값인데
+         React 상태 업데이트가 비동기이므로 이전 selectedComment 참조
+
+□ L-3. deletePhoto가 R2 실제 파일 삭제 안 함 — 스토리지 비용 누적
+   파일: context/AppContext.tsx:67, 918
+   재현: 갤러리 사진/영상 삭제 시
+   증상: DB 레코드는 삭제되나 R2 실제 파일 잔존. 장기적으로 스토리지 비용 증가
+   원인: deletePhoto가 url 파라미터를 받지만 contentService에서 DB 삭제만 수행
+
+□ L-4. 일정 그리드 날짜 헤더 key={date} 중복 가능성
+   파일: app/room/[id]/schedule.tsx:451, 476
+   재현: 같은 날짜에 여러 시간대 있는 일정 스크롤 시
+   증상: 날짜 헤더가 잘못된 위치에 렌더링되는 현상 가능
+   원인: hours.map 안에서 uniqueDates.map의 key={date}가 형제간 유니크하나
+         날짜 헤더 Animated.View와 key가 동일해 React 재조정 시 혼선
+
+□ L-5. 빈 투표 선택지 2개인 상태에서 삭제 불가 + 오류 위치 미표시
+   파일: app/room/[id]/vote.tsx:76, 389
+   재현: 선택지 추가 후 일부만 입력한 상태에서 제출 시도
+   증상: 빈 항목이 2개일 때 최소 2개 제한으로 삭제 불가 → 제출도 불가 → 막힘
+         어떤 항목이 비어있는지 시각적 표시 없음
+   원인: options.length > 2 제한으로 빈 항목 삭제 차단
+
+──────────────────────────────────────────────────
+[우선순위 요약]
+──────────────────────────────────────────────────
+
+즉시 수정 (출시 블로커):
+  ✗ C-1  인증 경쟁 조건 (AppContext.tsx:371)
+  ✗ C-2  결제 성공 후 DB 실패 = 결제 오류로 표시 (AppContext.tsx:441)
+  ✗ H-1  Redo 댄서 위치 버그 (formationId.tsx:1093)
+  ✗ H-2  씬 삭제 → 타임라인 크래시 (formationId.tsx:1610)
+  ✗ H-6  Android 알림 채널 순서 (NotificationService.ts:54)
+
+출시 전 수정 권장:
+  ✗ H-3  안무 영상 loop=false (FormationPiPPlayer.tsx:64)
+  ✗ H-4  댓글창 스테일 클로저 (feedback.tsx:403)
+  ✗ H-5  orientation lock 경쟁 (feedback.tsx:300)
+  ✗ H-7  파일 크기 미검사 (storageService.ts:5)
+  ✗ H-8  날짜 타임존 하루 밀림 (schedule.tsx:158)
+  ✗ H-9  투표 선택지 삭제 미반영 (vote.tsx:103)
+  ✗ H-10 실시간 채널 쿼리 폭풍 (AppContext.tsx:567)
+
+여유 있을 때:
+  ✗ M-1 ~ M-18  MEDIUM 항목들
+  ✗ L-1 ~ L-5   LOW 항목들
+
+====================================================
+  검토 영역: feedback / formation / archive / AppContext /
+             subscription / NotificationService / storageService /
+             schedule / vote / members / notice / _layout
+  버전: 1.0.12 (build 22)
+====================================================
