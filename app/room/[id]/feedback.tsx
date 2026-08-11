@@ -23,6 +23,34 @@ import AdBanner from '../../../components/ui/AdBanner';
 import { saveMediaToDevice } from '../../../services/downloadService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const FORMATION_PX_PER_SEC = 60;
+
+function MiniFormationView({ scene, dancers, settings }: { scene: any, dancers: any[], settings: any }) {
+  if (!scene || !dancers?.length) return null;
+  const aspectRatio = (settings?.gridCols || 20) / (settings?.gridRows || 10);
+  return (
+    <View style={{ flex: 1, padding: 3 }}>
+      <View style={{ width: '100%', aspectRatio, position: 'relative', maxHeight: '100%' }}>
+        {dancers.map(d => {
+          const pos = scene.positions?.[d.id];
+          if (!pos) return null;
+          return (
+            <View
+              key={d.id}
+              style={{
+                position: 'absolute',
+                width: 5, height: 5, borderRadius: 2.5,
+                backgroundColor: d.color,
+                left: `${pos.x * 100}%`, top: `${pos.y * 100}%`,
+                marginLeft: -2.5, marginTop: -2.5,
+              }}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function FeedbackScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -109,6 +137,7 @@ export default function FeedbackScreen() {
   const formationTimeRef = useRef(0);
   const lastOnTimeUpdateRef = useRef(0);
   const [videoTime, setVideoTime] = useState(0);
+  const timelineScrollRef = useRef<ScrollView>(null);
 
   // 서브 영상 위치·크기 (핀치/드래그)
   const SUB_INIT_W = 130;
@@ -199,14 +228,12 @@ export default function FeedbackScreen() {
   }, [cachedVideoUrl, player]);
 
   useEffect(() => {
-    if (isSwapped && cachedChoreographyUrl && subPlayer) {
+    if (cachedChoreographyUrl && subPlayer) {
       subPlayer.replace(cachedChoreographyUrl);
       subPlayer.muted = true;
       subPlayer.currentTime = 0;
-    } else if (!isSwapped && subPlayer) {
-      try { subPlayer.pause(); } catch (_) {}
     }
-  }, [cachedChoreographyUrl, subPlayer, isSwapped]);
+  }, [cachedChoreographyUrl]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -230,13 +257,25 @@ export default function FeedbackScreen() {
 
   const currentPlaybackTime = isFormation ? formationTime : videoTime;
 
+  // 동선 타임라인 자동 스크롤: 현재 재생 위치가 항상 중앙에 오도록
+  useEffect(() => {
+    if (!isFormation || formationDuration <= 0) return;
+    const viewW = SCREEN_WIDTH - 32;
+    const targetX = Math.max(0, formationTime / 1000 * FORMATION_PX_PER_SEC - viewW / 2);
+    timelineScrollRef.current?.scrollTo({ x: targetX, animated: false });
+  }, [formationTime, isFormation, formationDuration]);
+
   const activeFloatingBubbles = useMemo(() => {
     if (!selectedVideo || !isFullScreen || showSidebar || !enableFloatingComments) return [];
-    return selectedVideo.comments.filter(c => {
-      const triggerTime = c.timestampMillis - 1000;
-      const sequentialOffset = (c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 5) * 200;
-      return currentPlaybackTime >= triggerTime && currentPlaybackTime < triggerTime + 3000 + sequentialOffset;
-    }).sort((a, b) => a.createdAt - b.createdAt).slice(-6);
+    // 등장한 댓글들을 createdAt 오름차순 정렬 후 최대 6개 pool 선정
+    const appeared = selectedVideo.comments
+      .filter(c => currentPlaybackTime >= c.timestampMillis - 1000)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const pool = appeared.slice(-6);
+    // pool 내 index(오래된 순=0)에 따라 0.1초 텀으로 순서대로 사라짐
+    return pool.filter((c, index) =>
+      currentPlaybackTime < c.timestampMillis - 1000 + 3000 + index * 100
+    );
   }, [selectedVideo, isFullScreen, showSidebar, enableFloatingComments, currentPlaybackTime]);
 
   const roomVideos = useMemo(() => videos.filter(v => v.roomId === id), [videos, id]);
@@ -522,10 +561,12 @@ export default function FeedbackScreen() {
       player.muted = !isSwapped;
       subPlayer.muted = isSwapped;
     }
-    // !isSwapped means we're switching TO choreography-as-main
-    if (!isSwapped && subPlayer && cachedChoreographyUrl && isFormationPlaying) {
-      subPlayer.currentTime = formationTimeRef.current / 1000;
-      subPlayer.play();
+    if (!isSwapped && subPlayer && cachedChoreographyUrl) {
+      // Entering swapped mode: subPlayer (choreo) becomes the main view
+      const targetTime = isFormation ? formationTimeRef.current / 1000 : player.currentTime;
+      subPlayer.currentTime = targetTime;
+      const shouldPlay = isFormation ? isFormationPlaying : player.playing;
+      if (shouldPlay) subPlayer.play();
     } else if (isSwapped && subPlayer) {
       subPlayer.pause();
     }
@@ -675,51 +716,157 @@ export default function FeedbackScreen() {
           </View>
         )}
 
-        {/* 재생/진행바 */}
-        <View style={[styles.formationProgressRow, compact && { paddingHorizontal: 8 }]}>
-          <TouchableOpacity
-            onPress={() => setIsFormationPlaying((v) => !v)}
-            style={[styles.formationPlayBtn, { backgroundColor: theme.primary }]}
-          >
-            <Ionicons name={isFormationPlaying ? 'pause' : 'play'} size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={[styles.timeText, { color: compact ? 'rgba(255,255,255,0.8)' : theme.textSecondary, width: 42 }]}>{formatTime(formationTime)}</Text>
-          <GestureDetector gesture={scrubGesture}>
-            <View
-              style={[styles.progressBarTouchable, { flex: 1 }]}
-              onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+        {/* 재생바: 일반모드=대형 편집 타임라인, 전체화면=간단 스크럽바 */}
+        {compact ? (
+          <View style={[styles.formationProgressRow, { paddingHorizontal: 8 }]}>
+            <TouchableOpacity
+              onPress={() => setIsFormationPlaying((v) => !v)}
+              style={[styles.formationPlayBtn, { backgroundColor: theme.primary }]}
             >
-              <View style={[styles.progressBarBg, { backgroundColor: compact ? 'rgba(255,255,255,0.25)' : (theme.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'), height: 6, borderRadius: 3 }]}>
-                <View style={[styles.progressBarFill, {
-                  width: `${progressPct}%`,
-                  backgroundColor: theme.primary,
-                  height: 6,
-                  borderRadius: 3,
-                }]} />
-                <View style={[styles.progressKnob, {
-                  left: `${progressPct}%`,
-                  backgroundColor: '#FFF',
-                  width: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  marginLeft: -8,
-                  top: -5,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 2,
-                  elevation: 3,
-                }]} />
+              <Ionicons name={isFormationPlaying ? 'pause' : 'play'} size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={[styles.timeText, { color: 'rgba(255,255,255,0.8)', width: 42 }]}>{formatTime(formationTime)}</Text>
+            <GestureDetector gesture={scrubGesture}>
+              <View
+                style={[styles.progressBarTouchable, { flex: 1 }]}
+                onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+              >
+                <View style={[styles.progressBarBg, { backgroundColor: 'rgba(255,255,255,0.25)', height: 6, borderRadius: 3 }]}>
+                  <View style={[styles.progressBarFill, { width: `${progressPct}%`, backgroundColor: theme.primary, height: 6, borderRadius: 3 }]} />
+                  {/* 대형 간 블렌딩 구간 X 마크 */}
+                  {formationDuration > 0 && selectedFormation && [...selectedFormation.data.timeline]
+                    .sort((a: any, b: any) => a.timestampMillis - b.timestampMillis)
+                    .map((entry: any, i: number, arr: any[]) => {
+                      if (i >= arr.length - 1) return null;
+                      const gapStart = entry.timestampMillis + entry.durationMillis;
+                      const gapEnd = arr[i + 1].timestampMillis;
+                      if (gapEnd <= gapStart) return null;
+                      const midMs = (gapStart + gapEnd) / 2;
+                      const midPct = (midMs / (formationDuration * 1000)) * 100;
+                      return (
+                        <View key={entry.id} style={{ position: 'absolute', left: `${midPct}%` as any, top: -3, width: 12, height: 12, marginLeft: -6, justifyContent: 'center', alignItems: 'center' }}>
+                          <View style={{ position: 'absolute', width: 10, height: 1.5, backgroundColor: 'rgba(255,255,255,0.9)', transform: [{ rotate: '45deg' }] }} />
+                          <View style={{ position: 'absolute', width: 10, height: 1.5, backgroundColor: 'rgba(255,255,255,0.9)', transform: [{ rotate: '-45deg' }] }} />
+                        </View>
+                      );
+                    })
+                  }
+                  <View style={[styles.progressKnob, { left: `${progressPct}%`, backgroundColor: '#FFF', width: 16, height: 16, borderRadius: 8, marginLeft: -8, top: -5, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }]} />
+                </View>
               </View>
-            </View>
-          </GestureDetector>
-          <Text style={[styles.timeText, { color: compact ? 'rgba(255,255,255,0.8)' : theme.textSecondary, width: 42, textAlign: 'right' }]}>{formatTime(formationDuration * 1000)}</Text>
-          {compact && (
+            </GestureDetector>
+            <Text style={[styles.timeText, { color: 'rgba(255,255,255,0.8)', width: 42, textAlign: 'right' }]}>{formatTime(formationDuration * 1000)}</Text>
             <TouchableOpacity onPress={() => setIsFormationFullScreen(false)} style={{ paddingLeft: 8 }}>
               <Ionicons name="contract" size={20} color="#fff" />
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        ) : (
+          <>
+            {/* 대형 편집 타임라인 재생바 */}
+            <View style={{ height: 110, marginBottom: 6, position: 'relative' }}>
+              <ScrollView
+                ref={timelineScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                contentContainerStyle={{ paddingHorizontal: (SCREEN_WIDTH - 32) / 2 }}
+              >
+                <View style={{ width: formationDuration * FORMATION_PX_PER_SEC, height: 110, position: 'relative' }}>
+                  {/* 파형 트랙 배경 */}
+                  <View style={{ position: 'absolute', top: 38, left: 0, right: 0, height: 34, backgroundColor: theme.primary, opacity: 0.07, borderRadius: 4 }} />
+                  {/* 대형 블록 */}
+                  {[...selectedFormation.data.timeline]
+                    .sort((a, b) => a.timestampMillis - b.timestampMillis)
+                    .map((entry) => {
+                      const scene = selectedFormation.data.scenes.find(s => s.id === entry.sceneId);
+                      const blockLeft = entry.timestampMillis / 1000 * FORMATION_PX_PER_SEC;
+                      const blockW = Math.max(24, entry.durationMillis / 1000 * FORMATION_PX_PER_SEC);
+                      const isActive = formationTime >= entry.timestampMillis && formationTime < entry.timestampMillis + entry.durationMillis;
+                      return (
+                        <TouchableOpacity
+                          key={entry.id}
+                          style={{
+                            position: 'absolute',
+                            left: blockLeft,
+                            width: blockW,
+                            top: 18,
+                            height: 68,
+                            backgroundColor: isActive ? theme.primary + '33' : theme.card,
+                            borderWidth: 1,
+                            borderColor: isActive ? theme.primary : theme.border,
+                            borderRadius: 6,
+                            overflow: 'hidden',
+                          }}
+                          onPress={() => seekTo(entry.timestampMillis)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <MiniFormationView
+                              scene={scene}
+                              dancers={selectedFormation.data.dancers}
+                              settings={selectedFormation.settings}
+                            />
+                          </View>
+                          <Text style={{ color: isActive ? theme.primary : theme.textSecondary, fontSize: 8, textAlign: 'center', paddingBottom: 3, fontWeight: '700' }} numberOfLines={1}>
+                            {scene?.name || ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  {/* 대형 간 블렌딩 구간 X 마크 */}
+                  {[...selectedFormation.data.timeline]
+                    .sort((a: any, b: any) => a.timestampMillis - b.timestampMillis)
+                    .map((entry: any, i: number, arr: any[]) => {
+                      if (i >= arr.length - 1) return null;
+                      const gapStart = entry.timestampMillis + entry.durationMillis;
+                      const gapEnd = arr[i + 1].timestampMillis;
+                      if (gapEnd <= gapStart) return null;
+                      const gapLeft = gapStart / 1000 * FORMATION_PX_PER_SEC;
+                      const gapWidth = (gapEnd - gapStart) / 1000 * FORMATION_PX_PER_SEC;
+                      const midX = gapLeft + gapWidth / 2;
+                      const isInGap = formationTime >= gapStart && formationTime < gapEnd;
+                      return (
+                        <View key={`gap-${entry.id}`} style={{ position: 'absolute', left: gapLeft, width: gapWidth, top: 18, height: 68, justifyContent: 'center', alignItems: 'center' }}>
+                          <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: isInGap ? (theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)') : 'transparent', borderRadius: 4 }}>
+                            {gapWidth > 12 && (
+                              <>
+                                <View style={{ position: 'absolute', width: Math.min(gapWidth * 0.7, 40), height: 1.5, backgroundColor: isInGap ? theme.primary : theme.textSecondary, opacity: isInGap ? 0.9 : 0.5, transform: [{ rotate: '45deg' }] }} />
+                                <View style={{ position: 'absolute', width: Math.min(gapWidth * 0.7, 40), height: 1.5, backgroundColor: isInGap ? theme.primary : theme.textSecondary, opacity: isInGap ? 0.9 : 0.5, transform: [{ rotate: '-45deg' }] }} />
+                              </>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })
+                  }
+                  {/* 시간 마커 */}
+                  {Array.from({ length: Math.floor(formationDuration / 5) + 1 }).map((_, i) => (
+                    <View key={i} style={{ position: 'absolute', left: i * 5 * FORMATION_PX_PER_SEC, top: 0 }}>
+                      <View style={{ width: 1, height: 12, backgroundColor: theme.border, opacity: 0.7 }} />
+                      <Text style={{ color: theme.textSecondary, fontSize: 9, opacity: 0.6, fontWeight: '500', marginTop: 1 }}>{formatTime(i * 5000)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+              {/* 고정 바늘 */}
+              <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', marginLeft: -1, width: 2, backgroundColor: theme.primary, opacity: 0.9, borderRadius: 1 }} />
+              <View pointerEvents="none" style={{ position: 'absolute', top: -2, left: '50%', marginLeft: -5, width: 10, height: 10, borderRadius: 5, backgroundColor: theme.primary }} />
+            </View>
+            {/* 재생버튼 + 시간 */}
+            <View style={[styles.formationProgressRow, { justifyContent: 'center', gap: 16, paddingHorizontal: 0 }]}>
+              <TouchableOpacity
+                onPress={() => setIsFormationPlaying((v) => !v)}
+                style={[styles.formationPlayBtn, { backgroundColor: theme.primary }]}
+              >
+                <Ionicons name={isFormationPlaying ? 'pause' : 'play'} size={22} color="#fff" />
+              </TouchableOpacity>
+              <Text style={[styles.timeText, { color: theme.textSecondary, width: 'auto' as any, fontSize: 13 }]}>
+                {formatTime(formationTime)}{' '}
+                <Text style={{ opacity: 0.45 }}>/ {formatTime(formationDuration * 1000)}</Text>
+              </Text>
+            </View>
+          </>
+        )}
       </>
     );
 
@@ -737,11 +884,25 @@ export default function FeedbackScreen() {
                 onDurationDetected={setFormationDuration}
                 isPlaying={isFormationPlaying}
                 playbackRate={playbackRate}
+                noAudio={!selectedFormation?.audioUrl}
                 containerWidth={winW}
                 containerHeight={winH - Math.max(70, 56 + insets.bottom)}
-                hidePip={false}
+                hidePip={true}
                 forceDarkMode={false}
               />
+              {/* 안무 영상 오버레이 (전체화면) */}
+              {cachedChoreographyUrl && (
+                <FormationPiPPlayer
+                  videoUrl={cachedChoreographyUrl}
+                  currentTimeMs={currentTimeMsSV}
+                  isPlaying={isFormationPlaying}
+                  syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
+                  skipConversion={true}
+                  onClose={() => {}}
+                  initialX={winW - 216}
+                  initialY={60}
+                />
+              )}
               {/* 전체화면 컨트롤 오버레이 */}
               <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom + 4, paddingHorizontal: 4, backgroundColor: 'rgba(0,0,0,0.5)' }}>
                 {renderFormationControls(true)}
@@ -792,11 +953,25 @@ export default function FeedbackScreen() {
                 onDurationDetected={setFormationDuration}
                 isPlaying={isFormationPlaying}
                 playbackRate={playbackRate}
+                noAudio={!selectedFormation?.audioUrl}
                 containerWidth={winW}
                 containerHeight={formationContainerHeight > 0 ? formationContainerHeight : undefined}
-                hidePip={false}
+                hidePip={true}
                 forceDarkMode={false}
               />
+              {/* 안무 영상 오버레이 — 드래그·핀치로 위치·크기 자유 조절 */}
+              {cachedChoreographyUrl && (
+                <FormationPiPPlayer
+                  videoUrl={cachedChoreographyUrl}
+                  currentTimeMs={currentTimeMsSV}
+                  isPlaying={isFormationPlaying}
+                  syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
+                  skipConversion={true}
+                  onClose={() => {}}
+                  initialX={SCREEN_WIDTH - 216}
+                  initialY={60}
+                />
+              )}
             </View>
 
             {/* 하단 컨트롤 */}
@@ -849,6 +1024,7 @@ export default function FeedbackScreen() {
               onDurationDetected={setFormationDuration}
               isPlaying={isFormationPlaying}
               playbackRate={playbackRate}
+              noAudio={!selectedFormation?.audioUrl}
               containerWidth={SCREEN_WIDTH - 80}
               containerHeight={formationContainerHeight > 0 ? formationContainerHeight - 40 : undefined}
               hidePip={true}
@@ -903,6 +1079,7 @@ export default function FeedbackScreen() {
             currentTimeMs={currentTimeMsSV}
             isPlaying={isFormation ? isFormationPlaying : isVideoPlaying}
             syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
+            skipConversion={true}
             onClose={() => {}}
             initialX={subPosX.value}
             initialY={subPosY.value}
@@ -921,6 +1098,7 @@ export default function FeedbackScreen() {
                 isPlaying={isFormationPlaying}
                 hidePip={true}
                 noAudio={true}
+                externalTimeSV={currentTimeMsSV}
                 containerWidth={subContainerW}
               />
             ) : (

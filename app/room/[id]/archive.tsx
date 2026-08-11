@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, ScrollView, TextInput, Alert, ActivityIndicator, RefreshControl, Dimensions, KeyboardAvoidingView, Keyboard, Platform, ActionSheetIOS } from 'react-native';
 import { Image } from 'expo-image';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -36,6 +36,15 @@ export default function ArchiveScreen() {
 
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const evShow = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const evHide = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(evShow, (e) => setKbHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(evHide, () => setKbHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const [description, setDescription] = useState('');
   const [selectedContent, setSelectedContent] = useState<{ uri: string, type: 'image' | 'video' } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -315,10 +324,7 @@ export default function ArchiveScreen() {
       />
 
       <Modal visible={!!selectedPhoto} animationType="slide" transparent onRequestClose={() => { setSelectedPhoto(null); setShowFullScreen(false); }}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={[styles.container, { backgroundColor: theme.background }]}
-        >
+        <View style={[styles.container, { backgroundColor: theme.background, paddingBottom: kbHeight }]}>
           <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
             <TouchableOpacity onPress={() => { setSelectedPhoto(null); setShowFullScreen(false); }} style={styles.backBtn}>
               <Ionicons name="close" size={28} color={theme.text} />
@@ -501,7 +507,7 @@ export default function ArchiveScreen() {
                 : <Ionicons name="send" size={20} color="#fff" />}
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Edit & Add Modals */}

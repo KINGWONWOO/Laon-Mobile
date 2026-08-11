@@ -14,12 +14,10 @@ import { ensureStandardMP4 } from '../../utils/convertMP4';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
-const L = (...a: any[]) => console.log('[PiP]', ...a);
-
 const DRIFT_PLAY_S  = 0.5;
-const DRIFT_SCRUB_S = 0.05; // 0.1s 클릭에 즉시 반응하도록 축소
-const SEEK_COOLDOWN = 150;  // 연타 대응을 위해 간격 축소
-const SETTLE_MS     = 2000; // 변환된 MP4는 반응이 빠르므로 대기 시간 단축
+const DRIFT_SCRUB_S = 0.15;
+const SEEK_COOLDOWN = 300;
+const SETTLE_MS     = 2000;
 
 interface Props {
   videoUrl: string;
@@ -60,12 +58,13 @@ export const FormationPiPPlayer = React.memo(({
   const prevPlaying  = useRef(false);
   const lastSeekedTo = useRef(0);
   const lastSeekAt   = useRef(0);
-  const settleUntil  = useRef(0); // seek 후 이 시각까지 드리프트 보정 무시
+  const settleUntil  = useRef(0);
+  const scrubTickRef = useRef(0);
 
-  const player = useVideoPlayer({ uri: displayUrl }, p => {
+  const player = useVideoPlayer('', p => {
     p.muted = true;
     p.loop  = false;
-    p.timeUpdateEventInterval = 0.1;
+    p.timeUpdateEventInterval = 0.5;
   });
 
   useEffect(() => {
@@ -75,7 +74,7 @@ export const FormationPiPPlayer = React.memo(({
 
       const isLocal = videoUrl.startsWith('file://') || videoUrl.startsWith('/');
       if (isLocal && !skipConversion) {
-        L(`Checking local video for fMP4: ${videoUrl}`);
+        console.log('[PiP] Checking local video for fMP4:', videoUrl);
         setIsConverting(true);
         setConversionProgress(0);
         try {
@@ -90,7 +89,7 @@ export const FormationPiPPlayer = React.memo(({
           if (isMounted) setIsConverting(false);
         }
       } else {
-        L(`Skipping conversion (skipConversion=${skipConversion} or remote).`);
+        console.log(`[PiP] Skipping conversion (skipConversion=${skipConversion} or remote).`);
         setDisplayUrl(videoUrl);
       }
     };
@@ -107,13 +106,12 @@ export const FormationPiPPlayer = React.memo(({
     player.replace({ uri: displayUrl });
   }, [displayUrl, player]);
 
-  const seekTo = useCallback((sec: number, reason: string) => {
+  const seekTo = useCallback((sec: number) => {
     const now = Date.now();
-    if (now - lastSeekAt.current < SEEK_COOLDOWN) { L(`cooldown [${reason}]`); return; }
-    L(`seek → ${sec.toFixed(2)}s [${reason}]`);
+    if (now - lastSeekAt.current < SEEK_COOLDOWN) return;
     lastSeekAt.current   = now;
     lastSeekedTo.current = sec;
-    settleUntil.current  = now + SETTLE_MS; // seek 후 1초 동안 드리프트 보정 차단
+    settleUntil.current  = now + SETTLE_MS;
     player.currentTime   = sec;
   }, [player]);
 
@@ -123,17 +121,15 @@ export const FormationPiPPlayer = React.memo(({
       if (status === 'readyToPlay' && !videoLoaded.current) {
         videoLoaded.current = true;
         const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
-        L(`readyToPlay → ${targetSec.toFixed(2)}s`);
-        // SEEK_COOLDOWN 우회: 초기 seek는 강제 실행
-        lastSeekAt.current   = 0;
-        seekTo(targetSec, 'initial');
+        lastSeekAt.current = 0;
+        seekTo(targetSec);
         if (isPlayingRef.current) player.play();
       }
     });
     return () => sub.remove();
   }, [player, syncOffset, seekTo]);
 
-  // 드리프트 보정
+  // 드리프트 보정 (재생 중에만)
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
       if (!videoLoaded.current || !isPlayingRef.current) return;
@@ -147,20 +143,15 @@ export const FormationPiPPlayer = React.memo(({
 
       const effectiveSec = currentTimeRef.current.value / 1000 + syncOffset;
       if (effectiveSec < 0) {
-        // 아직 재생 시작 전 — 영상을 0초에 멈춰둠
         if (player.playing) player.pause();
-        if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0, 'pre-start'); }
+        if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0); }
         return;
       }
 
-      // fMP4 seek 직후 currentTime=0 spurious 보고 방어
       if (currentTime < 0.5 && lastSeekedTo.current > 2) return;
 
       const drift = Math.abs(currentTime - effectiveSec);
-      if (drift > DRIFT_PLAY_S) {
-        L(`drift ${drift.toFixed(2)}s → ${effectiveSec.toFixed(2)}s`);
-        seekTo(effectiveSec, 'drift');
-      }
+      if (drift > DRIFT_PLAY_S) seekTo(effectiveSec);
     });
     return () => sub.remove();
   }, [player, syncOffset, seekTo]);
@@ -169,49 +160,63 @@ export const FormationPiPPlayer = React.memo(({
   useEffect(() => {
     if (!videoLoaded.current || isPlayingRef.current) return;
     const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
-    seekTo(targetSec, 'sync-adjust');
+    seekTo(targetSec);
   }, [syncOffset, seekTo]);
 
-  // 재생/정지 전환 + 스크럽 프리뷰
+  // 재생/정지 전환 + 스크럽 프리뷰 (편집 중 JS 부하 최소화)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!videoLoaded.current) return;
+      // Fallback: catch readyToPlay if statusChange missed it
+      if (!videoLoaded.current) {
+        try {
+          if ((player as any).duration > 0) {
+            videoLoaded.current = true;
+            const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
+            lastSeekAt.current = 0;
+            seekTo(targetSec);
+            if (isPlayingRef.current) player.play();
+          }
+        } catch (_) {}
+        return;
+      }
 
-      const playing     = isPlayingRef.current;
+      const playing      = isPlayingRef.current;
       const effectiveSec = currentTimeRef.current.value / 1000 + syncOffset;
-      const stateChg    = playing !== prevPlaying.current;
+      const stateChg     = playing !== prevPlaying.current;
 
       if (stateChg) {
         prevPlaying.current = playing;
+        scrubTickRef.current = 0;
         if (!playing) {
           player.pause();
         } else if (effectiveSec < 0) {
-          // 싱크 오프셋이 음수일 때 아직 재생 시작 전 → 0초에 대기
           player.pause();
-          if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0, 'play-transition-pre'); }
+          if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0); }
         } else {
           lastSeekAt.current = 0;
-          seekTo(effectiveSec, 'play-transition');
+          seekTo(effectiveSec);
           player.play();
         }
       }
 
-      // 음수 오프셋 대기 중 → effectiveSec이 0을 넘는 순간 재생 시작
       if (playing && effectiveSec >= 0 && !player.playing) {
         lastSeekAt.current = 0;
-        seekTo(effectiveSec, 'auto-start');
+        seekTo(effectiveSec);
         player.play();
       }
 
-      // 음수 오프셋 대기 중 → 영상을 0초에 유지
       if (playing && effectiveSec < 0) {
         if (player.playing) player.pause();
       }
 
+      // 정지 중 스크럽 프리뷰: 3틱(~300ms)마다 한 번만 seek하여 편집 중 JS 부하 감소
       if (!playing) {
-        const targetSec = Math.max(0, effectiveSec);
-        if (Math.abs(targetSec - lastSeekedTo.current) > DRIFT_SCRUB_S) {
-          seekTo(targetSec, 'scrub-preview');
+        scrubTickRef.current = (scrubTickRef.current + 1) % 3;
+        if (scrubTickRef.current === 0) {
+          const targetSec = Math.max(0, effectiveSec);
+          if (Math.abs(targetSec - lastSeekedTo.current) > DRIFT_SCRUB_S) {
+            seekTo(targetSec);
+          }
         }
       }
     }, 100);

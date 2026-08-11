@@ -164,6 +164,21 @@ export default function FormationPlayer({
     return map;
   }, [scenes]);
 
+  // Gap-period X overlay: animated opacity driven by activeTimeSV
+  const gapOverlayStyle = useAnimatedStyle(() => {
+    'worklet';
+    const t = activeTimeSV.value;
+    if (sortedTimeline.length < 2) return { opacity: 0 };
+    for (let i = 0; i < sortedTimeline.length - 1; i++) {
+      const curr = sortedTimeline[i];
+      const next = sortedTimeline[i + 1];
+      const gapStart = curr.timestampMillis + curr.durationMillis;
+      const gapEnd = next.timestampMillis;
+      if (gapEnd > gapStart && t >= gapStart && t < gapEnd) return { opacity: 1 };
+    }
+    return { opacity: 0 };
+  });
+
   const player = useAudioPlayer(noAudio ? '' : (formation?.audioUrl || ''));
   const internalVideoPlayer = useVideoPlayer(videoSettings?.videoUrl || null, (p) => {
     p.loop = true;
@@ -219,13 +234,18 @@ export default function FormationPlayer({
       player.play();
       if (videoPlayer?.src) videoPlayer.play();
 
+      let lastNotifyAt = 0;
       const interval = setInterval(() => {
         const ms = player.currentTime * 1000;
         internalTimeSV.value = ms;
-        onTimeUpdate?.(ms);
-        if (!durationReportedRef.current && player.duration > 0 && onDurationDetected) {
-          onDurationDetected(player.duration);
-          durationReportedRef.current = true;
+        const now = Date.now();
+        if (now - lastNotifyAt >= 100) {
+          lastNotifyAt = now;
+          onTimeUpdate?.(ms);
+          if (!durationReportedRef.current && player.duration > 0 && onDurationDetected) {
+            onDurationDetected(player.duration);
+            durationReportedRef.current = true;
+          }
         }
       }, 50);
       return () => clearInterval(interval);
@@ -317,6 +337,25 @@ export default function FormationPlayer({
               cellSize={STAGE_CELL_SIZE}
             />
           ))}
+
+          {/* Transition gap X overlay */}
+          {(() => {
+            const diag = Math.sqrt(STAGE_WIDTH * STAGE_WIDTH + STAGE_HEIGHT * STAGE_HEIGHT);
+            const angleDeg = Math.atan2(STAGE_HEIGHT, STAGE_WIDTH) * (180 / Math.PI);
+            const lineColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
+            const lineStyle: any = {
+              position: 'absolute', width: diag, height: 1.5,
+              backgroundColor: lineColor,
+              top: '50%', left: '50%',
+              marginLeft: -diag / 2, marginTop: -0.75,
+            };
+            return (
+              <Animated.View style={[StyleSheet.absoluteFill, gapOverlayStyle]} pointerEvents="none">
+                <View style={[lineStyle, { transform: [{ rotate: `${angleDeg}deg` }] }]} />
+                <View style={[lineStyle, { transform: [{ rotate: `-${angleDeg}deg` }] }]} />
+              </Animated.View>
+            );
+          })()}
         </View>
         {showDirectionLabels && (
           <View style={styles.directionLabelBottom} pointerEvents="none">

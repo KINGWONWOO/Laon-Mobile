@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform, KeyboardAvoidingView, PixelRatio, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, TextInput, Modal, Alert, ActivityIndicator, Pressable, Image, ScrollView, Platform, KeyboardAvoidingView, PixelRatio } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppContext } from '../../../../context/AppContext';
@@ -1422,11 +1422,11 @@ export default function FormationEditorScreen() {
 
   const pickVideo = async () => {
     try {
-      // 480p로 압축하여 PiP 재생 시 프레임 드랍 방지 (200x112px PiP에 충분한 해상도)
+      // 480p + quality 0.3으로 저비트레이트 압축 — 200x112px PiP에서 GPU 디코딩 부하 최소화
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['videos'],
         allowsEditing: true,
-        quality: 1,
+        quality: 0.3,
         videoExportPreset: ImagePicker.VideoExportPreset.H264_640x480,
       });
 
@@ -1464,13 +1464,19 @@ export default function FormationEditorScreen() {
         }
 
         pipVideoManualRef.current = true; // 수동 선택됨 표시
+
+        // 비디오 로딩 중 프레임 콜백 부하를 줄여 댄서 이동 버벅임 방지
+        seekFreezeUntilSV.value = Date.now() + 2500;
+        if (playerStatus.playing) player.pause();
+
         setVideoUrl(persistUri);
         setVideoPreConverted(true);
         pipX.value = width - 220;
         pipY.value = 100;
         pipScale.value = 1;
         // PiP 플레이어가 초기화될 시간을 확보한 후 오버레이 해제
-        await new Promise(resolve => setTimeout(resolve, 400));
+        await new Promise(resolve => setTimeout(resolve, 500));
+        seekFreezeUntilSV.value = Date.now();
       } catch (e: any) {
         Alert.alert(t('error'), e.message);
       } finally {
@@ -1532,30 +1538,23 @@ export default function FormationEditorScreen() {
     setShowFilenameModal(true);
   };
 
-  const [publishStep, setPublishStep] = useState<'idle' | 'uploading' | 'publishing'>('idle');
-  const [includeChoreographyInPublish, setIncludeChoreographyInPublish] = useState(true);
-
   const handlePublish = async () => {
     if (!publishTitle.trim()) { Alert.alert(t('notification'), t('enterPublishTitle')); return; }
-
     try {
       setIsExporting(true);
 
-      // R2에 안무 영상 업로드 — 토글이 켜진 경우에만 포함
-      // videoUrl 상태가 없을 때 formation 저장값으로 fallback (비동기 로딩 경쟁 조건 대비)
+      // PiP 영상이 있으면 R2에 업로드하여 피드백 뷰어에서 재생 가능하게 함
       const effectiveVideoUrl = videoUrl || formation?.videoSettings?.videoUrl;
       let choreographyUrl: string | undefined;
-      if (effectiveVideoUrl && includeChoreographyInPublish) {
+      if (effectiveVideoUrl) {
         if (effectiveVideoUrl.startsWith('http')) {
           choreographyUrl = effectiveVideoUrl;
         } else {
-          setPublishStep('uploading');
           const fileName = `choreo_${formationId}_${Date.now()}.mp4`;
           choreographyUrl = await storageService.uploadToR2('formations/choreo', effectiveVideoUrl, fileName);
         }
       }
 
-      setPublishStep('publishing');
       await publishFormationAsFeedback(id!, formationId!, publishTitle, {
         audioUrl,
         videoSettings: videoUrl ? { videoUrl, pipPosition: { x: pipX.value, y: pipY.value }, pipScale: pipScale.value, syncOffset } : undefined,
@@ -1568,7 +1567,6 @@ export default function FormationEditorScreen() {
       Alert.alert(t('error'), e.message);
     } finally {
       setIsExporting(false);
-      setPublishStep('idle');
     }
   };
   const copyActiveScene = () => {
@@ -1932,21 +1930,6 @@ export default function FormationEditorScreen() {
                 autoFocus 
               />
 
-              {videoUrl && (
-                <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 10, backgroundColor: includeChoreographyInPublish ? theme.primary + '18' : theme.border + '30' }}>
-                  <Ionicons name="videocam" size={16} color={includeChoreographyInPublish ? theme.primary : theme.textSecondary} />
-                  <Text style={{ color: includeChoreographyInPublish ? theme.primary : theme.textSecondary, fontSize: 12, fontWeight: '600', flex: 1 }}>
-                    {t('includeChoreographyVideo')}
-                  </Text>
-                  <Switch
-                    value={includeChoreographyInPublish}
-                    onValueChange={setIncludeChoreographyInPublish}
-                    trackColor={{ true: theme.primary }}
-                    thumbColor="#fff"
-                  />
-                </View>
-              )}
-
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 25 }}>
                 <TouchableOpacity onPress={() => setShowPublishModal(false)}>
                   <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>{t('cancel')}</Text>
@@ -1955,9 +1938,7 @@ export default function FormationEditorScreen() {
                   {isExporting ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <ActivityIndicator size="small" color={theme.primary} />
-                      <Text style={{ color: theme.primary, fontSize: 13 }}>
-                        {publishStep === 'uploading' ? (t('uploadingVideo') || '영상 업로드 중...') : (t('publishing') || '게시 중...')}
-                      </Text>
+                      <Text style={{ color: theme.primary, fontSize: 13 }}>{t('publishing') || '게시 중...'}</Text>
                     </View>
                   ) : (
                     <Text style={{ color: theme.primary, fontWeight: '900', fontSize: 16 }}>{t('post')}</Text>
