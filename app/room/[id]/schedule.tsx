@@ -155,7 +155,7 @@ export default function ScheduleScreen() {
     setReminderMinutes(activeSchedule.reminderMinutes || 30);
     if (activeSchedule.deadline) setDeadline(new Date(activeSchedule.deadline));
     
-    const existingDates = Array.from(new Set(activeSchedule.options.map((o:any) => o.dateTime.split(' ')[0]))).map(ds => new Date(ds as string));
+    const existingDates = Array.from(new Set(activeSchedule.options.map((o:any) => o.dateTime.split(' ')[0]))).map(ds => new Date((ds as string) + 'T12:00:00'));
     setSelectedDates(existingDates);
     
     const existingHours = activeSchedule.options.map((o:any) => parseInt(o.dateTime.split(' ')[1].split(':')[0]));
@@ -446,7 +446,7 @@ export default function ScheduleScreen() {
                   <View style={{ flex: 1, overflow: 'hidden' }}>
                     <Animated.View style={[{ flexDirection: 'row' }, stickyStyle1]}>
                       {uniqueDates.map(date => {
-                        const d = new Date(date as string);
+                        const d = new Date((date as string) + 'T12:00:00');
                         return (
                           <Animated.View key={date as string} style={[{ alignItems: 'center', justifyContent: 'center' }, animDateHeader1]}>
                             <Text style={[styles.dateHeaderText, { color: theme.textSecondary }]}>{d.toLocaleDateString(locale, { weekday: 'short' })}</Text>

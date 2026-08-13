@@ -63,7 +63,7 @@ export const FormationPiPPlayer = React.memo(({
 
   const player = useVideoPlayer('', p => {
     p.muted = true;
-    p.loop  = false;
+    p.loop  = true;
     p.timeUpdateEventInterval = 0.5;
   });
 

@@ -299,22 +299,17 @@ export default function FeedbackScreen() {
 
   useEffect(() => {
     async function changeOrientation() {
-      if (isFullScreen) await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-      else await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      if (isFormationFullScreen && selectedVideo && isFormation) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      } else if (isFullScreen) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      } else {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      }
     }
     changeOrientation();
     return () => { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); };
-  }, [isFullScreen]);
-
-  // 동선 영상 전체화면 (가로모드)
-  useEffect(() => {
-    if (!selectedVideo || !isFormation) return;
-    if (isFormationFullScreen) {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-    } else {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    }
-  }, [isFormationFullScreen, selectedVideo, isFormation]);
+  }, [isFullScreen, isFormationFullScreen, selectedVideo, isFormation]);
 
   // 영상 모달 닫힐 때 항상 세로모드로 복귀
   useEffect(() => {
@@ -409,7 +404,7 @@ export default function FeedbackScreen() {
       if (isFormation) setIsFormationPlaying(true);
       else player.play();
     }
-  }, [showCommentInput]);
+  }, [showCommentInput, selectedVideo, isFormation, player]);
 
   const handlePickVideo = async () => {
     const access = checkProAccess('feedback_limit', id as string);
@@ -872,7 +867,7 @@ export default function FeedbackScreen() {
 
     if (isLandscape) {
       return (
-        <Modal visible={true} animationType="fade" transparent={false} onRequestClose={() => setIsFormationFullScreen(false)}>
+        <Modal visible={true} animationType="fade" transparent={false} onRequestClose={() => { setIsFormationFullScreen(false); ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP); }}>
           <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
             <View style={{ flex: 1 }}>
               <FormationPlayer
@@ -1474,7 +1469,7 @@ export default function FeedbackScreen() {
             onRequestClose={() => setShowCommentInput(false)}
           >
             <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
               style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 }}
             >
               <View style={[styles.modalContent, { backgroundColor: theme.card }]}>

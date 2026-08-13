@@ -38,6 +38,7 @@ export const storageService = {
       
       const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true } as any);
       if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
+      if (fileInfo.size > MAX_FILE_SIZE) throw new Error(`파일 크기가 제한을 초과했습니다. (최대 ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
 
       const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
       const key = `${bucketPath}/${fileName}`;

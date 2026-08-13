@@ -369,10 +369,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (mounted) {
-        if (session) fetchMyProfile(session.user.id, session.user);
-        setIsLoadingUser(false);
+        if (session) await fetchMyProfile(session.user.id, session.user);
+        if (mounted) setIsLoadingUser(false);
       }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -448,7 +448,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       subscription_start: new Date(now).toISOString(),
       subscription_expiry: new Date(expiryMs).toISOString(),
     }).eq('id', currentUserRef.current.id);
-    if (error) throw error;
+    if (error) {
+      // RC 결제는 성공했으나 DB 저장 실패 — 다음 앱 시작 시 syncRcWithSupabase로 복구됨
+      console.error('[Purchase] DB update failed after successful payment:', error);
+    }
     await fetchMyProfile(currentUserRef.current.id);
   };
 
@@ -565,9 +568,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const channel = supabase.channel('global-sync').on('postgres_changes', { event: '*', schema: 'public' }, () => refreshAllData()).subscribe();
+    const TABLE_TO_QUERY: Record<string, string[]> = {
+      notices: ['notices'],
+      notice_comments: ['notices'],
+      video_feedbacks: ['videos'],
+      video_comments: ['videos'],
+      gallery_items: ['photos'],
+      photo_comments: ['photos'],
+      schedules: ['schedules'],
+      schedule_responses: ['schedules'],
+      votes: ['votes'],
+      vote_options: ['votes'],
+      vote_responses: ['votes'],
+      formations: ['formations'],
+      room_activities: ['activities'],
+    };
+    const channel = supabase.channel('global-sync').on(
+      'postgres_changes',
+      { event: '*', schema: 'public' },
+      (payload: any) => {
+        const table: string = payload?.table ?? '';
+        const keys = TABLE_TO_QUERY[table];
+        if (keys) {
+          keys.forEach(k => queryClient.invalidateQueries({ queryKey: [k], refetchType: 'active' }));
+        } else {
+          queryClient.invalidateQueries({ refetchType: 'active' });
+        }
+      }
+    ).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser, refreshAllData]);
+  }, [currentUser, queryClient]);
 
   // 로그인 시 앱 언어를 profiles.language에 동기화 (push 알림 언어 적용)
   useEffect(() => {

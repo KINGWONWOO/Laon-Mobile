@@ -46,6 +46,17 @@ export async function registerForPushNotificationsAsync(userId: string) {
       throw new Error('EAS projectId not found');
     }
 
+    if (Platform.OS === 'android') {
+      console.log('[Push] Setting Android notification channel...');
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+      console.log('[Push] Android channel set');
+    }
+
     console.log('[Push] Fetching Expo push token...');
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
@@ -65,17 +76,6 @@ export async function registerForPushNotificationsAsync(userId: string) {
       if (!updateData || updateData.length === 0) {
         console.warn('[Push] WARNING: update returned 0 rows — userId may not exist in profiles table:', userId);
       }
-    }
-
-    if (Platform.OS === 'android') {
-      console.log('[Push] Setting Android notification channel...');
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-      console.log('[Push] Android channel set');
     }
 
     return token;

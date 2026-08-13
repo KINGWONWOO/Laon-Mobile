@@ -1090,7 +1090,7 @@ export default function FormationEditorScreen() {
       setCreatePast(prev => [...prev, current]); setCreateFuture(prev => prev.slice(1));
       setDancers(next.dancers); setScenes(next.scenes); setTimeline(next.timeline); setAudioUrl(next.audioUrl);
       const active = next.scenes.find(s => s.id === activeSceneId);
-      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = (next as any).positions[dId]; });
+      if (active) Object.keys(active.positions).forEach(dId => { if (dancerPositions[dId]) dancerPositions[dId].value = active.positions[dId]; });
     } else {
       if (placeFuture.length === 0) return;
       const next = placeFuture[0];
@@ -1610,7 +1610,7 @@ export default function FormationEditorScreen() {
   const handleSceneCardLongPress = useCallback((scene: any) => {
     Alert.alert(scene.name, t('confirm'), [
       { text: t('renameFormation'), onPress: () => { setSceneModalMode('rename'); setTargetSceneId(scene.id); setInputName(scene.name); setShowSceneModal(true); } },
-      { text: t('delete'), style: 'destructive', onPress: () => { pushHistory(); setScenes((prev: any[]) => prev.filter((x: any) => x.id !== scene.id)); } },
+      { text: t('delete'), style: 'destructive', onPress: () => { pushHistory(); setScenes((prev: any[]) => prev.filter((x: any) => x.id !== scene.id)); setTimeline((prev: any[]) => prev.filter((x: any) => x.sceneId !== scene.id)); } },
       { text: t('cancel') }
     ]);
   }, [pushHistory, t]);

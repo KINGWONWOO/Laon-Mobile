@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateFull, OptionModal } from '../../../components/ui/RoomComponents';
 import { Shadows } from '../../../constants/theme';
 import { contentService } from '../../../services/contentService';
+import { supabase } from '../../../lib/supabase';
 import AdBanner from '../../../components/ui/AdBanner';
 
 const { width } = Dimensions.get('window');
@@ -105,9 +106,13 @@ export default function VoteScreen() {
     setIsUpdating(true);
     try {
       await updateVote(selectedVoteId, { question: question.trim(), deadline: hasDeadline ? deadline.getTime() : undefined, isAnonymous, allowMultiple, useNotification, reminderMinutes } as any);
-      const existingOptionTexts = activeVote.options.map((o: any) => o.text);
-      const newOptions = options.filter(opt => opt.trim() && !existingOptionTexts.includes(opt.trim()));
+      const currentOptionTexts = options.filter(o => o.trim());
+      const newOptions = currentOptionTexts.filter(opt => !activeVote.options.some((o: any) => o.text === opt));
       if (newOptions.length > 0) await contentService.addVoteOptions(selectedVoteId, newOptions);
+      const removedOptionIds = activeVote.options.filter((o: any) => !currentOptionTexts.includes(o.text)).map((o: any) => o.id);
+      if (removedOptionIds.length > 0) {
+        await supabase.from('vote_options').delete().in('id', removedOptionIds);
+      }
       await refreshAllData();
       setShowEditModal(false);
     } catch (e: any) { Alert.alert(t('errorTitle'), e.message); }
