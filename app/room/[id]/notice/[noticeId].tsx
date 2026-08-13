@@ -28,6 +28,8 @@ export default function NoticeDetailScreen() {
   const [useNotification, setUseNotification] = useState(false);
   const [isUpdatingNotice, setIsUpdatingNotice] = useState(false);
 
+  const notice = useMemo(() => notices.find(n => n.id === noticeId), [notices, noticeId]);
+
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState('');
   const [isUpdatingComment, setIsUpdatingComment] = useState(false);
@@ -46,8 +48,6 @@ export default function NoticeDetailScreen() {
   // Full Screen Image Viewer state
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerImageUrl, setViewerImageUrl] = useState('');
-
-  const notice = useMemo(() => notices.find(n => n.id === noticeId), [notices, noticeId]);
   
   useEffect(() => {
     if (notice && showEditNotice) {
