@@ -36,7 +36,6 @@ yarn-error.*
 .dev.vars
 secu.txt
 GoogleService-Info.plist
-google-services.json
 
 # Firebase Admin SDK service account keys
 *firebase-adminsdk*.json
