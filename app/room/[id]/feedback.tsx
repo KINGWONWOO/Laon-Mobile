@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { Ionicons } from '@expo/vector-icons';
 import { ensureStandardMP4 } from '../../../utils/convertMP4';
+import { Video as CompressorVideo } from 'react-native-compressor';
 import { useAppContext } from '../../../context/AppContext';
 import { VideoFeedback } from '../../../types';
 import { storageService } from '../../../services/storageService';
@@ -76,6 +77,7 @@ export default function FeedbackScreen() {
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [conversionProgress, setConversionProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState<'converting' | 'compressing' | 'uploading'>('converting');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [videoTitle, setVideoTitle] = useState('');
@@ -436,13 +438,29 @@ export default function FeedbackScreen() {
 
       setIsLoading(true);
       setConversionProgress(0);
+      setUploadPhase('converting');
       try {
         const rawUri = result.assets[0].uri;
         // fMP4 변환
-        const videoUri = await ensureStandardMP4(rawUri, (ratio) => {
+        const convertedUri = await ensureStandardMP4(rawUri, (ratio) => {
           setConversionProgress(Math.floor(ratio * 100));
         });
-        
+
+        // 5MB 초과 시 압축
+        let videoUri = convertedUri;
+        const fileInfo = await FileSystem.getInfoAsync(convertedUri) as any;
+        if (fileInfo.size && fileInfo.size > 5 * 1024 * 1024) {
+          setUploadPhase('compressing');
+          setConversionProgress(0);
+          videoUri = await CompressorVideo.compress(
+            convertedUri,
+            { compressionMethod: 'auto', maxSize: 1280, bitrate: 2_000_000 },
+            (progress) => setConversionProgress(Math.floor(progress * 100))
+          );
+        }
+
+        setUploadPhase('uploading');
+        setConversionProgress(100);
         const fileName = `${Date.now()}.mp4`;
         const publicUrl = await storageService.uploadToR2(`videos/${id}`, videoUri, fileName);
 
@@ -892,7 +910,6 @@ export default function FeedbackScreen() {
                   currentTimeMs={currentTimeMsSV}
                   isPlaying={isFormationPlaying}
                   syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
-                  skipConversion={true}
                   onClose={() => {}}
                   initialX={winW - 216}
                   initialY={60}
@@ -961,7 +978,6 @@ export default function FeedbackScreen() {
                   currentTimeMs={currentTimeMsSV}
                   isPlaying={isFormationPlaying}
                   syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
-                  skipConversion={true}
                   onClose={() => {}}
                   initialX={SCREEN_WIDTH - 216}
                   initialY={60}
@@ -1074,7 +1090,6 @@ export default function FeedbackScreen() {
             currentTimeMs={currentTimeMsSV}
             isPlaying={isFormation ? isFormationPlaying : isVideoPlaying}
             syncOffset={selectedFormation?.videoSettings?.syncOffset || 0}
-            skipConversion={true}
             onClose={() => {}}
             initialX={subPosX.value}
             initialY={subPosY.value}
@@ -1606,13 +1621,16 @@ export default function FeedbackScreen() {
             {isLoading ? (
               <View style={{ alignItems: 'center' }}>
                 <ActivityIndicator size="large" color={theme.primary} />
-                {conversionProgress > 0 && conversionProgress < 100 && (
+                {uploadPhase === 'converting' && conversionProgress > 0 && conversionProgress < 100 && (
+                  <Text style={{ color: theme.primary, marginTop: 10, fontWeight: 'bold' }}>변환 중 {conversionProgress}%</Text>
+                )}
+                {uploadPhase === 'compressing' && (
                   <Text style={{ color: theme.primary, marginTop: 10, fontWeight: 'bold' }}>
-                    {conversionProgress}%
+                    {conversionProgress < 100 ? `압축 중 ${conversionProgress}%` : '압축 완료'}
                   </Text>
                 )}
-                {conversionProgress >= 100 && (
-                   <Text style={{ color: theme.textSecondary, marginTop: 10, fontSize: 12 }}>{t('posting')}</Text>
+                {uploadPhase === 'uploading' && (
+                  <Text style={{ color: theme.textSecondary, marginTop: 10, fontSize: 12 }}>{t('posting')}</Text>
                 )}
               </View>
             ) : (

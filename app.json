@@ -21,7 +21,7 @@
     "android": {
       "package": "om.laon.dancefeedback",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 24,
+      "versionCode": 25,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",

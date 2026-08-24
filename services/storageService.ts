@@ -2,7 +2,8 @@ import { supabase } from '../lib/supabase';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB (압축 후 업로드)
 const MAX_GALLERY_COUNT = 20;
 const DEFAULT_BUCKET = 'laon-dance';
 
@@ -38,14 +39,17 @@ export const storageService = {
       
       const fileInfo: any = await FileSystem.getInfoAsync(targetPath, { size: true } as any);
       if (!fileInfo.exists) throw new Error('파일이 존재하지 않습니다.');
-      if (fileInfo.size > MAX_FILE_SIZE) throw new Error(`파일 크기가 제한을 초과했습니다. (최대 ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
 
-      const contentType = lowerName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
+      const isVideo = lowerName.endsWith('.mp4') || lowerName.endsWith('.mov');
+      const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      if (fileInfo.size > maxSize) throw new Error(`파일 크기가 제한을 초과했습니다. (최대 ${maxSize / 1024 / 1024}MB)`);
+
+      const contentType = isVideo ? 'video/mp4' : 'image/jpeg';
       const key = `${bucketPath}/${fileName}`;
 
       // 💡 1. 세션 확인
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (!session) {
         if (sessionError) console.error('[Storage] Session Error:', sessionError.message);
         throw new Error('인증 세션이 없습니다. 다시 로그인해 주세요.');

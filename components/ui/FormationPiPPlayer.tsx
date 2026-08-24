@@ -14,17 +14,11 @@ import { ensureStandardMP4 } from '../../utils/convertMP4';
 
 const { width: WINDOW_WIDTH } = Dimensions.get('window');
 
-const DRIFT_PLAY_S  = 0.5;
-const DRIFT_SCRUB_S = 0.15;
-const SEEK_COOLDOWN = 300;
-const SETTLE_MS     = 2000;
-
 interface Props {
   videoUrl: string;
   currentTimeMs: SharedValue<number>;
   isPlaying: boolean;
   syncOffset?: number;
-  skipConversion?: boolean;
   onClose: () => void;
   initialX?: number;
   initialY?: number;
@@ -37,196 +31,133 @@ export const FormationPiPPlayer = React.memo(({
   currentTimeMs,
   isPlaying,
   syncOffset = 0,
-  skipConversion = false,
   onClose,
   initialX = WINDOW_WIDTH - 220,
   initialY = 100,
   initialScale = 1,
   onPositionChange,
 }: Props) => {
+  const [converting, setConverting] = useState(false);
+  const [convertProgress, setConvertProgress] = useState(0);
+  const [minimized, setMinimized] = useState(false);
+  const [showControls, setShowControls] = useState(false);
 
-  const [displayUrl, setDisplayUrl] = useState(videoUrl);
-  const [isConverting, setIsConverting] = useState(false);
-  const [conversionProgress, setConversionProgress] = useState(0);
+  const readyRef = useRef(false);
+  const isPlayingRef = useRef(isPlaying);
+  const syncOffsetRef = useRef(syncOffset);
+  const currentTimeMsRef = useRef(currentTimeMs);
+  const seekCooldownRef = useRef(0);
+  const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isPlayingRef   = useRef(isPlaying);
-  const currentTimeRef = useRef(currentTimeMs);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
-  useEffect(() => { currentTimeRef.current = currentTimeMs; }, [currentTimeMs]);
-
-  const videoLoaded  = useRef(false);
-  const prevPlaying  = useRef(false);
-  const lastSeekedTo = useRef(0);
-  const lastSeekAt   = useRef(0);
-  const settleUntil  = useRef(0);
-  const scrubTickRef = useRef(0);
+  useEffect(() => { syncOffsetRef.current = syncOffset; }, [syncOffset]);
+  useEffect(() => { currentTimeMsRef.current = currentTimeMs; }, [currentTimeMs]);
 
   const player = useVideoPlayer('', p => {
     p.muted = true;
-    p.loop  = true;
-    p.timeUpdateEventInterval = 0.5;
+    p.loop = true;
   });
 
+  // Load video — convert if local file, then replace player source
   useEffect(() => {
-    let isMounted = true;
-    const checkAndConvert = async () => {
-      if (!videoUrl) return;
+    if (!videoUrl) return;
+    let cancelled = false;
+    readyRef.current = false;
 
+    async function load() {
       const isLocal = videoUrl.startsWith('file://') || videoUrl.startsWith('/');
-      if (isLocal && !skipConversion) {
-        console.log('[PiP] Checking local video for fMP4:', videoUrl);
-        setIsConverting(true);
-        setConversionProgress(0);
+      let uri = videoUrl;
+
+      if (isLocal) {
+        setConverting(true);
+        setConvertProgress(0);
         try {
-          const finalUrl = await ensureStandardMP4(videoUrl, (ratio) => {
-            if (isMounted) setConversionProgress(Math.floor(ratio * 100));
+          uri = await ensureStandardMP4(videoUrl, ratio => {
+            if (!cancelled) setConvertProgress(Math.round(ratio * 100));
           });
-          if (isMounted) setDisplayUrl(finalUrl);
-        } catch (e) {
-          console.error('[PiP] Conversion error:', e);
-          if (isMounted) setDisplayUrl(videoUrl);
-        } finally {
-          if (isMounted) setIsConverting(false);
+        } catch {
+          // fall back to original on error
         }
-      } else {
-        console.log(`[PiP] Skipping conversion (skipConversion=${skipConversion} or remote).`);
-        setDisplayUrl(videoUrl);
+        if (!cancelled) setConverting(false);
       }
-    };
 
-    checkAndConvert();
-    return () => { isMounted = false; };
-  }, [videoUrl, skipConversion]);
+      if (!cancelled) {
+        player.replace({ uri });
+      }
+    }
 
-  useEffect(() => {
-    if (!displayUrl) return;
-    videoLoaded.current  = false;
-    lastSeekedTo.current = 0;
-    settleUntil.current  = 0;
-    player.replace({ uri: displayUrl });
-  }, [displayUrl, player]);
+    load();
+    return () => { cancelled = true; };
+  }, [videoUrl, player]);
 
-  const seekTo = useCallback((sec: number) => {
-    const now = Date.now();
-    if (now - lastSeekAt.current < SEEK_COOLDOWN) return;
-    lastSeekAt.current   = now;
-    lastSeekedTo.current = sec;
-    settleUntil.current  = now + SETTLE_MS;
-    player.currentTime   = sec;
-  }, [player]);
-
-  // 로드 완료 → 초기 시크
+  // On readyToPlay: seek to current position and start if playing
   useEffect(() => {
     const sub = player.addListener('statusChange', ({ status }) => {
-      if (status === 'readyToPlay' && !videoLoaded.current) {
-        videoLoaded.current = true;
-        const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
-        lastSeekAt.current = 0;
-        seekTo(targetSec);
-        if (isPlayingRef.current) player.play();
-      }
+      if (status !== 'readyToPlay' || readyRef.current) return;
+      readyRef.current = true;
+
+      const targetSec = Math.max(0, currentTimeMsRef.current.value / 1000 + syncOffsetRef.current);
+      player.currentTime = targetSec;
+      seekCooldownRef.current = Date.now() + 600;
+
+      if (isPlayingRef.current) player.play();
     });
     return () => sub.remove();
-  }, [player, syncOffset, seekTo]);
+  }, [player]);
 
-  // 드리프트 보정 (재생 중에만)
+  // Sync loop: keep PiP frame in sync with main timeline
   useEffect(() => {
-    const sub = player.addListener('timeUpdate', ({ currentTime }) => {
-      if (!videoLoaded.current || !isPlayingRef.current) return;
-      const settling = Date.now() < settleUntil.current;
-      if (settling) {
-        if (currentTime > 0.1 && Math.abs(currentTime - lastSeekedTo.current) < 0.5) {
-          settleUntil.current = 0;
-        }
-        return;
-      }
+    const DRIFT_S = 0.5;
+    let prevPlaying = false;
+    let scrubTick = 0;
 
-      const effectiveSec = currentTimeRef.current.value / 1000 + syncOffset;
-      if (effectiveSec < 0) {
-        if (player.playing) player.pause();
-        if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0); }
-        return;
-      }
-
-      if (currentTime < 0.5 && lastSeekedTo.current > 2) return;
-
-      const drift = Math.abs(currentTime - effectiveSec);
-      if (drift > DRIFT_PLAY_S) seekTo(effectiveSec);
-    });
-    return () => sub.remove();
-  }, [player, syncOffset, seekTo]);
-
-  // 싱크 오프셋 변경 시 즉시 반영
-  useEffect(() => {
-    if (!videoLoaded.current || isPlayingRef.current) return;
-    const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
-    seekTo(targetSec);
-  }, [syncOffset, seekTo]);
-
-  // 재생/정지 전환 + 스크럽 프리뷰 (편집 중 JS 부하 최소화)
-  useEffect(() => {
     const interval = setInterval(() => {
-      // Fallback: catch readyToPlay if statusChange missed it
-      if (!videoLoaded.current) {
-        try {
-          if ((player as any).duration > 0) {
-            videoLoaded.current = true;
-            const targetSec = Math.max(0, currentTimeRef.current.value / 1000 + syncOffset);
-            lastSeekAt.current = 0;
-            seekTo(targetSec);
-            if (isPlayingRef.current) player.play();
-          }
-        } catch (_) {}
-        return;
-      }
+      if (!readyRef.current) return;
 
-      const playing      = isPlayingRef.current;
-      const effectiveSec = currentTimeRef.current.value / 1000 + syncOffset;
-      const stateChg     = playing !== prevPlaying.current;
+      const now = Date.now();
+      const playing = isPlayingRef.current;
+      const targetSec = currentTimeMsRef.current.value / 1000 + syncOffsetRef.current;
+      const clamped = Math.max(0, targetSec);
 
-      if (stateChg) {
-        prevPlaying.current = playing;
-        scrubTickRef.current = 0;
+      // Play/pause state changed
+      if (playing !== prevPlaying) {
+        prevPlaying = playing;
         if (!playing) {
           player.pause();
-        } else if (effectiveSec < 0) {
-          player.pause();
-          if (lastSeekedTo.current !== 0) { lastSeekAt.current = 0; seekTo(0); }
         } else {
-          lastSeekAt.current = 0;
-          seekTo(effectiveSec);
+          player.currentTime = clamped;
+          seekCooldownRef.current = now + 600;
           player.play();
         }
+        return;
       }
 
-      if (playing && effectiveSec >= 0 && !player.playing) {
-        lastSeekAt.current = 0;
-        seekTo(effectiveSec);
-        player.play();
-      }
-
-      if (playing && effectiveSec < 0) {
-        if (player.playing) player.pause();
-      }
-
-      // 정지 중 스크럽 프리뷰: 3틱(~300ms)마다 한 번만 seek하여 편집 중 JS 부하 감소
       if (!playing) {
-        scrubTickRef.current = (scrubTickRef.current + 1) % 3;
-        if (scrubTickRef.current === 0) {
-          const targetSec = Math.max(0, effectiveSec);
-          if (Math.abs(targetSec - lastSeekedTo.current) > DRIFT_SCRUB_S) {
-            seekTo(targetSec);
-          }
+        // Scrub preview every 3 ticks to reduce JS load
+        scrubTick = (scrubTick + 1) % 3;
+        if (scrubTick === 0 && Math.abs(player.currentTime - clamped) > 0.15) {
+          player.currentTime = clamped;
         }
+        return;
+      }
+
+      // Ensure playback is running
+      if (!player.playing) {
+        player.currentTime = clamped;
+        seekCooldownRef.current = now + 600;
+        player.play();
+        return;
+      }
+
+      // Drift correction
+      if (now > seekCooldownRef.current && Math.abs(player.currentTime - targetSec) > DRIFT_S) {
+        player.currentTime = clamped;
+        seekCooldownRef.current = now + 600;
       }
     }, 100);
-    return () => clearInterval(interval);
-  }, [player, syncOffset, seekTo]);
 
-  // Controls
-  const [minimized, setMinimized]       = useState(false);
-  const [showControls, setShowControls] = useState(false);
-  const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    return () => clearInterval(interval);
+  }, [player]);
 
   const toggleControls = useCallback(() => {
     setShowControls(p => !p);
@@ -236,9 +167,9 @@ export const FormationPiPPlayer = React.memo(({
 
   useEffect(() => () => { if (controlsTimer.current) clearTimeout(controlsTimer.current); }, []);
 
-  // Gestures
-  const posX   = useSharedValue(initialX);
-  const posY   = useSharedValue(initialY);
+  // Drag + pinch gestures
+  const posX = useSharedValue(initialX);
+  const posY = useSharedValue(initialY);
   const scaleV = useSharedValue(initialScale);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
@@ -285,15 +216,15 @@ export const FormationPiPPlayer = React.memo(({
             />
           </View>
         </GestureDetector>
-        {isConverting && (
+        {converting && (
           <View style={[styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
             <ActivityIndicator size="small" color="white" />
             <Text style={{ color: 'white', fontSize: 10, marginTop: 4, fontWeight: 'bold' }}>
-              {conversionProgress}%
+              {convertProgress}%
             </Text>
           </View>
         )}
-        {showControls && !isConverting && (
+        {showControls && !converting && (
           <View style={styles.overlay} pointerEvents="box-none">
             <View style={styles.topRow}>
               <TouchableOpacity onPress={onClose} style={styles.btn}>
